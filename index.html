@@ -1,0 +1,972 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Clippit — Good creators. Better paydays.</title>
+    <meta
+      name="description"
+      content="Your creativity deserves a payday. Discover funded campaigns, post on your socials, and earn naira for verified views. Built for Nigerian creators."
+    />
+    <meta name="theme-color" content="#F7F8F2" />
+    <meta
+      property="og:title"
+      content="Clippit — Your next post. Your next payday."
+    />
+    <meta
+      property="og:description"
+      content="Make something worth watching. Get paid for the views. A brighter creator economy, made in Nigeria."
+    />
+    <meta property="og:type" content="website" />
+    <link rel="icon" href="assets/favicon.png" type="image/png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800;900&family=Kalam:wght@700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css?v=6" />
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <svg
+      class="svg-library"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <symbol id="i-arrow" viewBox="0 0 24 24">
+        <path d="M5 12h14m-6-6 6 6-6 6" />
+      </symbol>
+      <symbol id="i-up" viewBox="0 0 24 24">
+        <path d="M5 19 19 5M5 5h14v14" />
+      </symbol>
+      <symbol id="i-check" viewBox="0 0 24 24">
+        <path d="m5 12 4 4L19 6" />
+      </symbol>
+      <symbol id="i-play" viewBox="0 0 24 24">
+        <path d="m9 5 11 7-11 7Z" />
+      </symbol>
+      <symbol id="i-star" viewBox="0 0 100 100">
+        <path
+          d="m50 3 9 29 26-17-17 26 29 9-29 9 17 26-26-17-9 29-9-29-26 17 17-26-29-9 29-9-17-26 26 17Z"
+        />
+      </symbol>
+      <symbol id="i-tiktok" viewBox="0 0 24 24">
+        <path d="M14 3v12.5a4.5 4.5 0 1 1-4-4.47M14 3c.7 4 3 6 7 6" />
+      </symbol>
+      <symbol id="i-instagram" viewBox="0 0 24 24">
+        <rect x="3" y="3" width="18" height="18" rx="5" />
+        <circle cx="12" cy="12" r="4" />
+        <path d="M17.5 6.5h.01" />
+      </symbol>
+      <symbol id="i-youtube" viewBox="0 0 24 24">
+        <rect x="2" y="5" width="20" height="14" rx="4" />
+        <path d="m10 9 5 3-5 3Z" />
+      </symbol>
+      <symbol id="i-eye" viewBox="0 0 24 24">
+        <path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12Z" />
+        <circle cx="12" cy="12" r="3" />
+      </symbol>
+    </svg>
+    <header class="nav" id="nav">
+      <div class="shell nav__inner">
+        <a class="brand" href="#top" aria-label="Clippit home"
+          ><img
+            src="assets/clippit-mark.png"
+            alt=""
+            width="40"
+            height="40"
+          /><span>Clippit<sup>™</sup></span></a
+        >
+        <nav class="nav__links" aria-label="Main navigation">
+          <a href="#how">How it works</a
+          ><a href="#campaigns">Explore campaigns</a
+          ><a href="#brands"
+            >For brands <svg class="icon"><use href="#i-up" /></svg
+          ></a>
+        </nav>
+        <div class="nav__actions">
+          <a class="button button--small" href="#campaigns"
+            >Find your first campaign
+            <svg class="icon"><use href="#i-up" /></svg></a
+          ><button
+            class="menu-toggle"
+            id="burger"
+            aria-label="Open menu"
+            aria-expanded="false"
+            aria-controls="mobileNav"
+          >
+            <span></span><span></span>
+          </button>
+        </div>
+      </div>
+      <nav
+        class="mobile-nav"
+        id="mobileNav"
+        aria-label="Mobile navigation"
+        hidden
+      >
+        <a href="#how">How it works</a><a href="#campaigns">Explore campaigns</a
+        ><a href="#brands">For brands</a><a href="#faq">Questions? Sorted.</a>
+      </nav>
+    </header>
+    <main id="main">
+      <section class="hero" id="top">
+        <div class="shell hero__layout">
+          <div class="hero__copy">
+            <div class="hero__tag">
+              <span class="little-star">✳</span> Made for the ones who make
+              things.
+            </div>
+            <h1>
+              <span class="title-mask"><span>Your next</span></span
+              ><span class="title-mask"><span>post. Your</span></span
+              ><span class="title-mask"
+                ><span class="payday"
+                  >next payday.<svg
+                    viewBox="0 0 600 30"
+                    preserveAspectRatio="none"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M8 19C138-1 349 5 590 10M95 27C238 16 430 19 535 24"
+                    /></svg></span
+              ></span>
+            </h1>
+            <p class="hero__description">
+              You’ve got the ideas. Brands have the budget.<br />Make the
+              content, bring the views, get paid in naira.<br
+                class="desktop-break"
+              />
+              Your own page. Your own kind of creative.
+            </p>
+            <div class="hero__buttons">
+              <a class="button button--large" href="#campaigns"
+                >Let’s get you paid
+                <svg class="icon"><use href="#i-up" /></svg></a
+              ><a class="text-link" href="#how"
+                ><span class="play-circle"
+                  ><svg class="icon"><use href="#i-play" /></svg
+                ></span>
+                How it works</a
+              >
+            </div>
+            <div class="hero__perks">
+              <span
+                ><svg class="icon"><use href="#i-check" /></svg>No follower
+                minimum</span
+              ><span
+                ><svg class="icon"><use href="#i-check" /></svg>Your creativity,
+                rewarded</span
+              >
+            </div>
+          </div>
+          <div
+            class="hero__collage"
+            aria-label="Illustrative social posts and Clippit earnings"
+          >
+            <div class="collage-orbit" aria-hidden="true"></div>
+            <svg class="collage-star" viewBox="0 0 100 100" aria-hidden="true">
+              <use href="#i-star" />
+            </svg>
+            <div class="hand-note collage-note">
+              that thing you do?<br />it’s worth something.<svg
+                viewBox="0 0 100 60"
+                aria-hidden="true"
+              >
+                <path d="M5 7C58-12 96 14 78 49m-17-9 16 12 15-18" />
+              </svg>
+            </div>
+            <article class="social-card social-card--back">
+              <img
+                src="assets/photos/street-style.jpg"
+                alt="A smiling creator in headphones on a city street"
+                width="650"
+                height="812"
+              />
+              <div class="social-card__top">
+                <svg class="icon"><use href="#i-instagram" /></svg
+                ><span>Reels</span><span>•••</span>
+              </div>
+              <div class="social-card__caption">
+                <span>POV: the sound is too good</span
+                ><b>Good music. Better moves.</b
+                ><small>♫ original sound · weekend energy</small>
+              </div>
+              <span class="view-bubble"
+                ><svg class="icon"><use href="#i-play" /></svg> 84.2K</span
+              >
+            </article>
+            <article class="social-card social-card--front">
+              <img
+                src="assets/photos/fashion.jpg"
+                alt="A stylish Black woman with an afro and cat-eye sunglasses"
+                width="800"
+                height="1100"
+                fetchpriority="high"
+              />
+              <div class="social-card__top">
+                <svg class="icon"><use href="#i-tiktok" /></svg
+                ><span>For you</span><span>⌕</span>
+              </div>
+              <div class="social-card__center">
+                a little main<br />character energy.
+              </div>
+              <div class="social-card__rail" aria-hidden="true">
+                <span>♥<small>12.8K</small></span
+                ><span>●<small>246</small></span
+                ><span>➤<small>Share</small></span>
+              </div>
+              <div class="social-card__caption">
+                <b>Your style. Your story.</b
+                ><small>Today’s look understood the assignment.</small
+                ><small>#CreateWithClippit #Style</small>
+              </div>
+              <span class="view-bubble"
+                ><svg class="icon"><use href="#i-play" /></svg> 128.4K
+                views</span
+              >
+            </article>
+            <div class="earning-sticker">
+              <span class="earning-sticker__check"
+                ><svg class="icon"><use href="#i-check" /></svg
+              ></span>
+              <div>
+                <small>Creativity looks good on you.</small
+                ><strong>+₦64,000</strong
+                ><span>128,000 eligible views × ₦500 / 1K</span>
+              </div>
+              <svg class="icon"><use href="#i-up" /></svg>
+            </div>
+            <div class="round-sticker" aria-hidden="true">
+              <span>GOOD CLIPS</span><b>☺</b><span>BETTER PAYDAYS</span>
+            </div>
+            <p class="collage-disclaimer">
+              Social-post mockups · illustrative views & earnings
+            </p>
+          </div>
+        </div>
+        <div class="shell hero__bottom">
+          <span>Your content. These platforms.</span>
+          <div class="platforms">
+            <span
+              ><svg class="icon"><use href="#i-tiktok" /></svg>TikTok</span
+            ><span
+              ><svg class="icon"><use href="#i-instagram" /></svg
+              >Instagram</span
+            ><span
+              ><svg class="icon"><use href="#i-youtube" /></svg>YouTube</span
+            >
+          </div>
+          <a href="#how" class="scroll-note"
+            >There’s money in your next idea <span>↓</span></a
+          >
+        </div>
+      </section>
+      <div class="ticker" aria-label="Create. Post. Earn. Repeat.">
+        <div class="ticker__track">
+          <span
+            >Create something good <b>✳</b> Post it your way <b>✳</b> Let the
+            views pay <b>✳</b> Do your thing <b>✳</b> </span
+          ><span aria-hidden="true"
+            >Create something good <b>✳</b> Post it your way <b>✳</b> Let the
+            views pay <b>✳</b> Do your thing <b>✳</b>
+          </span>
+        </div>
+      </div>
+      <section class="how section" id="how">
+        <div class="shell">
+          <div class="section-heading">
+            <div>
+              <p class="section-label">
+                <span class="little-star">✳</span> The creative-to-cash
+                pipeline
+              </p>
+              <h2 data-reveal>Less pitching.<br />More posting.</h2>
+            </div>
+            <p>
+              You don’t need a manager, a media kit, or a million followers.
+              Just a good idea and a social account.
+            </p>
+          </div>
+          <ol class="steps">
+            <li class="step" data-reveal>
+              <div class="step__visual step__visual--brief">
+                <div class="mini-brief">
+                  <span
+                    ><span class="brand-dot">g.</span> Gbedu Records
+                    <svg class="icon"><use href="#i-check" /></svg></span
+                  ><b>Make the next hit<br />impossible to skip.</b>
+                  <div><strong>₦850</strong><small>per 1,000 views</small></div>
+                  <span class="mini-brief__button"
+                    >This one’s my vibe
+                    <svg class="icon"><use href="#i-up" /></svg
+                  ></span>
+                </div>
+                <span class="hand-note">find your thing ↗</span>
+              </div>
+              <div class="step__title">
+                <span>01</span>
+                <h3>Find your kind of campaign.</h3>
+              </div>
+              <p>
+                Music, fashion, lifestyle, tech. Pick a funded brief that fits
+                your style. Check the rate, remaining budget, and rules before
+                you start.
+              </p>
+            </li>
+            <li class="step" data-reveal>
+              <div class="step__visual step__visual--post">
+                <div class="mini-post">
+                  <img
+                    src="assets/photos/lagos-portrait.jpg"
+                    alt="Smiling woman photographed in Lagos"
+                    width="650"
+                    height="975"
+                    loading="lazy"
+                  /><span>Made it. Posted it. <b>✳</b></span>
+                </div>
+                <div class="link-pill">
+                  <svg class="icon"><use href="#i-tiktok" /></svg>
+                  tiktok.com/@you/video/… <span>✓</span>
+                </div>
+              </div>
+              <div class="step__title">
+                <span>02</span>
+                <h3>Make it. Post it. Drop the link.</h3>
+              </div>
+              <p>
+                Connect your account, follow the brief, and post on your own
+                page. Submit the link and video. Keep your voice; that’s why
+                you’re here.
+              </p>
+            </li>
+            <li class="step" data-reveal>
+              <div class="step__visual step__visual--proof">
+                <div class="proof-slip">
+                  <span>Your clip checks out <span>✳</span></span>
+                  <p><i>✓</i> Product in the frame</p>
+                  <p><i>✓</i> Campaign tag included</p>
+                  <p><i>✓</i> The brief? Understood.</p>
+                  <div>
+                    <svg class="icon"><use href="#i-eye" /></svg><b>24,800</b
+                    ><small>views read from the platform</small>
+                  </div>
+                </div>
+              </div>
+              <div class="step__title">
+                <span>03</span>
+                <h3>You create. We count.</h3>
+              </div>
+              <p>
+                We check your clip against the brief and read views directly
+                from the platform. Approved, eligible views turn into earnings.
+              </p>
+            </li>
+            <li class="step" data-reveal>
+              <div class="step__visual step__visual--paid">
+                <div class="mini-receipt">
+                  <span>Clippit payday</span
+                  ><svg class="icon"><use href="#i-check" /></svg
+                  ><strong>₦12,000</strong
+                  ><small>Example earnings at ₦500 / 1K</small>
+                  <div>24,000 eligible views <span>✓</span></div>
+                </div>
+                <span class="hand-note">now that’s a good post.</span>
+              </div>
+              <div class="step__title">
+                <span>04</span>
+                <h3>Turn “nice post” into naira.</h3>
+              </div>
+              <p>
+                After the five-day holding period and checks, cleared earnings
+                become available to withdraw to your Nigerian bank account.
+              </p>
+            </li>
+          </ol>
+        </div>
+      </section>
+      <section class="campaigns section" id="campaigns">
+        <div class="shell">
+          <div class="section-heading">
+            <div>
+              <p class="section-label">
+                <span class="little-star">✳</span> Find your next creative
+                obsession
+              </p>
+              <h2 data-reveal>Big brief energy.</h2>
+            </div>
+            <div>
+              <p>
+                A beat you can’t sit still to. A fit worth showing off.<br />Pick
+                the brief you’d make content for anyway.
+              </p>
+              <span class="preview-label"
+                >Campaign previews · not live offers</span
+              >
+            </div>
+          </div>
+          <div
+            class="filter-bar"
+            role="group"
+            aria-label="Filter campaign previews"
+          >
+            <button
+              class="filter is-active"
+              data-filter="all"
+              aria-pressed="true"
+            >
+              A little bit of everything <span>3</span></button
+            ><button class="filter" data-filter="music" aria-pressed="false">
+              ♫ Music</button
+            ><button
+              class="filter"
+              data-filter="lifestyle"
+              aria-pressed="false"
+            >
+              ✳ Lifestyle</button
+            ><button class="filter" data-filter="fashion" aria-pressed="false">
+              ✂ Fashion
+            </button>
+          </div>
+          <div class="campaign-grid" id="campaignGrid">
+            <article class="campaign-card" data-category="music" data-reveal>
+              <div class="campaign-art campaign-art--music">
+                <img
+                  src="assets/photos/street-style.jpg"
+                  alt="Music fan wearing headphones outdoors"
+                  loading="lazy"
+                  width="650"
+                  height="812"
+                /><span class="campaign-category">Music & culture</span>
+                <div class="campaign-art__type">
+                  ON<br />REPEAT.<span>↗</span>
+                </div>
+                <span class="campaign-art__brand">gbedu records®</span>
+              </div>
+              <div class="campaign-card__body">
+                <div class="campaign-card__byline">
+                  <span>Gbedu Records</span>
+                  <div>
+                    <svg class="icon"><use href="#i-tiktok" /></svg
+                    ><svg class="icon"><use href="#i-youtube" /></svg>
+                  </div>
+                </div>
+                <h3>Put the next anthem on the map.</h3>
+                <p>
+                  Make a dance, a transition, or a moment with the campaign
+                  sound. Let your take do the talking.
+                </p>
+                <div class="campaign-rate">
+                  <strong>₦850</strong
+                  ><span>per 1,000<br />verified views</span>
+                </div>
+                <div class="campaign-pot">
+                  <span>Campaign budget remaining</span><b>₦408,000</b>
+                </div>
+                <div class="pot-track"><span style="width: 34%"></span></div>
+                <button class="campaign-open" data-campaign="music">
+                  Explore the brief <svg class="icon"><use href="#i-up" /></svg>
+                </button>
+              </div>
+            </article>
+            <article
+              class="campaign-card"
+              data-category="lifestyle"
+              data-reveal
+            >
+              <div class="campaign-art campaign-art--life">
+                <img
+                  src="assets/photos/lagos-portrait.jpg"
+                  alt="Lagos portrait with a vibrant patterned headwrap"
+                  loading="lazy"
+                  width="650"
+                  height="975"
+                /><span class="campaign-category">Everyday stories</span>
+                <div class="campaign-art__type">
+                  THE GOOD<br />IN YOUR<br />EVERYDAY.
+                </div>
+                <span class="campaign-art__brand">Everyday Lagos ✳</span>
+              </div>
+              <div class="campaign-card__body">
+                <div class="campaign-card__byline">
+                  <span>Everyday Lagos</span>
+                  <div>
+                    <svg class="icon"><use href="#i-tiktok" /></svg
+                    ><svg class="icon"><use href="#i-instagram" /></svg>
+                  </div>
+                </div>
+                <h3>Your city. Through your lens.</h3>
+                <p>
+                  Find a little joy in your daily routine. Tell a story that
+                  makes someone stop scrolling and smile.
+                </p>
+                <div class="campaign-rate">
+                  <strong>₦500</strong
+                  ><span>per 1,000<br />verified views</span>
+                </div>
+                <div class="campaign-pot">
+                  <span>Campaign budget remaining</span><b>₦340,000</b>
+                </div>
+                <div class="pot-track"><span style="width: 68%"></span></div>
+                <button class="campaign-open" data-campaign="lifestyle">
+                  Explore the brief <svg class="icon"><use href="#i-up" /></svg>
+                </button>
+              </div>
+            </article>
+            <article class="campaign-card" data-category="fashion" data-reveal>
+              <div class="campaign-art campaign-art--fashion">
+                <img
+                  src="assets/photos/afro-style.jpg"
+                  alt="Black fashion model with an afro and sunglasses in warm sunlight"
+                  loading="lazy"
+                  width="650"
+                  height="900"
+                /><span class="campaign-category">Fashion & style</span>
+                <div class="campaign-art__type">
+                  WEAR<br />YOUR<br />ENERGY.
+                </div>
+                <span class="campaign-art__brand">shuku / studios</span>
+              </div>
+              <div class="campaign-card__body">
+                <div class="campaign-card__byline">
+                  <span>Shuku Studios</span>
+                  <div>
+                    <svg class="icon"><use href="#i-instagram" /></svg>
+                  </div>
+                </div>
+                <h3>The fit deserves its own film.</h3>
+                <p>
+                  Style the collection your way. A GRWM, a street-style moment,
+                  or the cleanest transition on the feed.
+                </p>
+                <div class="campaign-rate">
+                  <strong>₦620</strong
+                  ><span>per 1,000<br />verified views</span>
+                </div>
+                <div class="campaign-pot">
+                  <span>Campaign budget remaining</span><b>₦880,000</b>
+                </div>
+                <div class="pot-track"><span style="width: 88%"></span></div>
+                <button class="campaign-open" data-campaign="fashion">
+                  Explore the brief <svg class="icon"><use href="#i-up" /></svg>
+                </button>
+              </div>
+            </article>
+          </div>
+          <p class="campaigns__note">
+            A little preview of what’s possible. Rates, budgets, and briefs are
+            illustrative.
+          </p>
+        </div>
+      </section>
+      <section class="calculator-section section" id="earnings">
+        <div class="shell calculator-layout">
+          <div class="calculator-copy">
+            <p class="section-label">
+              <span class="little-star">✳</span> Okay, but what’s the money
+              like?
+            </p>
+            <h2 data-reveal>
+              Do the maths.<br />Then do<br /><span class="hand-heading"
+                >your thing.</span
+              >
+            </h2>
+            <p>
+              No mysterious creator fund. Each brand sets a rate for every 1,000
+              verified views. You see the deal before you make the clip.
+            </p>
+            <div class="calculator-copy__note">
+              <svg viewBox="0 0 100 60" aria-hidden="true">
+                <path d="M5 48C18 3 71 9 92 32m-21 1 24 2-5-23" /></svg
+              ><span class="hand-note">go on, move the slider.</span>
+            </div>
+          </div>
+          <div class="calculator" data-reveal>
+            <div class="calculator__top">
+              <span>Your potential payday</span
+              ><span class="mini-tag">Try it out ↗</span>
+            </div>
+            <label for="viewSlider">If your clip gets…</label>
+            <div class="calculator__views">
+              <output for="viewSlider" id="calcViews">50,000</output
+              ><span>verified views</span>
+            </div>
+            <input
+              id="viewSlider"
+              type="range"
+              min="0"
+              max="500000"
+              step="1000"
+              value="50000"
+              aria-describedby="calcRules"
+            />
+            <div class="range-labels">
+              <span>0</span><span>500K views</span>
+            </div>
+            <label for="rateSelect">At a campaign rate of</label
+            ><select id="rateSelect">
+              <option value="500">₦500 per 1,000 views</option>
+              <option value="620">₦620 per 1,000 views</option>
+              <option value="850">₦850 per 1,000 views</option>
+            </select>
+            <div class="calculator__result">
+              <span>That’s a potential</span
+              ><output id="calcMoney" aria-live="polite">₦25,000</output
+              ><span class="hand-note">from one good idea. ✳</span>
+            </div>
+            <p id="calcRules">
+              Illustrative gross earnings, not a guarantee. Full thousands count
+              after the 1,000-view minimum. Approval, campaign caps, available
+              budget, and a five-day hold apply.
+            </p>
+          </div>
+        </div>
+      </section>
+      <section class="proof-section section" id="proof">
+        <div class="shell proof-layout">
+          <div class="proof-board" data-reveal>
+            <div class="proof-board__tape" aria-hidden="true"></div>
+            <span class="hand-note">Receipts. We love receipts.</span>
+            <div class="proof-board__row">
+              <span class="proof-board__icon"
+                ><svg class="icon"><use href="#i-tiktok" /></svg
+              ></span>
+              <div>
+                <b>Straight from the source.</b
+                ><small>Platform view count</small>
+              </div>
+              <strong>128,400</strong>
+            </div>
+            <div class="proof-board__connector">↓</div>
+            <div class="proof-board__row">
+              <span class="proof-board__icon"
+                ><svg class="icon"><use href="#i-check" /></svg
+              ></span>
+              <div>
+                <b>Every requirement, checked.</b
+                ><small>Brief compliance</small>
+              </div>
+              <span class="status-pill">Approved ✓</span>
+            </div>
+            <div class="proof-board__connector">↓</div>
+            <div class="proof-board__row proof-board__row--money">
+              <span class="proof-board__icon">₦</span>
+              <div>
+                <b>Every naira, accounted for.</b
+                ><small>128 × ₦500, before any caps</small>
+              </div>
+              <strong>₦64,000</strong>
+            </div>
+            <span class="proof-board__fine"
+              >Illustrative submission · 400 partial views carry no payout</span
+            ><span class="verified-stamp">VIEW<br />VERIFIED<br />✳</span>
+          </div>
+          <div class="proof-copy">
+            <p class="section-label">
+              <span class="little-star">✳</span> Serious about your money
+            </p>
+            <h2 data-reveal>All the vibes.<br />All the receipts.</h2>
+            <p>
+              Creating should be the fun part. Wondering whether you’ll get paid
+              shouldn’t be part of it.
+            </p>
+            <ul class="feature-list">
+              <li>
+                <svg class="icon"><use href="#i-check" /></svg>
+                <div>
+                  <h3>Funded before you film.</h3>
+                  <p>
+                    A campaign only opens once the brand’s funds have cleared
+                    into escrow.
+                  </p>
+                </div>
+              </li>
+              <li>
+                <svg class="icon"><use href="#i-check" /></svg>
+                <div>
+                  <h3>Your views tell the story.</h3>
+                  <p>
+                    We read counts from connected platforms. No typed-in numbers
+                    or screenshot submissions as proof.
+                  </p>
+                </div>
+              </li>
+              <li>
+                <svg class="icon"><use href="#i-check" /></svg>
+                <div>
+                  <h3>A clear answer. A fair next step.</h3>
+                  <p>
+                    If a clip misses the brief, you see exactly why. You can
+                    appeal the decision.
+                  </p>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+      <section class="brands-section section" id="brands">
+        <div class="shell brands-layout">
+          <div class="brands-copy">
+            <p class="section-label">
+              <span class="little-star">✳</span> For brands, artists, and big
+              ideas
+            </p>
+            <h2 data-reveal>
+              Don’t interrupt<br />the culture.<br />Be part of it.
+            </h2>
+            <p>
+              Your next campaign deserves more than a skipped ad. Put it in the
+              hands of creators who know how to make people watch.
+            </p>
+            <div class="brand-benefits">
+              <span>✓ You set the rate</span><span>✓ You set the budget</span
+              ><span>✓ Verified views, visible spend</span>
+            </div>
+            <button class="button button--white" data-open="brand">
+              Build a sample campaign
+              <svg class="icon"><use href="#i-up" /></svg>
+            </button>
+          </div>
+          <div class="brand-board" data-reveal>
+            <div class="brand-board__head">
+              <span class="brand-dot">c.</span><span>Your next big thing</span
+              ><span class="mini-tag">Campaign preview</span>
+            </div>
+            <div class="brand-board__budget">
+              <div><small>You put in</small><strong>₦500,000</strong></div>
+              <span>↗</span>
+              <div>
+                <small>At ₦500 / 1K, that funds</small
+                ><strong>1M <em>views</em></strong>
+              </div>
+            </div>
+            <div
+              class="brand-board__chart"
+              aria-label="Illustrative campaign growth chart"
+            >
+              <div style="--bar: 22%"></div>
+              <div style="--bar: 31%"></div>
+              <div style="--bar: 27%"></div>
+              <div style="--bar: 43%"></div>
+              <div style="--bar: 39%"></div>
+              <div style="--bar: 58%"></div>
+              <div style="--bar: 66%"></div>
+              <div style="--bar: 60%"></div>
+              <div style="--bar: 81%"></div>
+              <div style="--bar: 89%"></div>
+              <div style="--bar: 100%"></div>
+              <span class="chart-label">Good content travels. ↗</span>
+            </div>
+            <div class="brand-board__bottom">
+              <div class="avatar-stack">
+                <img
+                  src="assets/photos/lagos-portrait.jpg"
+                  alt=""
+                  width="44"
+                  height="44"
+                  loading="lazy"
+                /><img
+                  src="assets/photos/street-style.jpg"
+                  alt=""
+                  width="44"
+                  height="44"
+                  loading="lazy"
+                /><img
+                  src="assets/photos/fashion.jpg"
+                  alt=""
+                  width="44"
+                  height="44"
+                  loading="lazy"
+                />
+              </div>
+              <p>One brief. A whole lot<br />of creative possibilities.</p>
+              <svg class="icon"><use href="#i-star" /></svg>
+            </div>
+            <span class="hand-note brand-board__note"
+              >you bring the brief.<br />they bring the magic.</span
+            >
+          </div>
+        </div>
+      </section>
+      <section class="faq-section section" id="faq">
+        <div class="shell faq-layout">
+          <div>
+            <p class="section-label">
+              <span class="little-star">✳</span> Before you hit record
+            </p>
+            <h2 data-reveal>Good questions.<br />Straight answers.</h2>
+            <span class="hand-note faq-note"
+              >no fine-print gymnastics.<svg
+                viewBox="0 0 100 60"
+                aria-hidden="true"
+              >
+                <path d="M5 8c40-2 60 12 75 37m-20-2 22 6 6-23" /></svg
+            ></span>
+          </div>
+          <div class="faq-list">
+            <details open>
+              <summary>Do I need a big following?<span>+</span></summary>
+              <p>
+                No follower minimum. You need a connected social account and
+                content that meets the campaign brief. A clip starts earning
+                once it reaches 1,000 verified views, subject to the campaign’s
+                rules.
+              </p>
+            </details>
+            <details>
+              <summary>What kind of content can I make?<span>+</span></summary>
+              <p>
+                Whatever fits the brief: a music edit, a GRWM, a product demo, a
+                funny skit, or a slice of everyday life. Each campaign tells you
+                what to say, show, tag, and avoid. You create and edit with your
+                own tools.
+              </p>
+            </details>
+            <details>
+              <summary>How are my earnings calculated?<span>+</span></summary>
+              <p>
+                The brand sets a rate per 1,000 verified views. Only full
+                thousands pay: at ₦500 per 1,000 views, 4,900 views earns
+                ₦2,000. Your clip must be approved, and earnings are limited by
+                the remaining campaign budget and clip or creator caps.
+              </p>
+            </details>
+            <details>
+              <summary>When can I withdraw my money?<span>+</span></summary>
+              <p>
+                Earnings have a five-day holding period so suspicious views can
+                be checked. Once cleared and payable, you can request a
+                withdrawal to a Nigerian bank account. The product targets
+                delivery within 24 hours of becoming payable; bank processing
+                may vary.
+              </p>
+            </details>
+            <details>
+              <summary>What if my clip gets rejected?<span>+</span></summary>
+              <p>
+                You get the specific checklist items your content did not meet,
+                with reasons. If you think the decision is wrong, you can
+                appeal. You should always know what happened and what you can do
+                next.
+              </p>
+            </details>
+            <details>
+              <summary>
+                What happens when the campaign budget runs out?<span>+</span>
+              </summary>
+              <p>
+                The campaign closes when the pot is exhausted or its deadline
+                passes. It cannot pay more than it holds. Check the remaining
+                budget and the campaign caps before creating; example calculator
+                results are not reserved earnings.
+              </p>
+            </details>
+            <details>
+              <summary>
+                Is Clippit available outside Nigeria?<span>+</span>
+              </summary>
+              <p>
+                The first version is built for creators in Nigeria, with naira
+                payouts to Nigerian bank accounts. Platform availability depends
+                on supported account connections. International payouts are not
+                part of the first release.
+              </p>
+            </details>
+          </div>
+        </div>
+      </section>
+      <section class="throw-stage" id="join" data-throw>
+        <div class="throw-pin">
+          <div class="throw-intro" id="throwIntro">
+            <p class="section-label">
+              <span class="little-star">✳</span> One last thing…
+            </p>
+            <h2>Put that phone<br />to good use.</h2>
+            <span class="hand-note"
+              >keep scrolling. catch your next payday. ↓</span
+            >
+          </div>
+          <canvas
+            id="throwCanvas"
+            class="throw-canvas"
+            aria-hidden="true"
+          ></canvas>
+          <div class="phone" id="phone">
+            <div class="phone__screen">
+              <div class="phone__content" id="phoneContent">
+                <span class="little-star finale-star">✳</span>
+                <p class="section-label">Good creators. Better paydays.</p>
+                <h2>Go on.<br />Make your move.</h2>
+                <p>
+                  Your next great idea could be your next payday.<br />Let’s
+                  find a brief with your name on it.
+                </p>
+                <a class="button button--large" href="#campaigns"
+                  >Find my first campaign
+                  <svg class="icon"><use href="#i-up" /></svg></a
+                ><button class="celebrate-button" id="celebrate">
+                  Or just make it rain confetti <span>✳</span></button
+                ><span class="finale-fine"
+                  >Your own account. Your own voice. A whole new
+                  possibility.</span
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+    <footer class="footer">
+      <div class="shell">
+        <div class="footer__top">
+          <div>
+            <a class="brand" href="#top"
+              ><img
+                src="assets/clippit-mark.png"
+                alt=""
+                width="40"
+                height="40"
+              /><span>Clippit<sup>™</sup></span></a
+            >
+            <p>More creators.<br />A richer internet.</p>
+          </div>
+          <div>
+            <h3>Make your move</h3>
+            <a href="#campaigns">Explore campaigns</a
+            ><a href="#how">How it works</a
+            ><a href="#earnings">Earnings calculator</a>
+          </div>
+          <div>
+            <h3>Bring your brand</h3>
+            <a href="#brands">For brands & artists</a
+            ><button data-open="brand">Preview a campaign</button
+            ><a href="#proof">How verification works</a>
+          </div>
+          <div>
+            <h3>The good-to-knows</h3>
+            <a href="#faq">Your questions, answered</a
+            ><button data-open="credits">Photo credits</button
+            ><span class="footer-location"
+              ><span></span> Made in Nigeria. For the culture.</span
+            >
+          </div>
+        </div>
+        <div class="footer__wordmark" aria-hidden="true">
+          Clippit<span>↗</span>
+        </div>
+        <div class="footer__bottom">
+          <span>© 2026 Clippit</span><span>Attention → Proof → Money</span
+          ><a href="#top">Back to the good stuff ↑</a>
+        </div>
+      </div>
+    </footer>
+    <dialog id="detailDialog" class="dialog" aria-labelledby="dialogTitle">
+      <button class="dialog-close" aria-label="Close dialog">×</button>
+      <div id="dialogContent"></div>
+    </dialog>
+    <canvas class="confetti" id="confetti" aria-hidden="true"></canvas>
+    <script src="main.js?v=6"></script>
+  </body>
+</html>
