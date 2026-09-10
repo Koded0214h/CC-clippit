@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Clippit · TikTok Views</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;700;800&family=Kalam:wght@400;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --lime: #B8FF38;
+    --gold: #EFC884;
+    --paper: #F7F8F2;
+    --ink: #14150F;
+    --muted: #6B6E60;
+    --line: #E4E6DA;
+    --white: #FFFFFF;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 40px 20px 80px; }
+  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+  h1 { font-size: clamp(28px, 5vw, 44px); font-weight: 800; letter-spacing: -0.02em; margin: 0; }
+  .scribble { font-family: "Kalam", cursive; color: var(--muted); font-size: 18px; }
+  .card {
+    background: var(--white);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 24px;
+    margin-top: 24px;
+  }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--lime);
+    color: var(--ink);
+    border: 1px solid var(--ink);
+    border-radius: 999px;
+    padding: 12px 22px;
+    font: inherit; font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .btn.ghost { background: transparent; border-color: var(--line); font-weight: 500; }
+  .btn:active { transform: translateY(1px); }
+  .row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: space-between; }
+  .who { display: flex; align-items: center; gap: 12px; }
+  .who img { width: 44px; height: 44px; border-radius: 999px; object-fit: cover; background: var(--line); }
+  .who b { display: block; }
+  .who span { color: var(--muted); font-size: 14px; }
+  .totals { display: flex; gap: 28px; margin-top: 20px; flex-wrap: wrap; }
+  .stat .n { font-size: 32px; font-weight: 800; letter-spacing: -0.02em; }
+  .stat .l { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { text-align: right; padding: 12px 10px; border-bottom: 1px solid var(--line); font-size: 14px; }
+  th { color: var(--muted); font-weight: 500; text-transform: uppercase; font-size: 11px; letter-spacing: 0.06em; }
+  th:first-child, td:first-child { text-align: left; }
+  .vid { display: flex; align-items: center; gap: 12px; max-width: 380px; }
+  .vid img { width: 46px; height: 60px; border-radius: 8px; object-fit: cover; background: var(--line); flex: none; }
+  .vid a { color: var(--ink); text-decoration: none; font-weight: 500; }
+  .vid a:hover { text-decoration: underline; }
+  .views { font-weight: 800; }
+  .muted { color: var(--muted); }
+  .msg { padding: 16px 0; color: var(--muted); }
+  .err { color: #B23B2E; }
+  @media (max-width: 640px) {
+    .hide-sm { display: none; }
+    .vid { max-width: 200px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>TikTok Views</h1>
+    <span class="scribble">connect your account, see the numbers</span>
+  </header>
+
+  <div class="card" id="panel">
+    <div class="msg">Loading…</div>
+  </div>
+</div>
+
+<script>
+const panel = document.getElementById("panel");
+const nf = new Intl.NumberFormat();
+
+function fmtDate(unix) {
+  if (!unix) return "";
+  return new Date(unix * 1000).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
+function connectView(error) {
+  panel.innerHTML = `
+    <div class="row">
+      <div>
+        <b>Not connected</b>
+        <div class="muted">Authorize Clippit to read your video list and view counts.</div>
+      </div>
+      <a class="btn" href="/login">Connect TikTok</a>
+    </div>
+    ${error ? `<div class="msg err">${error}</div>` : ""}`;
+}
+
+function loadingVideos(user) {
+  panel.innerHTML = `
+    <div class="row">
+      <div class="who">
+        <img src="${user.avatar_url || ""}" alt="" />
+        <div><b>${user.display_name || "Connected"}</b><span>Connected</span></div>
+      </div>
+      <a class="btn ghost" href="/logout">Disconnect</a>
+    </div>
+    <div class="msg">Fetching your videos…</div>`;
+}
+
+function render(user, data) {
+  const rows = data.videos.map(v => `
+    <tr>
+      <td>
+        <div class="vid">
+          <img src="${v.cover_image_url || ""}" alt="" />
+          <a href="${v.share_url || "#"}" target="_blank" rel="noopener">${(v.title || v.video_description || "Untitled").slice(0, 80)}</a>
+        </div>
+      </td>
+      <td class="views">${nf.format(v.view_count || 0)}</td>
+      <td class="hide-sm">${nf.format(v.like_count || 0)}</td>
+      <td class="hide-sm">${nf.format(v.comment_count || 0)}</td>
+      <td class="hide-sm">${nf.format(v.share_count || 0)}</td>
+      <td class="muted hide-sm">${fmtDate(v.create_time)}</td>
+    </tr>`).join("");
+
+  panel.innerHTML = `
+    <div class="row">
+      <div class="who">
+        <img src="${user.avatar_url || ""}" alt="" />
+        <div><b>${user.display_name || "Connected"}</b><span>Connected</span></div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn ghost" id="refresh">Refresh</button>
+        <a class="btn ghost" href="/logout">Disconnect</a>
+      </div>
+    </div>
+    <div class="totals">
+      <div class="stat"><div class="n">${nf.format(data.total_views)}</div><div class="l">Total views</div></div>
+      <div class="stat"><div class="n">${nf.format(data.count)}</div><div class="l">Videos</div></div>
+    </div>
+    ${data.count === 0 ? '<div class="msg">No videos found on this account.</div>' : `
+    <table>
+      <thead>
+        <tr>
+          <th>Video</th><th>Views</th>
+          <th class="hide-sm">Likes</th><th class="hide-sm">Comments</th>
+          <th class="hide-sm">Shares</th><th class="hide-sm">Posted</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`}`;
+
+  const btn = document.getElementById("refresh");
+  if (btn) btn.addEventListener("click", () => start());
+}
+
+async function start() {
+  panel.innerHTML = '<div class="msg">Loading…</div>';
+  let status;
+  try {
+    status = await (await fetch("/api/status")).json();
+  } catch (e) {
+    connectView("Could not reach the service. Is service.py running?");
+    return;
+  }
+  if (!status.connected) {
+    connectView(status.error);
+    return;
+  }
+  loadingVideos(status.user);
+  try {
+    const data = await (await fetch("/api/videos")).json();
+    if (data.error) {
+      panel.insertAdjacentHTML("beforeend", `<div class="msg err">${data.error}</div>`);
+      return;
+    }
+    render(status.user, data);
+  } catch (e) {
+    panel.insertAdjacentHTML("beforeend", '<div class="msg err">Failed to load videos.</div>');
+  }
+}
+
+start();
+</script>
+</body>
+</html>
