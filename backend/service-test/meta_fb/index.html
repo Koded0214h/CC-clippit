@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Clippit · Facebook Page Metrics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;700;800&family=Kalam:wght@400;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --lime: #B8FF38;
+    --gold: #EFC884;
+    --paper: #F7F8F2;
+    --ink: #14150F;
+    --muted: #6B6E60;
+    --line: #E4E6DA;
+    --white: #FFFFFF;
+    --fb-blue: #1877F2;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 40px 20px 80px; }
+  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+  h1 { font-size: clamp(28px, 5vw, 44px); font-weight: 800; letter-spacing: -0.02em; margin: 0; }
+  .scribble { font-family: "Kalam", cursive; color: var(--muted); font-size: 18px; }
+  .card {
+    background: var(--white);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 24px;
+    margin-top: 24px;
+  }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--lime);
+    color: var(--ink);
+    border: 1px solid var(--ink);
+    border-radius: 999px;
+    padding: 12px 22px;
+    font: inherit; font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .btn.fb {
+    background: var(--fb-blue);
+    color: white;
+    border-color: transparent;
+  }
+  .btn.ghost { background: transparent; border-color: var(--line); font-weight: 500; }
+  .btn:active { transform: translateY(1px); }
+  .row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: space-between; }
+  .who { display: flex; align-items: center; gap: 12px; }
+  .who img { width: 52px; height: 52px; border-radius: 999px; object-fit: cover; background: var(--line); }
+  .who b { display: block; font-size: 17px; }
+  .who span { color: var(--muted); font-size: 14px; }
+  .who .badge { font-size: 11px; background: var(--line); padding: 2px 8px; border-radius: 99px; margin-left: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .totals { display: flex; gap: 28px; margin-top: 20px; flex-wrap: wrap; }
+  .stat .n { font-size: 32px; font-weight: 800; letter-spacing: -0.02em; }
+  .stat .l { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .about { color: var(--muted); margin-top: 12px; font-size: 14px; max-width: 500px; }
+  .page-list { display: flex; flex-direction: column; gap: 12px; margin-top: 16px; }
+  .page-option {
+    display: flex; align-items: center; gap: 12px; padding: 14px 18px;
+    border: 1px solid var(--line); border-radius: 14px; cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .page-option:hover { border-color: var(--fb-blue); }
+  .page-option img { width: 40px; height: 40px; border-radius: 999px; object-fit: cover; background: var(--line); }
+  .page-option b { display: block; }
+  .page-option span { color: var(--muted); font-size: 13px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { text-align: right; padding: 12px 10px; border-bottom: 1px solid var(--line); font-size: 14px; }
+  th { color: var(--muted); font-weight: 500; text-transform: uppercase; font-size: 11px; letter-spacing: 0.06em; }
+  th:first-child, td:first-child { text-align: left; }
+  .post { display: flex; align-items: center; gap: 12px; max-width: 380px; }
+  .post img { width: 46px; height: 46px; border-radius: 10px; object-fit: cover; background: var(--line); flex: none; }
+  .post a { color: var(--ink); text-decoration: none; font-weight: 500; font-size: 13px; }
+  .post a:hover { text-decoration: underline; }
+  .type-badge {
+    display: inline-block; font-size: 10px; font-weight: 700;
+    padding: 1px 6px; border-radius: 4px; text-transform: uppercase;
+    letter-spacing: 0.04em; margin-left: 6px;
+  }
+  .type-badge.photo { background: #E3F0FF; color: #2563EB; }
+  .type-badge.video { background: #FEE2E2; color: #DC2626; }
+  .type-badge.link { background: #F3E8FF; color: #9333EA; }
+  .type-badge.status { background: #FEF3C7; color: #D97706; }
+  .type-badge.shared { background: #E0F2E9; color: #16A34A; }
+  .views { font-weight: 800; }
+  .muted { color: var(--muted); }
+  .msg { padding: 16px 0; color: var(--muted); }
+  .err { color: #B23B2E; }
+  @media (max-width: 640px) {
+    .hide-sm { display: none; }
+    .post { max-width: 200px; }
+    .totals { gap: 16px; }
+    .stat .n { font-size: 24px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Facebook Page Metrics</h1>
+    <span class="scribble">connect your page, see the numbers</span>
+  </header>
+
+  <div class="card" id="panel">
+    <div class="msg">Loading…</div>
+  </div>
+</div>
+
+<script>
+const panel = document.getElementById("panel");
+const nf = new Intl.NumberFormat();
+
+function fmtDate(iso) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
+function typeBadge(t) {
+  const cls = (t || "status").toLowerCase();
+  return `<span class="type-badge ${cls}">${t || "POST"}</span>`;
+}
+
+function truncate(s, n) {
+  if (!s) return "No text";
+  return s.length > n ? s.slice(0, n) + "…" : s;
+}
+
+function connectView(error) {
+  panel.innerHTML = `
+    <div class="row">
+      <div>
+        <b>Not connected</b>
+        <div class="muted">Authorize Clippit to read your Facebook Page posts and insights.</div>
+      </div>
+      <a class="btn fb" href="/login">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg>
+        Connect Facebook
+      </a>
+    </div>
+    ${error ? `<div class="msg err">${error}</div>` : ""}`;
+}
+
+function pageSelectView(pages) {
+  if (!pages || !pages.length) {
+    panel.innerHTML = `
+      <div>
+        <b>No Pages found</b>
+        <div class="muted">This Facebook account does not return any Pages. Make sure you’re logging into the account that manages a Page, and that the app has the required permissions.</div>
+      </div>
+      <div style="margin-top:16px; display:flex; gap:10px; flex-wrap:wrap;">
+        <a class="btn fb" href="/login">Try again</a>
+        <a class="btn ghost" href="/logout">Disconnect</a>
+      </div>`;
+    return;
+  }
+
+  const options = pages.map(p => `
+    <a class="page-option" href="/select-page/${p.id}">
+      <img src="${p.picture_url || ""}" alt="" />
+      <div><b>${p.name}</b><span>${p.category || ""}</span></div>
+    </a>
+  `).join("");
+
+  panel.innerHTML = `
+    <div>
+      <b>Select a Page</b>
+      <div class="muted">Choose which Facebook Page to view metrics for.</div>
+    </div>
+    <div class="page-list">${options}</div>
+    <div style="margin-top:16px"><a class="btn ghost" href="/logout">Disconnect</a></div>`;
+}
+
+function loadingPosts(page) {
+  panel.innerHTML = `
+    <div class="row">
+      <div class="who">
+        <img src="${page.picture_url || ""}" alt="" />
+        <div>
+          <b>${page.name || "Connected"}<span class="badge">${page.category || ""}</span></b>
+          <span>${page.link || ""}</span>
+        </div>
+      </div>
+      <a class="btn ghost" href="/logout">Disconnect</a>
+    </div>
+    ${page.about ? `<div class="about">${page.about}</div>` : ""}
+    <div class="totals">
+      <div class="stat"><div class="n">${nf.format(page.followers_count || page.fan_count || 0)}</div><div class="l">Followers</div></div>
+      <div class="stat"><div class="n">${nf.format(page.fan_count || 0)}</div><div class="l">Page Likes</div></div>
+    </div>
+    <div class="msg">Fetching your posts and insights…</div>`;
+}
+
+function render(page, data) {
+  const rows = data.posts.map(p => {
+    const ins = p.insights || {};
+    return `
+    <tr>
+      <td>
+        <div class="post">
+          ${p.full_picture ? `<img src="${p.full_picture}" alt="" />` : ""}
+          <div><a href="${p.permalink_url || "#"}" target="_blank" rel="noopener">${truncate(p.message, 60)}</a>${typeBadge(p.type)}</div>
+        </div>
+      </td>
+      <td class="views">${nf.format(ins.post_impressions || 0)}</td>
+      <td>${nf.format(ins.post_impressions_unique || 0)}</td>
+      <td>${nf.format(p.like_count || 0)}</td>
+      <td class="hide-sm">${nf.format(p.comment_count || 0)}</td>
+      <td class="hide-sm">${nf.format(p.share_count || 0)}</td>
+      <td class="hide-sm">${nf.format(ins.post_clicks || 0)}</td>
+      <td class="muted hide-sm">${fmtDate(p.created_time)}</td>
+    </tr>`;
+  }).join("");
+
+  panel.innerHTML = `
+    <div class="row">
+      <div class="who">
+        <img src="${page.picture_url || ""}" alt="" />
+        <div>
+          <b>${page.name || "Connected"}<span class="badge">${page.category || ""}</span></b>
+          <span>${page.link || ""}</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn ghost" id="refresh">Refresh</button>
+        <a class="btn ghost" href="/logout">Disconnect</a>
+      </div>
+    </div>
+    ${page.about ? `<div class="about">${page.about}</div>` : ""}
+    <div class="totals">
+      <div class="stat"><div class="n">${nf.format(page.followers_count || page.fan_count || 0)}</div><div class="l">Followers</div></div>
+      <div class="stat"><div class="n">${nf.format(page.fan_count || 0)}</div><div class="l">Page Likes</div></div>
+      <div class="stat"><div class="n">${nf.format(data.count)}</div><div class="l">Posts</div></div>
+      <div class="stat"><div class="n">${nf.format(data.total_impressions)}</div><div class="l">Total impressions</div></div>
+      <div class="stat"><div class="n">${nf.format(data.total_reach)}</div><div class="l">Total reach</div></div>
+      <div class="stat"><div class="n">${nf.format(data.total_likes)}</div><div class="l">Total reactions</div></div>
+    </div>
+    ${data.count === 0 ? '<div class="msg">No posts found on this page.</div>' : `
+    <table>
+      <thead>
+        <tr>
+          <th>Post</th><th>Impressions</th><th>Reach</th><th>Reactions</th>
+          <th class="hide-sm">Comments</th><th class="hide-sm">Shares</th>
+          <th class="hide-sm">Clicks</th><th class="hide-sm">Posted</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`}`;
+
+  const btn = document.getElementById("refresh");
+  if (btn) btn.addEventListener("click", () => start());
+}
+
+async function start() {
+  panel.innerHTML = '<div class="msg">Loading…</div>';
+  let status;
+  try {
+    status = await (await fetch("/api/status")).json();
+  } catch (e) {
+    connectView("Could not reach the service. Is service.py running?");
+    return;
+  }
+  if (!status.connected) {
+    connectView(status.error);
+    return;
+  }
+  if (!status.page_selected) {
+    pageSelectView(status.pages);
+    return;
+  }
+  loadingPosts(status.page);
+
+  try {
+    const data = await (await fetch("/api/posts")).json();
+    if (data.error) {
+      panel.insertAdjacentHTML("beforeend", `<div class="msg err">${data.error}</div>`);
+      return;
+    }
+    render(status.page, data);
+  } catch (e) {
+    panel.insertAdjacentHTML("beforeend", '<div class="msg err">Failed to load posts.</div>');
+  }
+}
+
+start();
+</script>
+</body>
+</html>
