@@ -34,6 +34,14 @@ All sections use light backgrounds. The skating character and ink-reveal impleme
 
 This is a landing page with functional local previews. Campaigns, views, and earnings are illustrative, not live offers or customer testimonials. Real accounts, platform connections, escrow funding, submissions, and withdrawals require backend integration.
 
+## Backend services
+
+Additional services are available under `backend/service-test/`:
+
+- **`meta_insta/`**: Flask app for Instagram Business account metrics via OAuth. Connect an Instagram Creator/Business account and view profile data, posts, engagement metrics (views, reach, saved, likes, comments), and account-level insights.
+
+Each service has its own setup instructions in its `README.md`.
+
 ## Browser verification
 
 With Python Playwright and its Chromium browser installed:

@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Clippit · Instagram Metrics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;700;800&family=Kalam:wght@400;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --lime: #B8FF38;
+    --gold: #EFC884;
+    --paper: #F7F8F2;
+    --ink: #14150F;
+    --muted: #6B6E60;
+    --line: #E4E6DA;
+    --white: #FFFFFF;
+    --ig-gradient: linear-gradient(45deg, #f09433, #e6683c, #dc2743, #cc2366, #bc1888);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; padding: 40px 20px 80px; }
+  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+  h1 { font-size: clamp(28px, 5vw, 44px); font-weight: 800; letter-spacing: -0.02em; margin: 0; }
+  .scribble { font-family: "Kalam", cursive; color: var(--muted); font-size: 18px; }
+  .card {
+    background: var(--white);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 24px;
+    margin-top: 24px;
+  }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--lime);
+    color: var(--ink);
+    border: 1px solid var(--ink);
+    border-radius: 999px;
+    padding: 12px 22px;
+    font: inherit; font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .btn.ig {
+    background: var(--ig-gradient);
+    color: white;
+    border-color: transparent;
+  }
+  .btn.ghost { background: transparent; border-color: var(--line); font-weight: 500; }
+  .btn:active { transform: translateY(1px); }
+  .row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: space-between; }
+  .who { display: flex; align-items: center; gap: 12px; }
+  .who img { width: 52px; height: 52px; border-radius: 999px; object-fit: cover; background: var(--line); }
+  .who b { display: block; font-size: 17px; }
+  .who span { color: var(--muted); font-size: 14px; }
+  .who .badge { font-size: 11px; background: var(--line); padding: 2px 8px; border-radius: 99px; margin-left: 6px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .totals { display: flex; gap: 28px; margin-top: 20px; flex-wrap: wrap; }
+  .stat .n { font-size: 32px; font-weight: 800; letter-spacing: -0.02em; }
+  .stat .l { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .bio { color: var(--muted); margin-top: 12px; font-size: 14px; max-width: 500px; }
+  .account-insights {
+    display: flex; gap: 20px; flex-wrap: wrap; margin-top: 16px; padding-top: 16px;
+    border-top: 1px solid var(--line);
+  }
+  .account-insights .stat .n { font-size: 24px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { text-align: right; padding: 12px 10px; border-bottom: 1px solid var(--line); font-size: 14px; }
+  th { color: var(--muted); font-weight: 500; text-transform: uppercase; font-size: 11px; letter-spacing: 0.06em; }
+  th:first-child, td:first-child { text-align: left; }
+  .post { display: flex; align-items: center; gap: 12px; max-width: 380px; }
+  .post img { width: 46px; height: 46px; border-radius: 10px; object-fit: cover; background: var(--line); flex: none; }
+  .post a { color: var(--ink); text-decoration: none; font-weight: 500; font-size: 13px; }
+  .post a:hover { text-decoration: underline; }
+  .type-badge {
+    display: inline-block; font-size: 10px; font-weight: 700;
+    padding: 1px 6px; border-radius: 4px; text-transform: uppercase;
+    letter-spacing: 0.04em; margin-left: 6px;
+  }
+  .type-badge.image { background: #E3F0FF; color: #2563EB; }
+  .type-badge.video { background: #FEE2E2; color: #DC2626; }
+  .type-badge.reel { background: #F3E8FF; color: #9333EA; }
+  .type-badge.carousel { background: #FEF3C7; color: #D97706; }
+  .views { font-weight: 800; }
+  .muted { color: var(--muted); }
+  .msg { padding: 16px 0; color: var(--muted); }
+  .err { color: #B23B2E; }
+  .tabs { display: flex; gap: 4px; margin-top: 20px; }
+  .tab {
+    padding: 8px 16px; border-radius: 10px 10px 0 0; cursor: pointer;
+    font-weight: 600; font-size: 14px; border: 1px solid var(--line);
+    border-bottom: none; background: var(--paper); color: var(--muted);
+  }
+  .tab.active { background: var(--white); color: var(--ink); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+  @media (max-width: 640px) {
+    .hide-sm { display: none; }
+    .post { max-width: 200px; }
+    .totals { gap: 16px; }
+    .stat .n { font-size: 24px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Instagram Metrics</h1>
+    <span class="scribble">connect your account, see the numbers</span>
+  </header>
+
+  <div class="card" id="panel">
+    <div class="msg">Loading…</div>
+  </div>
+</div>
+
+<script>
+const panel = document.getElementById("panel");
+const nf = new Intl.NumberFormat();
+
+function fmtDate(iso) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
+function typeBadge(t) {
+  const map = { IMAGE: "image", VIDEO: "video", REEL: "reel", CAROUSEL_ALBUM: "carousel" };
+  const cls = map[t] || "image";
+  return `<span class="type-badge ${cls}">${t || "POST"}</span>`;
+}
+
+function truncate(s, n) {
+  if (!s) return "Untitled";
+  return s.length > n ? s.slice(0, n) + "…" : s;
+}
+
+function connectView(error) {
+  panel.innerHTML = `
+    <div class="row">
+      <div>
+        <b>Not connected</b>
+        <div class="muted">Authorize Clippit to read your Instagram profile, posts, and insights.</div>
+      </div>
+      <a class="btn ig" href="/login">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/></svg>
+        Connect Instagram
+      </a>
+    </div>
+    ${error ? `<div class="msg err">${error}</div>` : ""}`;
+}
+
+function loadingMedia(user) {
+  panel.innerHTML = `
+    <div class="row">
+      <div class="who">
+        <img src="${user.profile_picture_url || ""}" alt="" />
+        <div>
+          <b>@${user.username || "connected"}<span class="badge">${user.account_type || ""}</span></b>
+          <span>${user.name || ""}</span>
+        </div>
+      </div>
+      <a class="btn ghost" href="/logout">Disconnect</a>
+    </div>
+    ${user.biography ? `<div class="bio">${user.biography}</div>` : ""}
+    <div class="totals">
+      <div class="stat"><div class="n">${nf.format(user.followers_count || 0)}</div><div class="l">Followers</div></div>
+      <div class="stat"><div class="n">${nf.format(user.follows_count || 0)}</div><div class="l">Following</div></div>
+      <div class="stat"><div class="n">${nf.format(user.media_count || 0)}</div><div class="l">Posts</div></div>
+    </div>
+    <div class="msg">Fetching your posts and insights…</div>`;
+}
+
+function render(user, data, accountInsights) {
+  const rows = data.media.map(m => {
+    const thumb = m.thumbnail_url || m.media_url || "";
+    const ins = m.insights || {};
+    return `
+    <tr>
+      <td>
+        <div class="post">
+          ${thumb ? `<img src="${thumb}" alt="" />` : ""}
+          <div><a href="${m.permalink || "#"}" target="_blank" rel="noopener">${truncate(m.caption, 60)}</a>${typeBadge(m.media_type)}</div>
+        </div>
+      </td>
+      <td class="views">${nf.format(ins.views || ins.impressions || 0)}</td>
+      <td>${nf.format(m.like_count || 0)}</td>
+      <td>${nf.format(m.comments_count || 0)}</td>
+      <td class="hide-sm">${nf.format(ins.reach || 0)}</td>
+      <td class="hide-sm">${nf.format(ins.saved || 0)}</td>
+      <td class="muted hide-sm">${fmtDate(m.timestamp)}</td>
+    </tr>`;
+  }).join("");
+
+  // Account insights section
+  let insightsHtml = "";
+  if (accountInsights && accountInsights.length) {
+    insightsHtml = `<div class="account-insights">`;
+    for (const metric of accountInsights) {
+      const val = metric.total_value?.value ?? metric.values?.[0]?.value ?? 0;
+      const label = (metric.title || metric.name || "").replace(/_/g, " ");
+      insightsHtml += `<div class="stat"><div class="n">${nf.format(val)}</div><div class="l">${label}</div></div>`;
+    }
+    insightsHtml += `</div>`;
+  }
+
+  panel.innerHTML = `
+    <div class="row">
+      <div class="who">
+        <img src="${user.profile_picture_url || ""}" alt="" />
+        <div>
+          <b>@${user.username || "connected"}<span class="badge">${user.account_type || ""}</span></b>
+          <span>${user.name || ""}</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn ghost" id="refresh">Refresh</button>
+        <a class="btn ghost" href="/logout">Disconnect</a>
+      </div>
+    </div>
+    ${user.biography ? `<div class="bio">${user.biography}</div>` : ""}
+    <div class="totals">
+      <div class="stat"><div class="n">${nf.format(user.followers_count || 0)}</div><div class="l">Followers</div></div>
+      <div class="stat"><div class="n">${nf.format(user.follows_count || 0)}</div><div class="l">Following</div></div>
+      <div class="stat"><div class="n">${nf.format(user.media_count || 0)}</div><div class="l">Posts</div></div>
+      <div class="stat"><div class="n">${nf.format(data.total_views)}</div><div class="l">Total views</div></div>
+      <div class="stat"><div class="n">${nf.format(data.total_likes)}</div><div class="l">Total likes</div></div>
+      <div class="stat"><div class="n">${nf.format(data.total_comments)}</div><div class="l">Total comments</div></div>
+    </div>
+    ${insightsHtml}
+    ${data.count === 0 ? '<div class="msg">No posts found on this account.</div>' : `
+    <table>
+      <thead>
+        <tr>
+          <th>Post</th><th>Views</th><th>Likes</th><th>Comments</th>
+          <th class="hide-sm">Reach</th><th class="hide-sm">Saved</th>
+          <th class="hide-sm">Posted</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`}`;
+
+  const btn = document.getElementById("refresh");
+  if (btn) btn.addEventListener("click", () => start());
+}
+
+async function start() {
+  panel.innerHTML = '<div class="msg">Loading…</div>';
+  let status;
+  try {
+    status = await (await fetch("/api/status")).json();
+  } catch (e) {
+    connectView("Could not reach the service. Is service.py running?");
+    return;
+  }
+  if (!status.connected) {
+    connectView(status.error);
+    return;
+  }
+  loadingMedia(status.user);
+
+  // Fetch media and account insights in parallel
+  try {
+    const [mediaRes, insightsRes] = await Promise.all([
+      fetch("/api/media").then(r => r.json()),
+      fetch("/api/insights").then(r => r.json()).catch(() => ({ insights: [] })),
+    ]);
+    if (mediaRes.error) {
+      panel.insertAdjacentHTML("beforeend", `<div class="msg err">${mediaRes.error}</div>`);
+      return;
+    }
+    render(status.user, mediaRes, insightsRes.insights || []);
+  } catch (e) {
+    panel.insertAdjacentHTML("beforeend", '<div class="msg err">Failed to load posts.</div>');
+  }
+}
+
+start();
+</script>
+</body>
+</html>
