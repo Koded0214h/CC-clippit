@@ -2144,7 +2144,8 @@ input[type="range"]::-moz-range-thumb {
   margin-top: 4px;
 }
 .throw-enabled {
-  height: 330vh;
+  /* More runway lets every frame of the flip register before the phone lands. */
+  height: 400vh;
 }
 .throw-enabled .throw-pin {
   position: sticky;
@@ -3416,7 +3417,7 @@ input[type="range"]::-moz-range-thumb {
     font-size: 16px;
   }
   .throw-enabled {
-    height: 290vh;
+    height: 370vh;
   }
   .throw-enabled .phone__content h2 {
     font-size: 60px;
