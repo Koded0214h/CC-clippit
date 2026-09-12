@@ -3,7 +3,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 BASE = 'http://127.0.0.1:5174/'
-OUT = Path('tmp/qa')
+OUT = Path(__file__).resolve().parents[1] / 'tmp/qa'
 OUT.mkdir(parents=True, exist_ok=True)
 
 with sync_playwright() as p:
@@ -18,8 +18,11 @@ with sync_playwright() as p:
     assert not page.evaluate('document.documentElement.scrollWidth > innerWidth'), 'Desktop horizontal overflow'
     for selector, name in [('#how','how'),('#campaigns','campaigns'),('#earnings','calculator'),('#proof','proof'),('#brands','brands'),('#faq','faq')]:
         page.locator(selector).scroll_into_view_if_needed()
-        page.wait_for_timeout(1400)
+        page.wait_for_timeout(260)
+        page.screenshot(path=str(OUT / (name+'-entrance.png')))
+        page.wait_for_timeout(1800)
         page.locator(selector).screenshot(path=str(OUT / (name+'.png')))
+        assert page.locator(selector).evaluate('(el)=>el.getAnimations({subtree:true}).filter(a=>a.playState==="running").length') == 0, f'Entrance did not settle: {name}'
     page.locator('[data-filter="music"]').click()
     assert page.locator('.campaign-card:visible').count() == 1
     page.locator('[data-campaign="music"]').click()
@@ -92,6 +95,18 @@ with sync_playwright() as p:
     assert not reduced.locator('#phone').evaluate('(el)=>el.inert')
     reduced.locator('#join').scroll_into_view_if_needed()
     reduced.screenshot(path=str(OUT / 'reduced-finale.png'))
+    # Changing motion preference mid-entrance must reveal the content immediately.
+    motion = browser.new_page(viewport={'width':390,'height':844})
+    motion.goto(BASE, wait_until='networkidle')
+    motion.locator('.campaign-card').first.scroll_into_view_if_needed()
+    motion.wait_for_timeout(150)
+    motion.screenshot(path=str(OUT / 'mobile-card-entrance.png'))
+    motion.emulate_media(reduced_motion='reduce')
+    motion.wait_for_timeout(100)
+    assert motion.locator('.campaign-card').first.evaluate('(el)=>getComputedStyle(el).opacity') == '1'
+    assert motion.locator('#campaigns').evaluate('(el)=>el.getAnimations({subtree:true}).length') == 0
+    motion.screenshot(path=str(OUT / 'motion-preference-change.png'))
+    motion.close()
     nojs = browser.new_page(viewport={'width':1440,'height':1000}, java_script_enabled=False)
     nojs.goto(BASE, wait_until='networkidle')
     assert nojs.locator('h1').is_visible()

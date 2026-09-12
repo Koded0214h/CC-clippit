@@ -769,32 +769,11 @@ body {
 .motion-ready .collage-star {
   animation: star-enter 1.4s 0.3s var(--ease) both;
 }
-.motion-ready [data-reveal] {
-  transition:
-    clip-path 1s var(--ease),
-    opacity 0.8s var(--ease),
-    transform 1s var(--ease);
-}
 .motion-ready [data-reveal].awaiting {
   opacity: 0;
-  clip-path: inset(0 0 100% 0);
-  transform: translateY(24px) rotate(1deg);
 }
 .motion-ready [data-reveal].revealed {
   opacity: 1;
-  clip-path: inset(-50% -30% -50% -30%);
-  transform: none;
-}
-.motion-ready .step:nth-child(2),
-.motion-ready .campaign-card:nth-child(2) {
-  transition-delay: 0.1s;
-}
-.motion-ready .step:nth-child(3),
-.motion-ready .campaign-card:nth-child(3) {
-  transition-delay: 0.2s;
-}
-.motion-ready .step:nth-child(4) {
-  transition-delay: 0.3s;
 }
 @keyframes title-enter {
   from {
@@ -825,12 +804,17 @@ body {
   }
 }
 @keyframes card-toss {
-  from {
+  0% {
     opacity: 0;
-    transform: translate(50px, 140px) rotate(calc(var(--rotation) + 25deg))
-      scale(0.6);
+    transform: translate(35px, 150px) rotate(calc(var(--rotation) + 28deg))
+      scale(0.72);
   }
-  to {
+  72% {
+    opacity: 1;
+    transform: translate(-4px, -9px) rotate(calc(var(--rotation) - 4deg))
+      scale(1.025);
+  }
+  100% {
     opacity: 1;
     transform: rotate(var(--rotation));
   }
@@ -906,18 +890,60 @@ body {
   width: calc(100% - 4px);
   margin-inline: 2px;
 }
-.motion-ready [data-reveal].awaiting {
-  clip-path: none;
+.mini-post {
+  transform-origin: 50% 8%;
 }
-.motion-ready [data-reveal].revealed {
-  animation: section-unfold 0.95s var(--ease) both;
+.mini-receipt,
+.calculator__result {
+  transform-origin: center top;
 }
-@keyframes section-unfold {
+.pot-track > span,
+.proof-board__tape {
+  transform-origin: left center;
+}
+.brand-board__chart > div {
+  transform-origin: center bottom;
+}
+.motion-ready .social-card__top {
+  animation: social-ui-enter 650ms 950ms var(--ease) both;
+}
+.motion-ready .social-card__caption {
+  animation: social-ui-enter 750ms 1100ms var(--ease) both;
+}
+.motion-ready .social-card--front .social-card__caption {
+  animation-delay: 1250ms;
+}
+.motion-ready .view-bubble {
+  animation: view-badge-enter 800ms 1400ms var(--ease) both;
+}
+.motion-ready .social-card--front .view-bubble {
+  animation-delay: 1600ms;
+}
+@keyframes social-ui-enter {
   from {
-    clip-path: inset(0 0 80% 0);
+    opacity: 0;
+    translate: 0 12px;
   }
   to {
-    clip-path: inset(-50% -30% -50% -30%);
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+@keyframes view-badge-enter {
+  0% {
+    opacity: 0;
+    scale: 0.35;
+    rotate: -18deg;
+  }
+  72% {
+    opacity: 1;
+    scale: 1.12;
+    rotate: 3deg;
+  }
+  100% {
+    opacity: 1;
+    scale: 1;
+    rotate: 0deg;
   }
 }
 /* Four visual steps */
@@ -1890,9 +1916,6 @@ input[type="range"]::-moz-range-thumb {
   border-radius: 4px 4px 0 0;
   transform-origin: bottom;
   transition: transform 1.2s var(--ease);
-}
-.awaiting .brand-board__chart > div {
-  transform: scaleY(0.03);
 }
 .brand-board__chart > div:nth-child(even) {
   background: #d0eca6;

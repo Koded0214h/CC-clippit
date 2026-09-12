@@ -14,15 +14,309 @@
   };
   if (!reduced.matches) document.body.classList.add("motion-ready");
 
-  // A single reveal per composition. Plain HTML stays visible if JS is unavailable.
+  // Each composition has its own entrance; individual transforms preserve the
+  // resting paper rotations in CSS. Finished animations release their styles.
   const revealNodes = $$("[data-reveal]");
+  const entranceAnimations = new Set();
+  const settle = "cubic-bezier(.22,1,.36,1)";
+  function enter(target, keyframes, duration = 850, delay = 0) {
+    if (!target || reduced.matches || !target.animate) return;
+    const animation = target.animate(keyframes, {
+      duration,
+      delay,
+      easing: settle,
+      fill: "both",
+    });
+    entranceAnimations.add(animation);
+    const release = () => {
+      entranceAnimations.delete(animation);
+      animation.cancel();
+    };
+    animation.finished.then(release, release);
+  }
+  function pop(target, delay, rotation = -12) {
+    enter(
+      target,
+      [
+        { opacity: 0, scale: ".45", rotate: `${rotation}deg` },
+        { opacity: 1, scale: "1.09", rotate: "2deg", offset: 0.72 },
+        { opacity: 1, scale: "1", rotate: "0deg" },
+      ],
+      720,
+      delay,
+    );
+  }
+  function land(target, delay = 0, angle = -6, distance = 70) {
+    const travel = innerWidth < 700 ? distance * 0.65 : distance;
+    enter(
+      target,
+      [
+        {
+          opacity: 0,
+          translate: `0 ${travel}px`,
+          rotate: `${angle}deg`,
+          scale: ".93",
+        },
+        {
+          opacity: 1,
+          translate: "0 -7px",
+          rotate: `${-angle * 0.16}deg`,
+          scale: "1.012",
+          offset: 0.72,
+        },
+        { opacity: 1, translate: "0 0", rotate: "0deg", scale: "1" },
+      ],
+      1100,
+      delay,
+    );
+  }
+  function rollNumber(target, delay) {
+    enter(
+      target,
+      [
+        { opacity: 0, translate: "0 18px", rotate: "-4deg", scale: ".92" },
+        {
+          opacity: 1,
+          translate: "0 -3px",
+          rotate: "1deg",
+          scale: "1.025",
+          offset: 0.7,
+        },
+        { opacity: 1, translate: "0 0", rotate: "0deg", scale: "1" },
+      ],
+      760,
+      delay,
+    );
+  }
+  function campaignEntrance(card, delay) {
+    const index = $$(".campaign-card").indexOf(card);
+    land(card, delay, [-7, 4, 8][index] || -5, 95);
+    enter(
+      $(".campaign-art > img", card),
+      [
+        { scale: "1.17", translate: "0 10px" },
+        { scale: "1", translate: "0 0" },
+      ],
+      1350,
+      delay + 100,
+    );
+    enter(
+      $(".campaign-art__type", card),
+      [
+        { opacity: 0, translate: "0 28px", clipPath: "inset(0 0 100% 0)" },
+        {
+          opacity: 1,
+          translate: "0 0",
+          clipPath: "inset(-10% -70% -10% -10%)",
+        },
+      ],
+      750,
+      delay + 280,
+    );
+    pop($(".campaign-category", card), delay + 420, index % 2 ? 10 : -10);
+    rollNumber($(".campaign-rate", card), delay + 430);
+    enter(
+      $(".pot-track > span", card),
+      [{ scale: "0 1" }, { scale: "1 1" }],
+      950,
+      delay + 540,
+    );
+    pop($(".campaign-open > .icon", card), delay + 620, -45);
+  }
+  function stepEntrance(step, delay) {
+    // Content stays calm while the miniature product objects do the storytelling.
+    enter(step, [{ opacity: 0 }, { opacity: 1 }], 500, delay);
+    const brief = $(".mini-brief", step),
+      post = $(".mini-post", step);
+    const proof = $(".proof-slip", step),
+      receipt = $(".mini-receipt", step);
+    if (brief) {
+      enter(
+        brief,
+        [
+          {
+            opacity: 0,
+            translate: "-75px 35px",
+            rotate: "-20deg",
+            scale: ".85",
+          },
+          {
+            opacity: 1,
+            translate: "4px -4px",
+            rotate: "4deg",
+            scale: "1.02",
+            offset: 0.72,
+          },
+          { opacity: 1, translate: "0 0", rotate: "0deg", scale: "1" },
+        ],
+        1100,
+        delay + 100,
+      );
+      pop($(".mini-brief__button", step), delay + 650, 0);
+    }
+    if (post) {
+      enter(
+        post,
+        [
+          { opacity: 0, rotate: "32deg", translate: "28px -90px" },
+          { opacity: 1, rotate: "-8deg", translate: "-3px 4px", offset: 0.62 },
+          { opacity: 1, rotate: "3deg", translate: "0 -2px", offset: 0.82 },
+          { opacity: 1, rotate: "0deg", translate: "0 0" },
+        ],
+        1300,
+        delay + 60,
+      );
+      pop($(".link-pill", step), delay + 610, -9);
+    }
+    if (proof) {
+      land(proof, delay + 80, 5, 50);
+      $$(".proof-slip > p", step).forEach((row, index) => {
+        enter(
+          row,
+          [
+            { opacity: 0, translate: "-14px 0" },
+            { opacity: 1, translate: "0 0" },
+          ],
+          450,
+          delay + 340 + index * 140,
+        );
+        pop($("i", row), delay + 460 + index * 140, -28);
+      });
+      rollNumber($(".proof-slip > div", step), delay + 780);
+    }
+    if (receipt) {
+      enter(
+        receipt,
+        [
+          {
+            opacity: 0,
+            translate: "0 -60px",
+            scale: "1 .6",
+            clipPath: "inset(0 0 95% 0)",
+          },
+          {
+            opacity: 1,
+            translate: "0 4px",
+            scale: "1 1.03",
+            clipPath: "inset(0 0 0 0)",
+            offset: 0.82,
+          },
+          {
+            opacity: 1,
+            translate: "0 0",
+            scale: "1 1",
+            clipPath: "inset(0 0 0 0)",
+          },
+        ],
+        1150,
+        delay + 80,
+      );
+      pop($(".mini-receipt > .icon", step), delay + 580, 20);
+      rollNumber($(".mini-receipt > strong", step), delay + 700);
+    }
+    enter(
+      $(".step__visual > .hand-note", step),
+      [
+        { opacity: 0, clipPath: "inset(0 100% 0 0)" },
+        { opacity: 1, clipPath: "inset(-25% -10% -25% -10%)" },
+      ],
+      650,
+      delay + 750,
+    );
+  }
+  function revealComposition(el, delay = 0) {
+    el.classList.remove("awaiting");
+    el.classList.add("revealed");
+    if (reduced.matches) return;
+    if (el.matches(".campaign-card")) return campaignEntrance(el, delay);
+    if (el.matches(".step")) return stepEntrance(el, delay);
+    if (el.matches(".calculator")) {
+      land(el, delay, -7, 65);
+      enter(
+        $(".calculator__result", el),
+        [
+          { opacity: 0, scale: "1 .15", translate: "0 -15px" },
+          { opacity: 1, scale: "1 1.04", translate: "0 2px", offset: 0.75 },
+          { opacity: 1, scale: "1 1", translate: "0 0" },
+        ],
+        950,
+        delay + 380,
+      );
+      rollNumber($("#calcMoney", el), delay + 700);
+      pop($(".mini-tag", el), delay + 600);
+    } else if (el.matches(".proof-board")) {
+      land(el, delay, 8, 50);
+      $$(".proof-board__row", el).forEach((row, index) => {
+        enter(
+          row,
+          [
+            { opacity: 0, translate: "-24px 8px", rotate: "-2deg" },
+            { opacity: 1, translate: "0 0", rotate: "0deg" },
+          ],
+          650,
+          delay + 300 + index * 180,
+        );
+      });
+      $$(".proof-board__connector", el).forEach((arrow, index) =>
+        pop(arrow, delay + 550 + index * 180, 0),
+      );
+      enter(
+        $(".proof-board__tape", el),
+        [{ scale: "0 1" }, { scale: "1 1" }],
+        650,
+        delay + 150,
+      );
+      pop($(".verified-stamp", el), delay + 1000, -28);
+    } else if (el.matches(".brand-board")) {
+      land(el, delay, -10, 70);
+      $$(".brand-board__chart > div", el).forEach((bar, index) => {
+        enter(
+          bar,
+          [
+            { scale: "1 .03" },
+            { scale: "1 1.08", offset: 0.8 },
+            { scale: "1 1" },
+          ],
+          800,
+          delay + 320 + index * 55,
+        );
+      });
+      $$(".avatar-stack img", el).forEach((avatar, index) =>
+        pop(avatar, delay + 800 + index * 100, -15),
+      );
+      enter(
+        $(".brand-board__note", el),
+        [
+          { opacity: 0, translate: "-15px 0", rotate: "-8deg" },
+          { opacity: 1, translate: "0 0", rotate: "0deg" },
+        ],
+        800,
+        delay + 850,
+      );
+    } else {
+      enter(
+        el,
+        [
+          { opacity: 0, translate: "0 25px", rotate: "1.5deg" },
+          { opacity: 1, translate: "0 0", rotate: "0deg" },
+        ],
+        850,
+        delay,
+      );
+    }
+  }
   if (!reduced.matches && "IntersectionObserver" in window) {
     const observer = new IntersectionObserver(
       (entries) => {
-        entries.forEach((entry) => {
-          if (!entry.isIntersecting) return;
-          entry.target.classList.remove("awaiting");
-          entry.target.classList.add("revealed");
+        // Stagger only siblings entering together; a lone mobile card never waits
+        // for the index it had in the desktop row.
+        const visible = entries.filter((entry) => entry.isIntersecting);
+        const groups = new Map();
+        visible.forEach((entry) => {
+          const parent = entry.target.parentElement;
+          const order = groups.get(parent) || 0;
+          groups.set(parent, order + 1);
+          revealComposition(entry.target, Math.min(order * 130, 390));
           observer.unobserve(entry.target);
         });
       },
@@ -33,6 +327,16 @@
       observer.observe(el);
     });
   }
+
+  // Keyboard users can reach a card immediately, including during its entrance.
+  document.addEventListener("focusin", (event) => {
+    const card = event.target.closest("[data-reveal]");
+    if (!card) return;
+    card.classList.remove("awaiting");
+    for (const animation of entranceAnimations) {
+      if (card.contains(animation.effect?.target)) animation.cancel();
+    }
+  });
 
   const nav = $("#nav"),
     burger = $("#burger"),
@@ -66,10 +370,15 @@
         el.classList.toggle("is-active", selected);
         el.setAttribute("aria-pressed", String(selected));
       });
+      let returning = 0;
       $$(".campaign-card").forEach((card) => {
+        const wasHidden = card.hidden;
         card.hidden =
           button.dataset.filter !== "all" &&
           card.dataset.category !== button.dataset.filter;
+        if (wasHidden && !card.hidden) {
+          revealComposition(card, returning++ * 100);
+        }
       });
     }),
   );
@@ -491,6 +800,7 @@
   reduced.addEventListener("change", () => {
     document.body.classList.toggle("motion-ready", !reduced.matches);
     if (reduced.matches) {
+      entranceAnimations.forEach((animation) => animation.cancel());
       revealNodes.forEach((el) => el.classList.remove("awaiting"));
       stage.classList.remove("throw-enabled");
       phone.inert = false;

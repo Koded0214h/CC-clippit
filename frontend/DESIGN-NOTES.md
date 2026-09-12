@@ -23,7 +23,9 @@ Photography is stored locally. Photo credits are accessible from the footer. Peo
 ## Motion
 
 - Headline lines enter in sequence, social cards toss into place, then the receipt and stamp arrive.
-- Section compositions reveal once, using IntersectionObserver. The chart grows with its board.
+- Each card type has its own entrance: the brief slides and tilts into place, the photo swings from its top edge, checklist rows and ticks arrive sequentially, and the payout receipt feeds down and unfolds. Campaign posters land with a small overshoot, followed by artwork, category badges, rates, and budget bars.
+- The calculator unfolds its gold receipt, the verification board assembles its rows before the stamp lands, and the brand chart grows bar by bar before its creator avatars pop in. Social UI and view badges arrive after the hero cards settle.
+- IntersectionObserver triggers each composition once. Only siblings entering together are staggered, so a lone mobile card starts immediately. Filtered cards receive a fresh entrance when returned. Finished animations release their styles, keyboard focus settles a card immediately, and changing reduced-motion preferences cancels active entrances.
 - Finite canvas confetti plays at the opening and finale; the finale has a replay button.
 - The original 84-frame phone throw is preserved and loaded near its section. A matching DOM phone grows from the final frame into the closing CTA. Scrolling can reverse the sequence. A skip control is included.
 - The old skating character, pole, and ink-mask sections are removed from the implementation. Their existing image files are left on disk.
