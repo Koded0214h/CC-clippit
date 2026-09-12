@@ -2269,25 +2269,13 @@ input[type="range"]::-moz-range-thumb {
   background: #75a334;
 }
 .footer__wordmark {
-  font-size: clamp(120px, 24vw, 360px);
-  font-weight: 900;
-  letter-spacing: -0.085em;
-  line-height: 1.14;
-  font-style: italic;
-  margin: 40px 0 0 -9px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  margin: 38px 0 0 -8px;
+  max-width: min(100% + 8px, 1360px);
 }
-.footer__wordmark > span {
-  color: var(--lime);
-  font-style: normal;
-  font-size: 1em;
-  line-height: 1;
-  font-weight: 500;
-  letter-spacing: -0.04em;
-  -webkit-text-stroke: 2px var(--ink);
-  transform: translateY(-8%);
+.footer__wordmark img {
+  display: block;
+  width: 100%;
+  height: auto;
 }
 .footer__bottom {
   display: flex;
@@ -3463,7 +3451,7 @@ input[type="range"]::-moz-range-thumb {
   }
   .footer__wordmark {
     margin: 35px 0 0 -5px;
-    font-size: 24vw;
+    max-width: calc(100% + 5px);
   }
   .footer__bottom {
     font-size: 8px;
