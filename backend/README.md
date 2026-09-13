@@ -141,7 +141,7 @@ Admin accounts aren't self-service — `POST /auth/signup` rejects `role: admin`
 ## Social OAuth providers
 
 `modules/auth/providers/` ports the OAuth handshake from the standalone
-prototypes in `service-test/{tt,meta_fb,meta_insta,meta_threads}` — same
+prototypes in `service-test/{tt,meta_fb,meta_insta,meta_threads,x}` — same
 endpoints, same token-exchange steps, normalized into one `NormalizedToken`
 shape, now on `httpx.AsyncClient` instead of `requests`. Only the
 *connect-an-account* step is ported here; each platform's metrics/content
