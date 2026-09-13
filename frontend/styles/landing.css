@@ -7,8 +7,8 @@
   --gold: #efc884;
   --line: #dce2d2;
   --muted: #61665a;
-  --sans: "Geist", sans-serif;
-  --marker: "Kalam", cursive;
+  --sans: var(--font-geist), "Geist", sans-serif;
+  --marker: var(--font-kalam), "Kalam", cursive;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 *,
@@ -2178,16 +2178,6 @@ input[type="range"]::-moz-range-thumb {
 }
 .throw-enabled .finale-star {
   font-size: 46px;
-}
-.throw-skip {
-  display: block;
-  pointer-events: auto;
-  background: white;
-  border: 1px solid var(--ink);
-  border-radius: 6px;
-  padding: 9px 13px;
-  font-size: 11px;
-  margin-top: 28px;
 }
 @media (max-width: 700px) {
   .calculator-copy h2 > br:nth-child(2) {

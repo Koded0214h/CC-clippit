@@ -1,0 +1,71 @@
+:root {
+  --paper: #f7f8f2;
+  --white: #ffffff;
+  --ink: #151713;
+  --lime: #b8ff38;
+  --gold: #efc884;
+  --line: #dce2d2;
+  --muted: #61665a;
+  --soft: #e9eee1;
+  --danger: #b52e21;
+  --sans: var(--font-geist), "Geist", sans-serif;
+  --marker: var(--font-kalam), "Kalam", cursive;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  min-width: 320px;
+  background: var(--paper);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  overflow-x: clip;
+  color: var(--ink);
+  background: var(--paper);
+  font-family: var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+button,
+a,
+label {
+  touch-action: manipulation;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+::selection {
+  color: var(--ink);
+  background: var(--lime);
+}
+
+:focus-visible {
+  outline: 3px solid #4f7d15;
+  outline-offset: 4px;
+}
+
+[hidden] {
+  display: none !important;
+}

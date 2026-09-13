@@ -27,13 +27,21 @@ Photography is stored locally. Photo credits are accessible from the footer. Peo
 - The calculator unfolds its gold receipt, the verification board assembles its rows before the stamp lands, and the brand chart grows bar by bar before its creator avatars pop in. Social UI and view badges arrive after the hero cards settle.
 - IntersectionObserver triggers each composition once. Only siblings entering together are staggered, so a lone mobile card starts immediately. Filtered cards receive a fresh entrance when returned. Finished animations release their styles, keyboard focus settles a card immediately, and changing reduced-motion preferences cancels active entrances.
 - Finite canvas confetti plays at the opening and finale; the finale has a replay button.
-- The original 84-frame phone throw is preserved and loaded near its section. A matching DOM phone grows from the final frame into the closing CTA. Scrolling can reverse the sequence. A skip control is included.
+- The original 84-frame phone throw is preserved and loaded near its section. A matching DOM phone grows from the final frame into the closing CTA. Scrolling can reverse the sequence; the old skip control has been removed.
 - The old skating character, pole, and ink-mask sections are removed from the implementation. Their existing image files are left on disk.
 - Reduced-motion preferences disable decorative motion and replace the phone sequence with a static, accessible closing section.
 
 ## Product scope
 
-This remains a standalone landing page, not an implemented creator marketplace. Campaign cards and earnings are labelled previews. The calculator applies full thousands and discloses the 1,000-view minimum, campaign caps, available budget, and five-day hold. The brand builder downloads a local plain-text brief; it does not publish, store personal data, or take payment. Account connections, real campaign data, escrow, and withdrawals still require the application backend.
+The marketing surface and authentication journey now run as one Next.js application. Campaign cards and earnings remain labelled previews. The calculator applies full thousands and discloses the 1,000-view minimum, campaign caps, available budget, and five-day hold. The brand builder downloads a local plain-text brief; it does not publish, store personal data, or take payment. Account connections, real campaign data, escrow, and withdrawals still require the application backend.
+
+## Authentication flow
+
+The auth journey uses proper App Router paths under `/auth`, with a shared React shell, typed flow state, reusable form primitives, and one page per authentication state. It keeps the same paper, lime, gold, ink, Geist, and Kalam system beside a disciplined form workspace.
+
+The frontend covers account-type selection, creator and organisation registration, sign in, email verification, password recovery, recovery OTP, new password, and completion states. Forms include inline validation, password visibility controls, keyboard-friendly OTP entry and paste, resend cooldown feedback, reduced-motion behavior, and layouts down to 320px. Identity persistence, mail delivery, sessions, and OAuth remain ready for production API integration rather than being simulated with local storage.
+
+The final auth treatment keeps a single creator video as a desktop-only atmosphere layer. All editorial copy and status chrome were removed from the footage; the only story beat is an animated comic notification from the creator's phone: “You just received ₦55,000 for your Indomie content.” Mobile omits the video scene entirely so the task starts immediately. The footage is the commercial-use Mixkit clip [Happy man chatting on his cell phone](https://mixkit.co/free-stock-video/happy-man-chatting-on-his-cell-phone-41167/) under the Mixkit Stock Video Free License. It is illustrative stock footage; the person shown is not presented as a Clippit customer or endorser.
 
 ## Verification
 

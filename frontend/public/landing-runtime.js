@@ -5,6 +5,7 @@
     ...root.querySelectorAll(selector),
   ];
   const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+  let motionAllowed = !reduced.matches;
   const nf = new Intl.NumberFormat("en-NG");
   const money = (value) => "₦" + nf.format(Math.floor(value));
   const clamp = (n, min = 0, max = 1) => Math.max(min, Math.min(max, n));
@@ -20,7 +21,7 @@
   const entranceAnimations = new Set();
   const settle = "cubic-bezier(.22,1,.36,1)";
   function enter(target, keyframes, duration = 850, delay = 0) {
-    if (!target || reduced.matches || !target.animate) return;
+    if (!target || !motionAllowed || !target.animate) return;
     const animation = target.animate(keyframes, {
       duration,
       delay,
@@ -28,6 +29,16 @@
       fill: "both",
     });
     entranceAnimations.add(animation);
+    const watchMotionPreference = () => {
+      if (!entranceAnimations.has(animation)) return;
+      if (reduced.matches) {
+        animation.cancel();
+        entranceAnimations.delete(animation);
+        return;
+      }
+      requestAnimationFrame(watchMotionPreference);
+    };
+    requestAnimationFrame(watchMotionPreference);
     const release = () => {
       entranceAnimations.delete(animation);
       animation.cancel();
@@ -305,8 +316,9 @@
       );
     }
   }
+  let revealObserver;
   if (!reduced.matches && "IntersectionObserver" in window) {
-    const observer = new IntersectionObserver(
+    revealObserver = new IntersectionObserver(
       (entries) => {
         // Stagger only siblings entering together; a lone mobile card never waits
         // for the index it had in the desktop row.
@@ -317,14 +329,14 @@
           const order = groups.get(parent) || 0;
           groups.set(parent, order + 1);
           revealComposition(entry.target, Math.min(order * 130, 390));
-          observer.unobserve(entry.target);
+          revealObserver.unobserve(entry.target);
         });
       },
       { threshold: 0.08, rootMargin: "0px 0px -35px 0px" },
     );
     revealNodes.forEach((el) => {
       el.classList.add("awaiting");
-      observer.observe(el);
+      revealObserver.observe(el);
     });
   }
 
@@ -645,18 +657,6 @@
   let throwWidth = 0,
     throwHeight = 0,
     scheduled = false;
-  const skip = document.createElement("button");
-  skip.className = "throw-skip";
-  skip.textContent = "Skip to the good part ↗";
-  skip.addEventListener("click", () => {
-    window.scrollTo({
-      top: stage.offsetTop + stage.offsetHeight - innerHeight,
-      behavior: "instant",
-    });
-    updateScene();
-    $(".button", content).focus({ preventScroll: true });
-  });
-  intro.append(skip);
   function sizeThrow() {
     throwWidth = stage.clientWidth;
     throwHeight = innerHeight;
@@ -676,7 +676,7 @@
     if (loading || failed || reduced.matches) return;
     loading = true;
     try {
-      const response = await fetch("assets/throw/manifest.json");
+      const response = await fetch("/assets/throw/manifest.json");
       if (!response.ok) throw new Error("Missing animation manifest");
       manifest = await response.json();
       frames = await Promise.all(
@@ -687,7 +687,7 @@
               const image = new Image();
               image.onload = () => resolve(image);
               image.onerror = reject;
-              image.src = `assets/throw/f${String(i).padStart(2, "0")}.webp`;
+              image.src = `/assets/throw/f${String(i).padStart(2, "0")}.webp`;
             }),
         ),
       );
@@ -798,9 +798,12 @@
     if (confettiFrame) confettiSize();
   });
   reduced.addEventListener("change", () => {
-    document.body.classList.toggle("motion-ready", !reduced.matches);
+    motionAllowed = !reduced.matches;
+    document.body.classList.toggle("motion-ready", motionAllowed);
     if (reduced.matches) {
+      revealObserver?.disconnect();
       entranceAnimations.forEach((animation) => animation.cancel());
+      document.getAnimations().forEach((animation) => animation.cancel());
       revealNodes.forEach((el) => el.classList.remove("awaiting"));
       stage.classList.remove("throw-enabled");
       phone.inert = false;

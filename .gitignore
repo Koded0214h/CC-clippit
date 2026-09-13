@@ -1,7 +1,42 @@
+# Dependencies
+node_modules/
+
+# Framework and build output
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+
+# Test and local QA output
+coverage/
 /tmp/
 /frontend/tmp/
-__pycache__/
+
+# Environment files and local secrets
 .env
+.env.*
+!.env.example
+
+# Python caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Logs and process output
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 nohup.out
+
+# Deployment and editor state
+.vercel/
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Locally extracted reference documents
 *docs/*

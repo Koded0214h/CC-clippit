@@ -1,53 +1,36 @@
 # Clippit
 
-A bright creator-first landing page: social collages, campaign posters, an interactive earnings calculator, a brand brief builder, and the original phone-throw finale.
+Clippit is a creator campaign product for the Nigerian market: creators discover funded briefs, submit social clips, earn from verified views, and withdraw cleared naira earnings. Organisations fund campaigns and track attention against their budgets.
 
-## Run locally
+## Repository
 
-```sh
-python serve.py
+- `frontend/` — Next.js 16, React 19, and strict TypeScript
+- `backend/service-test/` — isolated Python service experiments for social-platform integrations
+- `frontend/public/assets/` — local brand, photography, video, and motion assets
+
+## Run the frontend
+
+```powershell
+cd frontend
+npm install
+npm run dev
 ```
 
-Open http://localhost:5174. No dependencies or build step are needed to serve the page. The development server disables caching.
+Open `http://localhost:5174`. The server listens on all network interfaces, so another device on the same Wi-Fi can open `http://<your-ip>:5174`.
 
-## Files
+For a production build:
 
-- `index.html`: page content and accessible SVG icons.
-- `styles.css`: design tokens, responsive compositions, and entrance animations.
-- `main.js`: campaign filters, calculator, accessible dialogs, downloadable brief, finite confetti, and scroll-driven phone throw.
-- `assets/photos/`: locally downloaded photography; credits are linked in the website footer.
-- `assets/throw/`: the existing 84-frame sequence and its final phone geometry.
-- `DESIGN-NOTES.md`: art direction, reference links, asset provenance, and implementation scope.
-
-## Working interactions
-
-- Filter the three illustrative campaign previews by category.
-- Open a brief, read its sample requirements, and try its rate in the calculator.
-- Calculate example earnings at three campaign rates. Only full thousands count.
-- Create a sample brand brief and download it as a text file. Nothing is published or charged.
-- Expand the FAQs, use the mobile menu, and open photography credits.
-- Scroll through the retained phone throw, skip it, or replay confetti at the finale.
-
-All sections use light backgrounds. The skating character and ink-reveal implementation have been removed; existing unused character files remain on disk. Reduced-motion preferences produce a static closing section. Primary content remains readable without JavaScript.
-
-## Scope
-
-This is a landing page with functional local previews. Campaigns, views, and earnings are illustrative, not live offers or customer testimonials. Real accounts, platform connections, escrow funding, submissions, and withdrawals require backend integration.
-
-## Backend services
-
-Additional services are available under `backend/service-test/`:
-
-- **`meta_insta/`**: Flask app for Instagram Business account metrics via OAuth. Connect an Instagram Creator/Business account and view profile data, posts, engagement metrics (views, reach, saved, likes, comments), and account-level insights.
-
-Each service has its own setup instructions in its `README.md`.
-
-## Browser verification
-
-With Python Playwright and its Chromium browser installed:
-
-```sh
-python -X utf8 -u scripts/verify.py
+```powershell
+npm run typecheck
+npm run lint
+npm run build
+npm run start
 ```
 
-The script verifies the main interactions, desktop/mobile layouts, reduced motion, and no-JavaScript content, and saves visual captures in `tmp/qa/`.
+The marketing page lives at `/`. Authentication uses real routes under `/auth`, beginning with `/auth/sign-up` and `/auth/sign-in`.
+
+## Current scope
+
+The frontend implements the full reviewable UX for landing, registration, sign in, email verification, password recovery, OTP entry, and password reset. Campaign offers, balances, and earnings remain clearly illustrative until production APIs connect identity, platform verification, escrow, and payouts.
+
+See [`frontend/README.md`](frontend/README.md) for route details, architecture, and verification commands.
