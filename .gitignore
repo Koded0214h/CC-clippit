@@ -22,6 +22,8 @@ coverage/
 __pycache__/
 *.py[cod]
 .pytest_cache/
+.venv/
+venv/
 
 # Logs and process output
 *.log
