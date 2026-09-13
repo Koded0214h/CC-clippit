@@ -9,7 +9,8 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    database_url: str = "postgresql://clippit:clippit@localhost:5432/clippit"
+    # Async (asyncpg) URL used by the running app: postgresql+asyncpg://...
+    database_url: str = "postgresql+asyncpg://clippit:clippit@localhost:5432/clippit"
     jwt_secret: str = "dev-only-not-secret"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 1440
@@ -19,6 +20,11 @@ class Settings(BaseSettings):
     # backend is ever split out later. Not exposed to the browser.
     internal_service_secret: str = "dev-only-not-secret"
     frontend_origin: str = "http://localhost:3000"
+
+    # In-memory by default (fine for one process/dev). Point this at Redis
+    # (e.g. redis://localhost:6379) once this runs as more than one worker,
+    # or rate limits won't be shared across processes.
+    rate_limit_storage_uri: str = "memory://"
 
     tiktok_client_key: str = ""
     tiktok_client_secret: str = ""
@@ -35,6 +41,13 @@ class Settings(BaseSettings):
     threads_app_id: str = ""
     threads_app_secret: str = ""
     threads_redirect_uri: str = "http://localhost:8000/social/threads/callback"
+
+    @property
+    def sync_database_url(self) -> str:
+        """Alembic migrations run synchronously (psycopg2), while the app
+        talks to Postgres asynchronously (asyncpg) — same database, two
+        drivers. Derived so there's only one URL to configure."""
+        return self.database_url.replace("+asyncpg", "")
 
 
 @lru_cache

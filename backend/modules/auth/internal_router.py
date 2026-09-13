@@ -12,29 +12,47 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.cache import TTLCache
 from core.deps import get_db, require_internal_secret
 
 from . import models, schemas
 
 router = APIRouter(prefix="/internal", tags=["internal"], dependencies=[Depends(require_internal_secret)])
 
+# Other modules hit /internal/users/{id} on nearly every request they handle
+# (resolving "who is this" for a campaign or submission) — a user's role
+# barely ever changes, so a short TTL trades a little staleness for a lot
+# fewer DB round trips under load.
+_user_cache: TTLCache[uuid.UUID, schemas.InternalUserOut] = TTLCache(ttl_seconds=30, max_size=5000)
+
 
 @router.get("/users/{user_id}", response_model=schemas.InternalUserOut)
-def get_user(user_id: uuid.UUID, db: Session = Depends(get_db)):
-    user = db.get(models.User, user_id)
+async def get_user(user_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    cached = _user_cache.get(user_id)
+    if cached:
+        return cached
+
+    user = await db.get(models.User, user_id)
     if not user:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
-    return schemas.InternalUserOut.model_validate(user)
+
+    result = schemas.InternalUserOut.model_validate(user)
+    _user_cache.set(user_id, result)
+    return result
 
 
 @router.get("/social-accounts/{user_id}/{platform}/token", response_model=schemas.InternalTokenOut)
-def get_social_token(user_id: uuid.UUID, platform: models.Platform, db: Session = Depends(get_db)):
-    account = (
-        db.query(models.SocialAccount)
-        .filter(models.SocialAccount.user_id == user_id, models.SocialAccount.platform == platform)
-        .first()
+async def get_social_token(user_id: uuid.UUID, platform: models.Platform, db: AsyncSession = Depends(get_db)):
+    # Not cached: a token is exactly what must never be served stale after
+    # a reconnect, and this endpoint isn't called anywhere near as often as
+    # the user lookup above.
+    account = await db.scalar(
+        select(models.SocialAccount).where(
+            models.SocialAccount.user_id == user_id, models.SocialAccount.platform == platform
+        )
     )
     if not account:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No connected account for this platform")

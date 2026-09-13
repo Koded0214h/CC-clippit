@@ -9,9 +9,10 @@ import base64
 import hashlib
 from urllib.parse import urlencode
 
-import requests
+import httpx
 
 from core.config import get_settings
+
 from .base import NormalizedToken, OAuthError
 
 PLATFORM = "tiktok"
@@ -41,21 +42,21 @@ def authorize_url(state: str, code_verifier: str) -> str:
     return f"{AUTH_URL}?{urlencode(params)}"
 
 
-def exchange_code(code: str, code_verifier: str | None) -> NormalizedToken:
+async def exchange_code(code: str, code_verifier: str | None) -> NormalizedToken:
     settings = get_settings()
-    resp = requests.post(
-        TOKEN_URL,
-        headers={"Content-Type": "application/x-www-form-urlencoded"},
-        data={
-            "client_key": settings.tiktok_client_key,
-            "client_secret": settings.tiktok_client_secret,
-            "code": code,
-            "grant_type": "authorization_code",
-            "redirect_uri": settings.tiktok_redirect_uri,
-            "code_verifier": code_verifier or "",
-        },
-        timeout=15,
-    )
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            TOKEN_URL,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            data={
+                "client_key": settings.tiktok_client_key,
+                "client_secret": settings.tiktok_client_secret,
+                "code": code,
+                "grant_type": "authorization_code",
+                "redirect_uri": settings.tiktok_redirect_uri,
+                "code_verifier": code_verifier or "",
+            },
+        )
     payload = resp.json()
     if "access_token" not in payload:
         raise OAuthError(f"TikTok token exchange failed: {payload}")

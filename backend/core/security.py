@@ -20,8 +20,10 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 def create_access_token(user_id: uuid.UUID, role: str) -> str:
+    """Every token gets a unique `jti` so a single token — not every token
+    this user holds — can be revoked on logout (see modules.auth.models.RevokedToken)."""
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)
-    payload = {"sub": str(user_id), "role": role, "exp": expire}
+    payload = {"sub": str(user_id), "role": role, "jti": str(uuid.uuid4()), "exp": expire}
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 

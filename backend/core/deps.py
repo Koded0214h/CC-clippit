@@ -1,20 +1,17 @@
-from collections.abc import Generator
+from collections.abc import AsyncGenerator
 
 from fastapi import Header, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import get_settings
-from .database import SessionLocal
+from .database import AsyncSessionLocal
 
 settings = get_settings()
 
 
-def get_db() -> Generator[Session, None, None]:
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    async with AsyncSessionLocal() as session:
+        yield session
 
 
 def require_internal_secret(x_internal_secret: str = Header(default="")) -> None:

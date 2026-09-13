@@ -3,7 +3,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
 
-from .models import Platform, Role
+from .models import Platform, Role, Theme
 
 
 class SignupRequest(BaseModel):
@@ -62,6 +62,31 @@ class SocialAccountOut(BaseModel):
             platform_user_id=account.platform_user_id,
             connected_at=account.created_at,
         )
+
+
+class PreferencesOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    email_notifications: bool
+    marketing_emails: bool
+    theme: Theme
+
+
+class PreferencesUpdate(BaseModel):
+    email_notifications: bool | None = None
+    marketing_emails: bool | None = None
+    theme: Theme | None = None
+
+
+class ProfileOut(BaseModel):
+    """What the profile page loads in one call: who the user is, what
+    they've connected, and their preferences — this is also where the
+    frontend renders the "Connect TikTok / Facebook / ..." buttons from,
+    since social connections are a profile action, not a signup mechanism."""
+
+    user: UserOut
+    social_accounts: list[SocialAccountOut]
+    preferences: PreferencesOut
 
 
 class InternalUserOut(BaseModel):

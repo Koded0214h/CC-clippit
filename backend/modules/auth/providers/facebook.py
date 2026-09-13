@@ -9,9 +9,10 @@ the account.
 
 from urllib.parse import urlencode
 
-import requests
+import httpx
 
 from core.config import get_settings
+
 from .base import NormalizedToken, OAuthError
 
 PLATFORM = "facebook"
@@ -36,39 +37,38 @@ def authorize_url(state: str, code_verifier: str | None = None) -> str:
     return f"{AUTH_URL}?{urlencode(params)}"
 
 
-def exchange_code(code: str, code_verifier: str | None = None) -> NormalizedToken:
+async def exchange_code(code: str, code_verifier: str | None = None) -> NormalizedToken:
     settings = get_settings()
 
-    resp = requests.get(
-        TOKEN_URL,
-        params={
-            "client_id": settings.facebook_app_id,
-            "client_secret": settings.facebook_app_secret,
-            "redirect_uri": settings.facebook_redirect_uri,
-            "code": code,
-        },
-        timeout=15,
-    )
-    payload = resp.json()
-    if "access_token" not in payload:
-        raise OAuthError(f"Facebook token exchange failed: {payload}")
-    short_token = payload["access_token"]
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.get(
+            TOKEN_URL,
+            params={
+                "client_id": settings.facebook_app_id,
+                "client_secret": settings.facebook_app_secret,
+                "redirect_uri": settings.facebook_redirect_uri,
+                "code": code,
+            },
+        )
+        payload = resp.json()
+        if "access_token" not in payload:
+            raise OAuthError(f"Facebook token exchange failed: {payload}")
+        short_token = payload["access_token"]
 
-    ll_resp = requests.get(
-        TOKEN_URL,
-        params={
-            "grant_type": "fb_exchange_token",
-            "client_id": settings.facebook_app_id,
-            "client_secret": settings.facebook_app_secret,
-            "fb_exchange_token": short_token,
-        },
-        timeout=15,
-    )
-    ll_payload = ll_resp.json()
-    user_token = ll_payload.get("access_token", short_token)
-    expires_in = int(ll_payload.get("expires_in", 5_184_000))
+        ll_resp = await client.get(
+            TOKEN_URL,
+            params={
+                "grant_type": "fb_exchange_token",
+                "client_id": settings.facebook_app_id,
+                "client_secret": settings.facebook_app_secret,
+                "fb_exchange_token": short_token,
+            },
+        )
+        ll_payload = ll_resp.json()
+        user_token = ll_payload.get("access_token", short_token)
+        expires_in = int(ll_payload.get("expires_in", 5_184_000))
 
-    me_resp = requests.get(f"{GRAPH_API}/me", params={"access_token": user_token}, timeout=10)
-    user_id = me_resp.json().get("id", "")
+        me_resp = await client.get(f"{GRAPH_API}/me", params={"access_token": user_token})
+        user_id = me_resp.json().get("id", "")
 
     return NormalizedToken(access_token=user_token, platform_user_id=user_id, expires_in=expires_in)

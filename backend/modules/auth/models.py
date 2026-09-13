@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, ForeignKey, String, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -22,6 +22,12 @@ class Platform(str, enum.Enum):
     threads = "threads"
 
 
+class Theme(str, enum.Enum):
+    system = "system"
+    light = "light"
+    dark = "dark"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -34,6 +40,9 @@ class User(Base):
 
     social_accounts: Mapped[list["SocialAccount"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
+    )
+    preferences: Mapped["UserPreferences"] = relationship(
+        back_populates="user", cascade="all, delete-orphan", uselist=False
     )
 
 
@@ -54,3 +63,32 @@ class SocialAccount(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="social_accounts")
+
+
+class UserPreferences(Base):
+    __tablename__ = "user_preferences"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    email_notifications: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    marketing_emails: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    theme: Mapped[Theme] = mapped_column(Enum(Theme, name="theme"), nullable=False, server_default="system")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    user: Mapped["User"] = relationship(back_populates="preferences")
+
+
+class RevokedToken(Base):
+    """One row per revoked access token (its `jti`), checked on every
+    authenticated request. Only holds already-expired-or-logged-out tokens
+    long enough for their own `exp` to pass — safe to prune rows where
+    expires_at < now() on a schedule once this needs to scale."""
+
+    __tablename__ = "revoked_tokens"
+
+    jti: Mapped[str] = mapped_column(String(36), primary_key=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    revoked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

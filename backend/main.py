@@ -3,21 +3,30 @@
 Every module (auth today; campaigns, submissions, payouts, admin as they
 land) mounts its routers here. Run from the backend/ directory:
 
+    alembic upgrade head          # schema is managed by migrations now
     uvicorn main:app --reload --port 8000
 """
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 from core.config import get_settings
-from core.database import init_db
+from core.rate_limit import limiter
 from modules.auth.internal_router import router as auth_internal_router
+from modules.auth.profile_router import router as auth_profile_router
 from modules.auth.router import router as auth_router
 from modules.auth.social_router import router as auth_social_router
 
 settings = get_settings()
 
 app = FastAPI(title="Clippit API", version="0.1.0")
+
+app.state.limiter = limiter
+app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -27,9 +36,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.exception_handler(RateLimitExceeded)
+def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+    return JSONResponse(status_code=429, content={"detail": f"Too many requests: {exc.detail}"})
+
+
 # --- Auth & Accounts (Koded) ---
 app.include_router(auth_router)
 app.include_router(auth_social_router)
+app.include_router(auth_profile_router)
 app.include_router(auth_internal_router)
 
 # --- Campaign Management, Funding, Content Submission, Admin (Adam) ---
@@ -39,11 +55,6 @@ app.include_router(auth_internal_router)
 # --- Intelligence Engine, Payout Service (Koded) ---
 # app.include_router(engine_router)
 # app.include_router(payouts_router)
-
-
-@app.on_event("startup")
-def on_startup() -> None:
-    init_db()
 
 
 @app.get("/health")

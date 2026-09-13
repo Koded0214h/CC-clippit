@@ -2,9 +2,10 @@
 
 from urllib.parse import urlencode
 
-import requests
+import httpx
 
 from core.config import get_settings
+
 from .base import NormalizedToken, OAuthError
 
 PLATFORM = "instagram"
@@ -28,35 +29,34 @@ def authorize_url(state: str, code_verifier: str | None = None) -> str:
     return f"{AUTH_URL}?{urlencode(params)}"
 
 
-def exchange_code(code: str, code_verifier: str | None = None) -> NormalizedToken:
+async def exchange_code(code: str, code_verifier: str | None = None) -> NormalizedToken:
     settings = get_settings()
 
-    resp = requests.post(
-        TOKEN_URL,
-        data={
-            "client_id": settings.instagram_app_id,
-            "client_secret": settings.instagram_app_secret,
-            "grant_type": "authorization_code",
-            "redirect_uri": settings.instagram_redirect_uri,
-            "code": code,
-        },
-        timeout=15,
-    )
-    payload = resp.json()
-    if "access_token" not in payload:
-        raise OAuthError(f"Instagram token exchange failed: {payload}")
-    short_token = payload["access_token"]
-    user_id = str(payload.get("user_id", ""))
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            TOKEN_URL,
+            data={
+                "client_id": settings.instagram_app_id,
+                "client_secret": settings.instagram_app_secret,
+                "grant_type": "authorization_code",
+                "redirect_uri": settings.instagram_redirect_uri,
+                "code": code,
+            },
+        )
+        payload = resp.json()
+        if "access_token" not in payload:
+            raise OAuthError(f"Instagram token exchange failed: {payload}")
+        short_token = payload["access_token"]
+        user_id = str(payload.get("user_id", ""))
 
-    ll_resp = requests.get(
-        LONG_LIVED_TOKEN_URL,
-        params={
-            "grant_type": "ig_exchange_token",
-            "client_secret": settings.instagram_app_secret,
-            "access_token": short_token,
-        },
-        timeout=15,
-    )
+        ll_resp = await client.get(
+            LONG_LIVED_TOKEN_URL,
+            params={
+                "grant_type": "ig_exchange_token",
+                "client_secret": settings.instagram_app_secret,
+                "access_token": short_token,
+            },
+        )
     ll_payload = ll_resp.json()
     if "access_token" in ll_payload:
         return NormalizedToken(
