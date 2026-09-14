@@ -1,20 +1,23 @@
 # Clippit Backend
 
-One monolithic FastAPI app, fully async. Every backend module (Auth &
-Accounts today; Campaign Management, Content Submission, Intelligence
-Engine, Payout Service, Admin as they land — see
-`../architecture/backend-modules.md`) mounts its routers on the single
-`app` in `main.py`. There is no per-module process, port, or venv — one
-app, one server, one database.
+One monolithic FastAPI app, fully async. Ownership split is Koded on core
+backend (auth, campaigns, submissions, payouts, admin) and Adam on
+Performance & Trust Intelligence — see `../architecture/intelligence-contracts.md`
+for the frozen boundary and contracts (`architecture/backend-modules.md` is
+superseded but still useful for the table sketches of modules not yet
+built). Every module mounts its routers on the single `app` in `main.py`.
+There is no per-module process, port, or venv — one app, one server, one
+database.
 
 ```
 backend/
   main.py                    <- entry point: uvicorn main:app
-  requirements.txt
+  requirements.txt, requirements-dev.txt
   .env.example
   alembic.ini, alembic/      <- schema migrations (source of truth for the DB)
   core/                      <- shared: config, async db session, JWT/password hashing,
-                                 rate limiter, tiny TTL cache
+                                 rate limiter, tiny TTL cache, the canonical Platform enum
+  integrations/social/       <- platform adapters (Adam) — see Performance & Trust Intelligence below
   modules/
     auth/                    <- Auth & Accounts + Social OAuth (Koded)
       models.py               users, social_accounts, user_preferences, revoked_tokens
@@ -24,7 +27,10 @@ backend/
       profile_router.py        /profile, /profile/preferences
       internal_router.py       /internal/* — called by other modules, not the browser
       providers/                one file per OAuth platform (tiktok, facebook, instagram, threads)
-  service-test/              <- earlier standalone OAuth prototypes, kept for reference
+    campaigns/                <- Campaign Management (Koded) — see below
+    intelligence/              <- Performance & Trust Intelligence (Adam) — see below
+  service-test/               <- earlier standalone OAuth/platform prototypes, kept for reference
+  tests/                       <- pytest suite (SQLite in-memory; see conftest.py)
 ```
 
 ## Run it
@@ -153,6 +159,39 @@ Intelligence Engine module, not Auth.
   token exchange. No refresh-token flow ported yet; a token that's expired
   by the time `/internal/social-accounts/.../token` is called returns 409
   and the creator has to reconnect.
+
+## Campaign Management (Koded)
+
+An event manager (`role: organisation`) creates a campaign as a `draft`,
+sets its payout rule, then `activate`s it — only then can a creator see or
+submit against it. Once active, the campaign's terms are locked (title,
+description, expected views, platforms, payout rule) so a creator is never
+chasing a moving target; only an admin can still correct it. `close` ends
+a campaign from any state, including cancelling a draft outright.
+
+| Route | Auth | Purpose |
+|---|---|---|
+| `POST /campaigns` | organisation | create a `draft` campaign + its payout rule in one call |
+| `GET /campaigns` | Bearer | organisation: own campaigns, any status. Everyone else: `active` only (browsing) |
+| `GET /campaigns/{id}` | Bearer | a draft 404s for anyone but its owner/admin — existence isn't leaked |
+| `PATCH /campaigns/{id}` | owner or admin | edits allowed only while `draft` (admin bypasses the lock) |
+| `PUT /campaigns/{id}/payout-rule` | owner or admin | replace the rule; same draft-only lock |
+| `POST /campaigns/{id}/activate` | owner or admin | `draft` → `active`; 409 without a payout rule set |
+| `POST /campaigns/{id}/close` | owner or admin | `draft` or `active` → `closed` (terminal) |
+
+`platforms` validates against `core.platforms.Platform` (the same
+canonical list Intelligence uses) but is stored as a plain string array,
+not a native Postgres enum — deliberately, to avoid a third enum type
+constraining the same values as auth's `platform` type and Intelligence's
+checked varchars (see decision D5 in `intelligence-contracts.md`).
+`event_manager_id` on `campaigns` *is* a real foreign key to `users.id`,
+unlike Intelligence's tables — Campaign Management and Auth share one
+owner, so there's no cross-team-migration reason to avoid it here.
+
+No automated tests yet (verified so far by a manual Postgres smoke test
+covering every role/state transition above) — bringing this module's
+coverage up to the intelligence suite's standard is the next thing to do
+here, not a gap to carry forward silently.
 
 ## Performance & Trust Intelligence (Adam)
 
