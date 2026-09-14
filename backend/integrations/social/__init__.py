@@ -3,15 +3,18 @@
 Mirrors the lookup style already used by `modules/auth/providers`, so the
 codebase has one idiom for "give me the thing that handles this platform".
 
-Stage 1 registers the TikTok adapter here. Until then the registry is
-empty on purpose: the interface is frozen, the implementations are not.
+Adapters are registered as instances, one per platform, reused for the
+life of the process — they hold configuration, never per-request state.
 """
 
 from core.platforms import Platform
 
 from .base import SocialPlatformAdapter
+from .tiktok import TikTokAdapter
 
-REGISTRY: dict[Platform, SocialPlatformAdapter] = {}
+REGISTRY: dict[Platform, SocialPlatformAdapter] = {
+    Platform.tiktok: TikTokAdapter(),
+}
 
 
 def get_adapter(platform: Platform) -> SocialPlatformAdapter:

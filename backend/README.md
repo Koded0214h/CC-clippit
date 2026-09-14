@@ -154,6 +154,23 @@ Intelligence Engine module, not Auth.
   by the time `/internal/social-accounts/.../token` is called returns 409
   and the creator has to reconnect.
 
+## Performance & Trust Intelligence (Adam)
+
+Platform reads live in `integrations/social/`, behind one interface
+(`base.py`) so no platform-specific request logic exists anywhere else.
+`modules/intelligence/contracts.py` holds the only types that cross out of
+this domain — see `../architecture/intelligence-contracts.md` for the
+boundary, the canonical data model, and the decisions register.
+
+| Platform | Adapter | Needs creator token | Comment text |
+|---|---|---|---|
+| tiktok | `integrations/social/tiktok.py` | yes | no (Display API exposes counts only) |
+
+```sh
+pip install -r requirements-dev.txt
+pytest                      # adapters are tested against recorded payloads, no credentials needed
+```
+
 ## Known gaps (next optimization pass)
 
 - No refresh-token flow for Facebook/Instagram/Threads (see above).

@@ -210,13 +210,14 @@ unresolved decision written down is fixable; one buried in code is not.
 | D10 | Trust score formula and first thresholds | Adam | — | open — Stage 5 |
 | D11 | Owner of content verification (R2/FFmpeg/Deepgram/LLM) | Team | — | **open — unassigned** |
 | D12 | Product name spelled "Clippit" (repo) vs "Clipit" (plan doc) | Team | — | open — cosmetic but pick one |
+| D13 | Retry/backoff lives in the job layer, not in adapters. Adapters raise `RateLimited`/`UpstreamError` carrying `retry_after`; only the poller sleeps | Adam | 2026-09-14 | decided |
 
 ## 8. Stage roadmap
 
 | Stage | Scope | Exit condition |
 |---|---|---|
 | **0. Contracts** | This document + the three contract files | Koded can code against the contract without knowing any platform API |
-| **1. Adapter layer** | Interface + TikTok adapter, ported from `service-test/tt`. No DB, no routes | A real TikTok URL yields canonical metrics in a test, raw preserved |
+| **1. Adapter layer** ✅ | Interface + TikTok adapter, ported from `service-test/tt`. No DB, no routes | A real TikTok URL yields canonical metrics in a test, raw preserved |
 | **2. Ingestion & snapshots** | Schema, migration, normalizer, idempotent append-only writes | Ingesting twice yields two snapshots; nothing overwritten |
 | **3. Polling & jobs** | Job runtime, cadence by content age, backoff, retries, dead-letter | One submission grows a time series over hours, unattended |
 | **4. Performance features** | Feature table + `/internal/submissions/{id}/performance` | Earnings can bill from our output alone |
