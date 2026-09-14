@@ -1,7 +1,14 @@
-"""Present so pytest puts `backend/` on `sys.path`.
+"""Pytest bootstrap for the whole backend.
 
-Tests import the way the app does (`from core.platforms import Platform`),
-which only resolves if the backend root is importable. pytest adds the
-directory containing the root conftest.py, so this file existing is the
-whole mechanism — there is nothing to configure here.
+Its presence at the repo root is what puts `backend/` on `sys.path`, so
+tests can `from core.platforms import ...` the same way the app does.
+
+It also pins the database URL *before* anything imports `core.database`,
+which builds an engine at import time. Two reasons: the suite can then run
+with no Postgres and no `asyncpg` installed, and there is no configuration
+mistake that could point a test run at a real database.
 """
+
+import os
+
+os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite://")

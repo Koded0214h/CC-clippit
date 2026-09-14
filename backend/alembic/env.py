@@ -9,6 +9,7 @@ from core.database import Base
 # Every module's models must be imported here so autogenerate can see them —
 # add the import when a new module (campaigns, payouts, ...) lands.
 import modules.auth.models  # noqa: E402,F401
+import modules.intelligence.models  # noqa: E402,F401
 
 config = context.config
 if config.config_file_name is not None:

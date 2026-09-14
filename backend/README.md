@@ -166,10 +166,34 @@ boundary, the canonical data model, and the decisions register.
 |---|---|---|---|
 | tiktok | `integrations/social/tiktok.py` | yes | no (Display API exposes counts only) |
 
+Ingestion (`modules/intelligence/ingestion.py`) turns a submission into
+stored observations:
+
+```
+IngestionService.ingest(SubmissionRef)
+    social_content    one row per submission — identity, resolved once and reused
+    metric_snapshots  one row per reading — append-only, never updated
+```
+
+Identity is resolved on the first ingest only, so polling a submission
+costs one API call per poll rather than three. The service doesn't commit
+(the caller owns the transaction) and doesn't retry — adapter errors
+propagate for the Stage 3 poller to interpret.
+
+Creator tokens are read through auth's
+`/internal/social-accounts/{user_id}/{platform}/token` behind the
+`TokenSource` port in `tokens.py`. This module never imports auth's models
+or queries `social_accounts`.
+
 ```sh
 pip install -r requirements-dev.txt
-pytest                      # adapters are tested against recorded payloads, no credentials needed
+pytest                      # no credentials, no database, no network
 ```
+
+Adapters are tested against recorded payloads; ingestion runs on in-memory
+SQLite, which is why the intelligence models avoid Postgres-only column
+types. That catches logic bugs, not Postgres-specific ones — run the
+migration against a real database before shipping.
 
 ## Known gaps (next optimization pass)
 

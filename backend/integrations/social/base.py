@@ -172,6 +172,12 @@ class SocialPlatformAdapter(Protocol):
 
     platform: Platform
 
+    #: The concrete API behind this adapter, e.g. "tiktok.display_api".
+    #: Stored on every snapshot as provenance — `platform` alone isn't
+    #: enough, since X metrics come from twitterapi.io rather than X itself,
+    #: and old rows must stay truthful after a provider swap.
+    source: str
+
     #: True when reading metrics needs the creator's own OAuth token (TikTok,
     #: Instagram, Threads). False when any public URL can be read with a
     #: service-level key (X via twitterapi.io, YouTube Data API).

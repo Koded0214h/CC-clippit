@@ -102,6 +102,21 @@ Three invariants, from §10 and §18 of the plan:
 3. **Raw is retained.** The provider payload is stored alongside the
    normalized row so integration bugs are diagnosable after the fact.
 
+As built in Stage 2 (`backend/modules/intelligence/models.py`, migration
+`b7c41e05a9d2`), with three choices worth flagging to Koded:
+
+- **No foreign keys to `submissions`, `campaigns` or `users`.** Those are
+  his tables. We store the IDs and resolve through his internal API, so
+  our migrations and his stay independent.
+- **Enums are `VARCHAR` + `CHECK`, not native Postgres enum types.** Auth
+  already owns a type named `platform` with four values; ours needs six.
+  A checked varchar avoids the collision entirely and can be widened
+  without the `ALTER TYPE` dance when YouTube lands. Unblocks us from D5.
+- **`social_content.submission_id` is unique; `(platform,
+  platform_content_id)` is not.** Re-ingesting a submission must reuse its
+  row, but two creators submitting the *same post* is a trust signal we
+  need to be able to see rather than a constraint violation.
+
 ## 4. Adapter contract
 
 Interface: `backend/integrations/social/base.py`. Registry lookup mirrors
@@ -110,6 +125,7 @@ outside an adapter.
 
 ```python
 platform: Platform
+source: str                  # e.g. "tiktok.display_api" — stored as provenance
 requires_creator_token: bool
 supports_comments: bool
 
@@ -202,7 +218,7 @@ unresolved decision written down is fixable; one buried in code is not.
 | D2 | TikTok is the first production adapter | Adam | 2026-09-13 | decided |
 | D3 | Intelligence ships inside the existing FastAPI monolith: `modules/intelligence/` + `integrations/social/` | Adam | 2026-09-13 | decided |
 | D4 | Background job runtime: Inngest Python SDK vs Celery/RQ vs APScheduler | Adam | — | open — needed by Stage 3 |
-| D5 | `Platform` canonical in `core/platforms.py`; auth's DB enum migrated to match | Koded | — | open — needs his migration |
+| D5 | `Platform` canonical in `core/platforms.py`; auth's DB enum migrated to match | Koded | — | open — needs his migration. Now has teeth: auth's token endpoint `422`s on `x`/`youtube`, so those adapters can't read a creator token until it lands |
 | D6 | Canonical metric names: views, likes, comments, shares, saves, reach, impressions; nullable; raw retained | Adam | 2026-09-13 | decided |
 | D7 | Snapshots append-only; polling cadence policy by content age | Adam | — | append-only decided; cadence open, Stage 3 |
 | D8 | X metrics via twitterapi.io (third party) behind the adapter | Adam | 2026-09-13 | decided — cost/ToS to revisit before launch |
@@ -211,6 +227,8 @@ unresolved decision written down is fixable; one buried in code is not.
 | D11 | Owner of content verification (R2/FFmpeg/Deepgram/LLM) | Team | — | **open — unassigned** |
 | D12 | Product name spelled "Clippit" (repo) vs "Clipit" (plan doc) | Team | — | open — cosmetic but pick one |
 | D13 | Retry/backoff lives in the job layer, not in adapters. Adapters raise `RateLimited`/`UpstreamError` carrying `retry_after`; only the poller sleeps | Adam | 2026-09-14 | decided |
+| D14 | Intelligence reads creator tokens over auth's `/internal/social-accounts/…/token` endpoint behind a `TokenSource` port — never by importing auth's models or querying `social_accounts` | Adam | 2026-09-14 | decided — swap to an in-process impl later without touching ingestion |
+| D15 | A re-read with identical counters inside 60s is not stored as a new snapshot; anything that moved, or any reading after the window, always is | Adam | 2026-09-14 | decided — window may need tuning once Stage 3 sets cadence |
 
 ## 8. Stage roadmap
 
@@ -218,7 +236,7 @@ unresolved decision written down is fixable; one buried in code is not.
 |---|---|---|
 | **0. Contracts** | This document + the three contract files | Koded can code against the contract without knowing any platform API |
 | **1. Adapter layer** ✅ | Interface + TikTok adapter, ported from `service-test/tt`. No DB, no routes | A real TikTok URL yields canonical metrics in a test, raw preserved |
-| **2. Ingestion & snapshots** | Schema, migration, normalizer, idempotent append-only writes | Ingesting twice yields two snapshots; nothing overwritten |
+| **2. Ingestion & snapshots** ✅ | Schema, migration, normalizer, idempotent append-only writes | Ingesting twice yields two snapshots; nothing overwritten |
 | **3. Polling & jobs** | Job runtime, cadence by content age, backoff, retries, dead-letter | One submission grows a time series over hours, unattended |
 | **4. Performance features** | Feature table + `/internal/submissions/{id}/performance` | Earnings can bill from our output alone |
 | **5. Trust & anomaly v1** | Explainable rules, scores, signals, review outcomes as labels + `/trust` | Every flag can be explained to a human in the admin queue |

@@ -123,6 +123,7 @@ class TikTokAdapter:
     """
 
     platform = Platform.tiktok
+    source = "tiktok.display_api"
     requires_creator_token = True
 
     #: The Display API returns comment *counts* but never comment text, and
