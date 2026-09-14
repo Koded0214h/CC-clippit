@@ -217,6 +217,25 @@ That loop is a placeholder for decision D4 (Inngest vs Celery vs
 APScheduler). Nothing else in the module knows about a runtime — a hosted
 scheduler's handler body is `await coordinator.run_due()`.
 
+### Internal routes
+
+| Route | Purpose | Talks to a platform? |
+|---|---|---|
+| `POST /internal/submissions/{id}/metrics` | Register a submission (`SubmissionRef` body → 201) or force a fresh reading | yes |
+| `GET /internal/submissions/{id}/performance` | Everything we know, from our tables | never |
+
+Billing uses the GET, so a payout run is never slow or wrong because
+TikTok is down. Pass `?since_snapshot_id=` — the `provenance.snapshot_id`
+you last settled against — to get `features.billable_views`, which is the
+only view figure that gives the same answer twice and is therefore safe
+to retry. `features.incremental_views` is relative to the previous poll
+and is a velocity input, not a billing number.
+
+Derived values (`content_features`) are stored per snapshot and are
+disposable: `FeatureService.recompute_all()` rebuilds them from the
+observations, so improving the velocity formula corrects history instead
+of requiring a refetch.
+
 ```sh
 pip install -r requirements-dev.txt
 pytest                      # no credentials, no database, no network

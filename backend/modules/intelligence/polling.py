@@ -37,6 +37,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from . import repository
 from .contracts import SubmissionRef
+from .features import FeatureService
 from .ingestion import IngestionService
 from .models import ContentTracking, SocialContent
 from .scheduling import (
@@ -142,6 +143,7 @@ class PollingCoordinator:
                 tracking.last_error_message = None
                 tracking.last_polled_at = now
                 tracking.last_success_at = now
+                await self._derive(session, content.id, outcome)
                 result = self._schedule_next(tracking, content, now, outcome)
         return result
 
@@ -193,6 +195,7 @@ class PollingCoordinator:
                 tracking.last_error_code = None
                 tracking.last_error_message = None
                 tracking.last_success_at = now
+                await self._derive(session, content_id, outcome)
                 return self._schedule_next(tracking, content, now, outcome)
 
     async def stop(self, content_id: uuid.UUID, *, code: str, message: str | None = None) -> None:
@@ -222,6 +225,20 @@ class PollingCoordinator:
             tracking.next_poll_at = now
 
     # --- internals ---------------------------------------------------
+    async def _derive(self, session: AsyncSession, content_id: uuid.UUID, outcome) -> None:
+        """Compute this observation's features in the same transaction that
+        recorded it, so a snapshot is never visible without them.
+
+        Skipped when the reading was a suppressed duplicate (D15): there's
+        no new snapshot, and the existing one's features are already
+        correct.
+        """
+        if not outcome.created_snapshot or outcome.snapshot_id is None:
+            return
+        await FeatureService(session, clock=self._clock).record_for_snapshot(
+            content_id, outcome.snapshot_id
+        )
+
     def _schedule_next(
         self,
         tracking: ContentTracking,

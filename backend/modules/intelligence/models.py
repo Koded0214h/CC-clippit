@@ -157,6 +157,60 @@ class MetricSnapshot(Base):
     content: Mapped["SocialContent"] = relationship(back_populates="snapshots")
 
 
+class ContentFeature(Base):
+    """What one observation *means*, relative to the one before it.
+
+    Snapshots say "12,400 views at 09:00". Features say "2,100 more than
+    last time, 87 an hour, 7.5% engagement". Keeping them in separate
+    tables is the rule from §10 of the plan, and the reason is practical
+    rather than tidy: these numbers are guesses that will be revised.
+    When we improve how velocity is calculated, or find a bug in it, we
+    delete every row here and rebuild from the snapshots. That's only
+    possible because the snapshots were never touched.
+
+    One row per snapshot, enforced by a unique constraint. That makes
+    recomputation idempotent (compute the same snapshot twice, get one
+    row) and gives the trust engine what it actually needs in Stage 5: not
+    just today's velocity, but the *series* of velocities, which is where
+    a spike becomes visible.
+    """
+
+    __tablename__ = "content_features"
+    __table_args__ = (
+        sa.UniqueConstraint("snapshot_id", name="uq_content_feature_snapshot"),
+        sa.Index("ix_content_features_content_computed", "content_id", "computed_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(sa.Uuid, primary_key=True, default=uuid.uuid4)
+    content_id: Mapped[uuid.UUID] = mapped_column(
+        sa.ForeignKey("social_content.id", ondelete="CASCADE"), nullable=False
+    )
+    #: The observation these values were derived from. Features are a pure
+    #: function of this snapshot and its predecessor, which is what makes
+    #: the whole table disposable.
+    snapshot_id: Mapped[uuid.UUID] = mapped_column(
+        sa.ForeignKey("metric_snapshots.id", ondelete="CASCADE"), nullable=False
+    )
+    computed_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
+
+    #: Null on the first observation of a post — one point can't produce a
+    #: rate of change, and zero would be a lie.
+    incremental_views: Mapped[int | None] = mapped_column(sa.BigInteger, nullable=True)
+    view_velocity_per_hour: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
+    growth_rate: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
+
+    #: Engagement ratios, from cumulative totals rather than deltas —
+    #: "1.2% of viewers liked it" is a property of the post, not of the
+    #: gap between two polls.
+    like_view_ratio: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
+    comment_view_ratio: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
+    share_view_ratio: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+    )
+
+
 class ContentTracking(Base):
     """The poller's state for one piece of content — and the only mutable
     table this module owns.

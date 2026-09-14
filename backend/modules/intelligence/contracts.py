@@ -29,6 +29,8 @@ from pydantic import BaseModel, Field
 from core.platforms import Platform
 from integrations.social.base import ContentKind, PostType
 
+from .scheduling import TrackingStatus
+
 
 class SubmissionRef(BaseModel):
     """The input side of the boundary: what core hands us to work on.
@@ -79,13 +81,22 @@ class MetricsBlock(BaseModel):
 class PerformanceFeatures(BaseModel):
     """Derived values, computed from at least two snapshots.
 
-    `incremental_views` is the one earnings actually bills on: views gained
-    since the previous observation, floored at zero because platforms do
-    revise counts downward and a negative must never become a negative
-    payout.
+    Both view deltas are floored at zero. Platforms genuinely revise counts
+    downward — TikTok prunes bot views days later — and a negative delta
+    must never become a negative payout. The drop itself isn't lost: it's
+    still visible in the raw snapshots, where Stage 5 can treat it as the
+    trust signal it is.
     """
 
+    #: Views gained since the *previous observation*. This is a velocity
+    #: input, not a billing figure: it changes every poll, so summing it
+    #: across arbitrary reads would double-count. Use `billable_views`.
     incremental_views: int | None = None
+    #: Views gained since a caller-nominated snapshot — "how much has this
+    #: earned since the last time I paid for it". Only populated when the
+    #: caller passes `since_snapshot_id`, because only the caller knows
+    #: what it has already settled. See decision D18.
+    billable_views: int | None = None
     view_velocity_per_hour: float | None = None
     growth_rate: float | None = None
     like_view_ratio: float | None = None
@@ -105,6 +116,23 @@ class Provenance(BaseModel):
     observed_at: datetime
 
 
+class TrackingState(BaseModel):
+    """Whether we're still watching this submission, and if not, why.
+
+    Without this, a submission whose post went private just quietly stops
+    producing new numbers and nobody upstream knows the difference between
+    "no growth" and "we've stopped looking". `reason_code` is the stable
+    identifier from `scheduling.decide()` — `content_unavailable`,
+    `creator_reconnect_required`, `tracking_window_elapsed`, and so on.
+    """
+
+    status: TrackingStatus
+    reason_code: str | None = None
+    message: str | None = None
+    next_poll_at: datetime | None = None
+    last_success_at: datetime | None = None
+
+
 class PerformanceResult(BaseModel):
     """Answer to: how is this submission actually doing?"""
 
@@ -113,6 +141,7 @@ class PerformanceResult(BaseModel):
     metrics: MetricsBlock
     features: PerformanceFeatures
     provenance: Provenance
+    tracking: TrackingState | None = None
 
 
 class TrustStatus(str, enum.Enum):

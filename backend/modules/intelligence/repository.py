@@ -17,13 +17,27 @@ from datetime import datetime, timedelta
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import ContentTracking, MetricSnapshot, SocialContent
+from .models import ContentFeature, ContentTracking, MetricSnapshot, SocialContent
 from .scheduling import TrackingStatus
 
 
 async def content_for_submission(db: AsyncSession, submission_id: uuid.UUID) -> SocialContent | None:
     return await db.scalar(
         sa.select(SocialContent).where(SocialContent.submission_id == submission_id)
+    )
+
+
+async def content_id_for_submission(db: AsyncSession, submission_id: uuid.UUID) -> uuid.UUID | None:
+    """Just the ID, as a plain value rather than an ORM instance.
+
+    Used where the caller has to survive a transaction boundary. A loaded
+    object is bound to its session and gets *expired* by a commit or
+    rollback, so touching an attribute afterwards triggers a lazy reload —
+    which in async SQLAlchemy raises `MissingGreenlet` rather than quietly
+    working. A UUID has no such attachment.
+    """
+    return await db.scalar(
+        sa.select(SocialContent.id).where(SocialContent.submission_id == submission_id)
     )
 
 
@@ -59,6 +73,48 @@ async def snapshots_for_content(db: AsyncSession, content_id: uuid.UUID) -> list
         .order_by(MetricSnapshot.captured_at.asc())
     )
     return list(result)
+
+
+async def snapshot_before(
+    db: AsyncSession, content_id: uuid.UUID, captured_at: datetime
+) -> MetricSnapshot | None:
+    """The observation immediately preceding `captured_at`.
+
+    Ordered by time rather than by insertion, because a backfill could
+    write an older reading after a newer one and "previous" has to mean
+    previous in the post's life, not in ours.
+    """
+    return await db.scalar(
+        sa.select(MetricSnapshot)
+        .where(MetricSnapshot.content_id == content_id, MetricSnapshot.captured_at < captured_at)
+        .order_by(MetricSnapshot.captured_at.desc())
+        .limit(1)
+    )
+
+
+async def series_extent(db: AsyncSession, content_id: uuid.UUID) -> tuple[int, datetime | None]:
+    """How many observations exist and when the first one was — one
+    aggregate instead of loading a series to count it."""
+    row = (
+        await db.execute(
+            sa.select(sa.func.count(), sa.func.min(MetricSnapshot.captured_at)).where(
+                MetricSnapshot.content_id == content_id
+            )
+        )
+    ).one()
+    return int(row[0]), row[1]
+
+
+async def feature_for_snapshot(db: AsyncSession, snapshot_id: uuid.UUID) -> ContentFeature | None:
+    return await db.scalar(
+        sa.select(ContentFeature).where(ContentFeature.snapshot_id == snapshot_id)
+    )
+
+
+async def add_feature(db: AsyncSession, feature: ContentFeature) -> ContentFeature:
+    db.add(feature)
+    await db.flush()
+    return feature
 
 
 async def tracking_for_content(db: AsyncSession, content_id: uuid.UUID) -> ContentTracking | None:

@@ -117,6 +117,12 @@ As built in Stage 2 (`backend/modules/intelligence/models.py`, migration
   row, but two creators submitting the *same post* is a trust signal we
   need to be able to see rather than a constraint violation.
 
+Stage 4 adds `content_features` — one row per snapshot, holding what that
+observation *means* (increment, velocity, ratios). Deliberately
+disposable: `FeatureService.recompute_all()` rebuilds every row from the
+snapshots, which is the point of never touching an observation. When the
+velocity formula improves, history gets corrected with no refetching.
+
 Stage 3 adds one more table, `content_tracking` — the poller's state, and
 the only mutable table this module owns. One row per piece of content:
 status, `next_poll_at`, failure counters, last error. `next_poll_at`
@@ -190,15 +196,29 @@ comment-text pipeline for it. Exact query semantics to confirm in Stage 1.
 ## 5. Internal API contract
 
 ```
-POST /internal/submissions/{id}/metrics       trigger an observation now
-GET  /internal/submissions/{id}/performance   -> PerformanceResult
-GET  /internal/submissions/{id}/trust         -> TrustResult
-GET  /internal/campaigns/{id}/performance     aggregate (Stage 4+)
-GET  /internal/creators/{id}/performance      aggregate (Stage 4+)
+POST /internal/submissions/{id}/metrics       trigger an observation now   ✅
+GET  /internal/submissions/{id}/performance   -> PerformanceResult         ✅
+GET  /internal/submissions/{id}/trust         -> TrustResult               Stage 5
+GET  /internal/campaigns/{id}/performance     aggregate                    Stage 5+
+GET  /internal/creators/{id}/performance      aggregate                    Stage 5+
 ```
 
 Guarded by `X-Internal-Secret`, matching the convention the auth module
 already uses.
+
+**The POST talks to a platform; the GET never does.** A billing run uses
+the GET, so nobody's payout waits on TikTok's uptime, and the read can't
+be rate limited. The POST is for registering a new submission (send a
+`SubmissionRef` body — 201, starts tracking) or forcing a fresh reading
+before the next scheduled poll (no body needed).
+
+Registration failures come back as HTTP errors, because a human is
+waiting for an answer about the link they just pasted. A failure on a
+*later* observation comes back as `200` with the reason in `tracking`,
+because the submission still exists and its last known numbers are still
+valid — what changed is that we've stopped watching. Every error body is
+`{"detail": {"code": ..., "message": ...}}`, with the same codes as the
+failure taxonomy in §6.
 
 ```json
 {
@@ -221,6 +241,25 @@ already uses.
 
 `shares: null` in that example is the contract doing its job — TikTok
 reports it, a platform that doesn't would send null rather than zero.
+
+### Billing from this safely
+
+`metrics.views` is the cumulative total as of `provenance.observed_at`.
+`features.incremental_views` is relative to the *previous poll*, which
+moves every thirty minutes — it's a velocity input, and a biller summing
+it would double-count anything read twice and miss anything read late.
+
+For money, pass `?since_snapshot_id=` — the `provenance.snapshot_id` from
+the response last settled against — and read `features.billable_views`.
+The same request asked twice gives the same answer, so a billing run is
+safe to retry. That makes earnings' side of the contract one stored value
+per submission (the snapshot it last paid for) and no arithmetic. This is
+decision D18 and needs Koded's agreement.
+
+Both deltas are floored at zero: platforms revise counts downward (TikTok
+prunes bot views days later) and a negative must never reach a ledger.
+The drop is still visible in the raw snapshots, where Stage 5 treats it
+as the signal it is.
 
 ## 6. Failure taxonomy
 
@@ -272,6 +311,8 @@ unresolved decision written down is fixable; one buried in code is not.
 | D15 | A re-read with identical counters inside 60s is not stored as a new snapshot; anything that moved, or any reading after the window, always is | Adam | 2026-09-14 | decided — window may need tuning once Stage 3 sets cadence |
 | D16 | Cadence tiers, the 6-failure dead-letter threshold and the 5-minute claim lease are first guesses, not measured | Adam | — | open — revisit against real campaign traffic; no production data exists to tune against yet |
 | D17 | Core tells us when to stop tracking (campaign ended, submission withdrawn) via `stop()`/`resume()`; until then a 30-day age cap stands in | Adam + Koded | — | **open — needs Koded**, cheap to wire once campaigns exist |
+| D18 | Earnings bills from `billable_views` against a caller-supplied `since_snapshot_id`, not from `incremental_views`. Earnings stores the last snapshot it settled; we stay stateless about money | Adam + Koded | — | **open — needs Koded.** Implemented and tested on our side |
+| D19 | Features are stored per snapshot and recomputable; the trust engine reads the stored series, never recomputes ad hoc, so a payout and an audit always see the same numbers | Adam | 2026-09-14 | decided |
 
 ## 8. Stage roadmap
 
@@ -281,7 +322,7 @@ unresolved decision written down is fixable; one buried in code is not.
 | **1. Adapter layer** ✅ | Interface + TikTok adapter, ported from `service-test/tt`. No DB, no routes | A real TikTok URL yields canonical metrics in a test, raw preserved |
 | **2. Ingestion & snapshots** ✅ | Schema, migration, normalizer, idempotent append-only writes | Ingesting twice yields two snapshots; nothing overwritten |
 | **3. Polling & jobs** ✅ | Job runtime, cadence by content age, backoff, retries, dead-letter | One submission grows a time series over hours, unattended |
-| **4. Performance features** | Feature table + `/internal/submissions/{id}/performance` | Earnings can bill from our output alone |
+| **4. Performance features** ✅ | Feature table + `/internal/submissions/{id}/performance` | Earnings can bill from our output alone |
 | **5. Trust & anomaly v1** | Explainable rules, scores, signals, review outcomes as labels + `/trust` | Every flag can be explained to a human in the admin queue |
 | **6. Comment intelligence** | Comment ingestion, near-duplicate/timing/coordination signals | Comment evidence appears in a trust result; sentiment stays out |
 

@@ -23,6 +23,7 @@ from modules.intelligence import models
 INTELLIGENCE_TABLES = [
     models.SocialContent.__table__,
     models.MetricSnapshot.__table__,
+    models.ContentFeature.__table__,
     models.ContentTracking.__table__,
 ]
 
