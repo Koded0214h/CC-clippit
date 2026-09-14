@@ -185,6 +185,38 @@ Creator tokens are read through auth's
 `TokenSource` port in `tokens.py`. This module never imports auth's models
 or queries `social_accounts`.
 
+Polling keeps that series growing. `scheduling.py` holds the policy as
+pure functions (how often to poll by post age; what a given failure
+means); `polling.py` applies it:
+
+```
+PollingCoordinator.start(SubmissionRef)   first reading, then queue it
+                  .run_due()              one tick — claim, poll, reschedule
+                  .stop() / .resume()     campaign ended / creator reconnected
+```
+
+| Post age | Polled every |
+|---|---|
+| < 24h | 30 min |
+| < 7 days | 2 hours |
+| < 30 days | 12 hours |
+| ≥ 30 days | tracking stops |
+
+A tick claims due work by pushing `next_poll_at` forward before any
+network call (`FOR UPDATE SKIP LOCKED` on Postgres), so several workers
+can run at once and a worker that dies mid-poll doesn't strand its rows.
+Each submission gets its own transaction and a poll never raises — every
+failure is recorded as a decision: retry with backoff, stop and tell the
+creator, or dead-letter for a human.
+
+```sh
+python -m modules.intelligence.worker     # asyncio loop, 60s tick
+```
+
+That loop is a placeholder for decision D4 (Inngest vs Celery vs
+APScheduler). Nothing else in the module knows about a runtime — a hosted
+scheduler's handler body is `await coordinator.run_due()`.
+
 ```sh
 pip install -r requirements-dev.txt
 pytest                      # no credentials, no database, no network

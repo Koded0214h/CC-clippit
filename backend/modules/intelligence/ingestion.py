@@ -26,7 +26,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,6 +38,7 @@ from . import normalizer, repository
 from .contracts import SubmissionRef
 from .errors import UrlNotRecognized
 from .models import MetricSnapshot, SocialContent
+from .timeutils import as_utc
 from .tokens import TokenSource
 
 #: How close to the previous observation a *numerically identical* reading
@@ -57,14 +58,6 @@ class IngestOutcome:
     created_content: bool
     created_snapshot: bool
     skipped_reason: str | None = None
-
-
-def _as_utc(value: datetime) -> datetime:
-    """SQLite hands back naive datetimes even for `DateTime(timezone=True)`,
-    while adapters always produce aware ones, and comparing the two raises.
-    Postgres doesn't have this problem; normalizing here keeps the same code
-    correct on both."""
-    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
 class IngestionService:
@@ -138,6 +131,6 @@ class IngestionService:
 
     def _is_duplicate(self, previous: MetricSnapshot, metrics) -> bool:
         within_window = (
-            _as_utc(metrics.observed_at) - _as_utc(previous.captured_at)
+            as_utc(metrics.observed_at) - as_utc(previous.captured_at)
         ) < self._dedupe_window
         return within_window and normalizer.counters_match(previous, metrics)

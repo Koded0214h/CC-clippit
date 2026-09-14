@@ -12,11 +12,13 @@ land together or not at all.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timedelta
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import MetricSnapshot, SocialContent
+from .models import ContentTracking, MetricSnapshot, SocialContent
+from .scheduling import TrackingStatus
 
 
 async def content_for_submission(db: AsyncSession, submission_id: uuid.UUID) -> SocialContent | None:
@@ -57,3 +59,52 @@ async def snapshots_for_content(db: AsyncSession, content_id: uuid.UUID) -> list
         .order_by(MetricSnapshot.captured_at.asc())
     )
     return list(result)
+
+
+async def tracking_for_content(db: AsyncSession, content_id: uuid.UUID) -> ContentTracking | None:
+    return await db.get(ContentTracking, content_id)
+
+
+async def add_tracking(db: AsyncSession, tracking: ContentTracking) -> ContentTracking:
+    db.add(tracking)
+    await db.flush()
+    return tracking
+
+
+async def claim_due(
+    db: AsyncSession,
+    *,
+    now: datetime,
+    limit: int,
+    lease: timedelta,
+) -> list[uuid.UUID]:
+    """Take ownership of up to `limit` submissions that are due.
+
+    Claiming is a write, not a read: each row's `next_poll_at` is pushed
+    out by `lease` before we let go of the transaction. Two things fall
+    out of that. A second worker running concurrently won't pick up the
+    same rows, and a worker that dies mid-poll doesn't strand its work —
+    the lease simply expires and the row becomes due again. The cost is
+    that a crash can lose one reading, which for a time series that's
+    about to be re-read anyway is the right way round.
+    """
+    stmt = (
+        sa.select(ContentTracking)
+        .where(
+            ContentTracking.status == TrackingStatus.active,
+            ContentTracking.next_poll_at <= now,
+        )
+        .order_by(ContentTracking.next_poll_at.asc())
+        .limit(limit)
+    )
+    # Postgres can hand concurrent workers disjoint row sets for free.
+    # SQLite (tests) has no such clause and no concurrency to protect
+    # against, so the lease alone carries the guarantee there.
+    if db.bind is not None and db.bind.dialect.name == "postgresql":
+        stmt = stmt.with_for_update(skip_locked=True)
+
+    rows = list(await db.scalars(stmt))
+    for row in rows:
+        row.next_poll_at = now + lease
+    await db.flush()
+    return [row.content_id for row in rows]

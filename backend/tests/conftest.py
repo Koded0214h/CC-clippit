@@ -20,11 +20,21 @@ from modules.intelligence import models
 #: Only this module's tables. Auth's models use Postgres-only column types
 #: and aren't under test here, so creating everything on Base would break
 #: the moment someone imports them.
-INTELLIGENCE_TABLES = [models.SocialContent.__table__, models.MetricSnapshot.__table__]
+INTELLIGENCE_TABLES = [
+    models.SocialContent.__table__,
+    models.MetricSnapshot.__table__,
+    models.ContentTracking.__table__,
+]
 
 
 @pytest_asyncio.fixture
-async def db() -> AsyncIterator[AsyncSession]:
+async def session_factory() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
+    """A sessionmaker over a fresh in-memory database.
+
+    The polling tests need this rather than a single session, because the
+    coordinator opens one transaction per submission on purpose — that's
+    the behaviour being tested.
+    """
     # StaticPool keeps every checkout on the same connection — without it,
     # ":memory:" hands each connection its own empty database.
     engine = create_async_engine(
@@ -35,8 +45,12 @@ async def db() -> AsyncIterator[AsyncSession]:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all, tables=INTELLIGENCE_TABLES)
 
-    session_factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
-    async with session_factory() as session:
-        yield session
+    yield async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
     await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def db(session_factory) -> AsyncIterator[AsyncSession]:
+    async with session_factory() as session:
+        yield session

@@ -44,6 +44,8 @@ from core.database import Base
 from core.platforms import Platform
 from integrations.social.base import ContentKind, PostType
 
+from .scheduling import TrackingStatus
+
 #: JSONB in production, plain JSON on SQLite under test.
 RawJSON = sa.JSON().with_variant(JSONB, "postgresql")
 
@@ -103,6 +105,9 @@ class SocialContent(Base):
     snapshots: Mapped[list["MetricSnapshot"]] = relationship(
         back_populates="content", cascade="all, delete-orphan"
     )
+    tracking: Mapped["ContentTracking | None"] = relationship(
+        back_populates="content", cascade="all, delete-orphan", uselist=False
+    )
 
 
 class MetricSnapshot(Base):
@@ -150,3 +155,55 @@ class MetricSnapshot(Base):
     )
 
     content: Mapped["SocialContent"] = relationship(back_populates="snapshots")
+
+
+class ContentTracking(Base):
+    """The poller's state for one piece of content — and the only mutable
+    table this module owns.
+
+    Kept separate from `social_content` on purpose. That table is what a
+    post *is*, and reads cleanly as a record; this one is operational
+    churn (next due time, failure counters, lease stamps) rewritten on
+    every tick. Mixing them would mean every poll dirties the identity row
+    and the two would be impossible to reason about separately.
+
+    `next_poll_at` doubles as the work queue: "what's due" is
+    `status = 'active' AND next_poll_at <= now()`, which is one index scan
+    rather than a separate queue system to operate.
+    """
+
+    __tablename__ = "content_tracking"
+    __table_args__ = (
+        # The due-work query, and the only index this table needs.
+        sa.Index("ix_content_tracking_due", "status", "next_poll_at"),
+    )
+
+    content_id: Mapped[uuid.UUID] = mapped_column(
+        sa.ForeignKey("social_content.id", ondelete="CASCADE"), primary_key=True
+    )
+    status: Mapped[TrackingStatus] = mapped_column(
+        _checked_enum(TrackingStatus, "content_tracking_status"),
+        nullable=False,
+        default=TrackingStatus.active,
+    )
+    next_poll_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
+
+    last_polled_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
+    last_success_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
+
+    #: Reset to zero by any success. Drives the backoff curve and the
+    #: dead-letter threshold, so it counts *consecutive* failures only.
+    consecutive_failures: Mapped[int] = mapped_column(sa.Integer, nullable=False, default=0)
+    #: Stable code from `scheduling.decide()` — also carries the reason a
+    #: row was stopped, which is what the product surfaces to a creator.
+    last_error_code: Mapped[str | None] = mapped_column(sa.String(64), nullable=True)
+    last_error_message: Mapped[str | None] = mapped_column(sa.String(512), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now(), nullable=False
+    )
+
+    content: Mapped["SocialContent"] = relationship(back_populates="tracking")
