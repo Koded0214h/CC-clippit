@@ -1,5 +1,13 @@
 # Clippit Backend — Module Breakdown
 
+> ⚠️ **Superseded on the ownership split.** *Clipit | Backend + Intelligence
+> Implementation Plan* (Sept 2026) assigns Adam the Performance & Trust
+> Intelligence domain and Koded the core backend — close to the inverse of
+> the "Assignment" section below. See
+> [`intelligence-contracts.md`](intelligence-contracts.md) §1, decision D1.
+> The module boundaries and table sketches here are still useful; **the
+> owner names are not current** until Koded confirms the new split.
+
 Based on `architecture/clippit-architecture.excalidraw`. Each module lists its
 scope, what it owns (DB tables / external APIs), and what it depends on from
 other modules — so a split can be made along a clean boundary rather than a
