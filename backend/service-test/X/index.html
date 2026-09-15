@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Clippit · X Metrics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;700;800&family=Kalam:wght@400;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --lime: #B8FF38;
+    --paper: #F7F8F2;
+    --ink: #14150F;
+    --muted: #6B6E60;
+    --line: #E4E6DA;
+    --white: #FFFFFF;
+    --ok: #1F6B45;
+    --bad: #B23B2E;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 40px 20px 80px; }
+  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+  h1 { font-size: clamp(28px, 5vw, 44px); font-weight: 800; letter-spacing: -0.02em; margin: 0; }
+  .scribble { font-family: "Kalam", cursive; color: var(--muted); font-size: 18px; }
+  .card {
+    background: var(--white);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 24px;
+    margin-top: 24px;
+  }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--lime);
+    color: var(--ink);
+    border: 1px solid var(--ink);
+    border-radius: 999px;
+    padding: 12px 22px;
+    font: inherit; font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .btn.ghost { background: transparent; border-color: var(--line); font-weight: 500; }
+  .btn:active { transform: translateY(1px); }
+  .row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: space-between; }
+  .who { display: flex; align-items: center; gap: 12px; }
+  .who img { width: 44px; height: 44px; border-radius: 999px; object-fit: cover; background: var(--line); }
+  .who b { display: block; }
+  .who span { color: var(--muted); font-size: 14px; }
+  .totals { display: flex; gap: 28px; margin-top: 20px; flex-wrap: wrap; }
+  .stat .n { font-size: 32px; font-weight: 800; letter-spacing: -0.02em; }
+  .stat .l { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { text-align: right; padding: 12px 10px; border-bottom: 1px solid var(--line); font-size: 14px; }
+  th { color: var(--muted); font-weight: 500; text-transform: uppercase; font-size: 11px; letter-spacing: 0.06em; }
+  th:first-child, td:first-child { text-align: left; }
+  .post { max-width: 420px; }
+  .post a { color: var(--ink); text-decoration: none; font-weight: 500; }
+  .post a:hover { text-decoration: underline; }
+  .post small { display: block; color: var(--muted); margin-top: 4px; }
+  .views { font-weight: 800; }
+  .muted { color: var(--muted); }
+  .msg { padding: 16px 0; color: var(--muted); }
+  .err { color: var(--bad); }
+  .pill {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 3px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    color: var(--muted);
+  }
+  .pill.video { color: var(--ink); border-color: var(--ink); }
+  .pill.quote { color: #5A4A00; border-color: #EFC884; background: #FFFBF0; }
+  .pill.retweet { color: var(--muted); }
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 20px; }
+  .tab {
+    border: 1px solid var(--line);
+    background: transparent;
+    border-radius: 999px;
+    padding: 8px 14px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .tab.active { background: var(--lime); border-color: var(--ink); }
+  .tab.muted-tab { color: var(--muted); }
+  .verify-box {
+    display: flex; gap: 10px; flex-wrap: wrap; margin-top: 8px;
+  }
+  .verify-box input {
+    flex: 1 1 280px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 12px 18px;
+    font: inherit;
+  }
+  .verify-result {
+    margin-top: 14px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: #FAFBF7;
+  }
+  .verify-result.ok { border-color: #B8E6C8; background: #F3FBF6; }
+  .verify-result.bad { border-color: #F0C4BE; background: #FFF6F4; }
+  .dev-form { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; }
+  .dev-form input {
+    flex: 1 1 200px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 12px 18px;
+    font: inherit;
+  }
+  @media (max-width: 640px) {
+    .hide-sm { display: none; }
+    .post { max-width: 220px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>X Metrics</h1>
+    <span class="scribble">engine check — views, likes, ownership</span>
+  </header>
+
+  <div class="card" id="panel">
+    <div class="msg">Loading…</div>
+  </div>
+</div>
+
+<script>
+const panel = document.getElementById("panel");
+const nf = new Intl.NumberFormat();
+let oauthEnabled = false;
+
+function fmtDate(raw) {
+  if (!raw) return "";
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? raw : d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
+function connectView(error) {
+  const devBlock = !oauthEnabled ? `
+    <div class="msg">No X OAuth credentials — use dev mode: enter the @handle you want to test.</div>
+    <div class="dev-form">
+      <input id="dev-user" type="text" placeholder="@handle" />
+      <button class="btn" id="dev-connect">Connect handle</button>
+    </div>` : "";
+
+  panel.innerHTML = `
+    <div class="row">
+      <div>
+        <b>Not connected</b>
+        <div class="muted">Connect an X account, then pull post metrics via twitterapi.io.</div>
+      </div>
+      ${oauthEnabled ? '<a class="btn" href="/login">Connect X (OAuth)</a>' : ""}
+    </div>
+    ${devBlock}
+    ${error ? `<div class="msg err">${error}</div>` : ""}`;
+
+  const btn = document.getElementById("dev-connect");
+  if (btn) btn.addEventListener("click", devConnect);
+}
+
+async function devConnect() {
+  const input = document.getElementById("dev-user");
+  const username = (input?.value || "").trim();
+  if (!username) return;
+  try {
+    const resp = await fetch("/api/dev-connect", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) {
+      panel.insertAdjacentHTML("beforeend", `<div class="msg err">${data.error || "Connect failed"}</div>`);
+      return;
+    }
+    start();
+  } catch {
+    panel.insertAdjacentHTML("beforeend", '<div class="msg err">Could not reach the service.</div>');
+  }
+}
+
+function loadingPosts(user) {
+  panel.innerHTML = `
+    <div class="row">
+      <div class="who">
+        <img src="${user.profile_image_url || ""}" alt="" />
+        <div><b>@${user.username}</b><span>${user.name || "Connected"}</span></div>
+      </div>
+      <a class="btn ghost" href="/logout">Disconnect</a>
+    </div>
+    <div class="msg">Fetching posts…</div>`;
+}
+
+function postTypePill(type) {
+  if (type === "quote") return '<span class="pill quote">quote</span>';
+  if (type === "retweet") return '<span class="pill retweet">repost</span>';
+  if (type === "reply") return '<span class="pill">reply</span>';
+  return '<span class="pill">original</span>';
+}
+
+function renderVerifyResult(data) {
+  const ok = data.verified;
+  const cls = ok ? "ok" : "bad";
+  const headline = ok
+    ? `Verified — ${data.post_type || "original"} post belongs to connected account`
+    : data.reject_reason || "Not verified — author mismatch, ineligible post type, or missing tweet";
+  return `
+    <div class="verify-result ${cls}">
+      <b>${headline}</b>
+      <div class="muted" style="margin-top:6px">
+        Author @${data.author_username || "?"} · expected @${data.expected_username}
+      </div>
+      <div class="totals" style="margin-top:10px">
+        <div class="stat"><div class="n">${nf.format(data.metrics?.views || 0)}</div><div class="l">Views</div></div>
+        <div class="stat"><div class="n">${nf.format(data.metrics?.likes || 0)}</div><div class="l">Likes</div></div>
+        <div class="stat"><div class="n">${nf.format(data.metrics?.replies || 0)}</div><div class="l">Replies</div></div>
+        <div class="stat"><div class="n">${nf.format(data.metrics?.retweets || 0)}</div><div class="l">Retweets</div></div>
+      </div>
+      <button class="btn ghost" id="load-replies" style="margin-top:12px" data-url="${data.submission_url || ""}">Load sample replies</button>
+      <div id="replies-out"></div>
+    </div>`;
+}
+
+function renderPostRows(list) {
+  return list.map(p => `
+    <tr>
+      <td>
+        <div class="post">
+          <a href="${p.url || "#"}" target="_blank" rel="noopener">${(p.text || "Post").slice(0, 100)}${(p.text || "").length > 100 ? "…" : ""}</a>
+          <small>
+            ${postTypePill(p.post_type)}
+            ${p.has_video ? '<span class="pill video">video</span> ' : ""}
+            ${p.post_type === "quote" && p.quoted_author ? `<span class="muted">quoting @${p.quoted_author}</span> ` : ""}
+            ${p.post_type === "retweet" && p.retweeted_author ? `<span class="muted">via @${p.retweeted_author}</span> ` : ""}
+            ${fmtDate(p.created_at)}
+          </small>
+        </div>
+      </td>
+      <td class="views">${nf.format(p.view_count || 0)}</td>
+      <td class="hide-sm">${nf.format(p.like_count || 0)}</td>
+      <td class="hide-sm">${nf.format(p.reply_count || 0)}</td>
+      <td class="hide-sm">${nf.format(p.retweet_count || 0)}</td>
+    </tr>`).join("");
+}
+
+function renderPostTable(list, emptyMsg) {
+  if (!list.length) return `<div class="msg">${emptyMsg}</div>`;
+  return `
+    <table>
+      <thead>
+        <tr>
+          <th>Post</th><th>Views</th>
+          <th class="hide-sm">Likes</th><th class="hide-sm">Replies</th>
+          <th class="hide-sm">Retweets</th>
+        </tr>
+      </thead>
+      <tbody>${renderPostRows(list)}</tbody>
+    </table>`;
+}
+
+function render(user, data) {
+  const counts = data.counts || {};
+  const originals = data.originals || [];
+  const quotes = data.quotes || [];
+  const retweets = data.retweets || [];
+
+  panel.innerHTML = `
+    <div class="row">
+      <div class="who">
+        <img src="${user.profile_image_url || ""}" alt="" />
+        <div><b>@${user.username}</b><span>${user.name || "Connected"} · ${user.connect_method === "oauth" ? "OAuth" : "dev handle"}</span></div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn ghost" id="refresh">Refresh</button>
+        <a class="btn ghost" href="/logout">Disconnect</a>
+      </div>
+    </div>
+    <div class="totals">
+      <div class="stat"><div class="n">${nf.format(data.total_views)}</div><div class="l">Views (yours)</div></div>
+      <div class="stat"><div class="n">${nf.format(data.count)}</div><div class="l">Submittable</div></div>
+      <div class="stat"><div class="n">${nf.format(data.video_count)}</div><div class="l">With video</div></div>
+      <div class="stat"><div class="n">${nf.format(counts.retweet || 0)}</div><div class="l">Reposts skipped</div></div>
+    </div>
+    <div class="tabs">
+      <button class="tab active" data-tab="originals">Originals (${counts.original || 0})</button>
+      <button class="tab" data-tab="quotes">Quotes (${counts.quote || 0})</button>
+      <button class="tab muted-tab" data-tab="retweets">Reposts (${counts.retweet || 0})</button>
+    </div>
+    <div id="tab-originals">${renderPostTable(originals, "No original posts in this page.")}</div>
+    <div id="tab-quotes" hidden>${renderPostTable(quotes, "No quote posts in this page.")}</div>
+    <div id="tab-retweets" hidden>${renderPostTable(retweets, "No reposts in this page.")}</div>
+
+    <div class="card" style="margin-top:20px;padding:18px;border-radius:14px">
+      <b>Engine verify</b>
+      <div class="muted" style="font-size:14px;margin-top:4px">Paste a submission URL — checks ownership + pulls view/like counts.</div>
+      <div class="verify-box">
+        <input id="verify-url" type="url" placeholder="https://x.com/you/status/123…" />
+        <button class="btn" id="verify-btn">Verify</button>
+      </div>
+      <div id="verify-out"></div>
+    </div>
+
+    ${data.count === 0 && !(counts.retweet || counts.reply) ? '<div class="msg">No submittable posts on this page — try Refresh or add ?pages=2.</div>' : ""}`;
+
+  panel.querySelectorAll(".tab").forEach(btn => {
+    btn.addEventListener("click", () => {
+      panel.querySelectorAll(".tab").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      ["originals", "quotes", "retweets"].forEach(name => {
+        const el = document.getElementById(`tab-${name}`);
+        if (el) el.hidden = btn.dataset.tab !== name;
+      });
+    });
+  });
+  document.getElementById("refresh")?.addEventListener("click", () => start());
+  document.getElementById("verify-btn")?.addEventListener("click", runVerify);
+}
+
+async function runVerify() {
+  const url = document.getElementById("verify-url")?.value?.trim();
+  const out = document.getElementById("verify-out");
+  if (!url || !out) return;
+  out.innerHTML = '<div class="msg">Verifying…</div>';
+  try {
+    const resp = await fetch(`/api/verify?url=${encodeURIComponent(url)}`);
+    const data = await resp.json();
+    if (!resp.ok) {
+      out.innerHTML = `<div class="msg err">${data.error || data.reason || "Verify failed"}</div>`;
+      return;
+    }
+    out.innerHTML = renderVerifyResult(data);
+    document.getElementById("load-replies")?.addEventListener("click", () => loadReplies(url));
+  } catch {
+    out.innerHTML = '<div class="msg err">Verify request failed.</div>';
+  }
+}
+
+async function loadReplies(url) {
+  const out = document.getElementById("replies-out");
+  if (!out) return;
+  out.innerHTML = '<div class="msg">Loading replies…</div>';
+  try {
+    const resp = await fetch(`/api/replies?url=${encodeURIComponent(url)}`);
+    const data = await resp.json();
+    if (!resp.ok) {
+      out.innerHTML = `<div class="msg err">${data.error || "Could not load replies"}</div>`;
+      return;
+    }
+    const rows = (data.replies || []).slice(0, 5).map(r => `
+      <div style="margin-top:8px;font-size:14px">
+        <b>@${r.author_username || "?"}</b>
+        <span class="muted"> · ${nf.format(r.like_count || 0)} likes</span>
+        <div>${(r.text || "").slice(0, 120)}</div>
+      </div>`).join("");
+    out.innerHTML = `
+      <div style="margin-top:12px">
+        <b>${nf.format(data.count)} replies fetched</b>
+        <span class="muted"> · ${data.unique_authors} unique authors (page 1)</span>
+        ${rows || '<div class="msg">No replies on this page.</div>'}
+      </div>`;
+  } catch {
+    out.innerHTML = '<div class="msg err">Replies request failed.</div>';
+  }
+}
+
+async function start() {
+  panel.innerHTML = '<div class="msg">Loading…</div>';
+  try {
+    const cfg = await (await fetch("/api/config")).json();
+    oauthEnabled = !!cfg.oauth_enabled;
+  } catch {
+    connectView("Could not reach the service. Is service.py running?");
+    return;
+  }
+
+  let status;
+  try {
+    status = await (await fetch("/api/status")).json();
+  } catch {
+    connectView("Could not reach the service. Is service.py running?");
+    return;
+  }
+
+  if (!status.connected) {
+    connectView(status.error);
+    if (new URLSearchParams(location.search).get("dev") === "1" && !oauthEnabled) {
+      /* show dev form */
+    }
+    return;
+  }
+
+  loadingPosts(status.user);
+  try {
+    const resp = await fetch("/api/posts");
+    const data = await resp.json();
+    if (!resp.ok) {
+      const retry = resp.status === 429
+        ? `<button class="btn ghost" id="retry-posts" style="margin-top:10px">Retry in ${data.retry_after || 30}s</button>`
+        : "";
+      panel.insertAdjacentHTML("beforeend", `<div class="msg err">${data.error || "Failed to load posts."}${retry}</div>`);
+      document.getElementById("retry-posts")?.addEventListener("click", () => start());
+      return;
+    }
+    render(status.user, data);
+  } catch {
+    panel.insertAdjacentHTML("beforeend", '<div class="msg err">Failed to load posts.</div>');
+  }
+}
+
+start();
+</script>
+</body>
+</html>

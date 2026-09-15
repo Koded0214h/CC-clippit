@@ -1,0 +1,25 @@
+{
+  "data": {
+    "videos": [
+      {
+        "id": "7391234567890123456",
+        "title": "Lagos street style ep. 4",
+        "video_description": "fit check at Balogun market #lagos #streetstyle",
+        "duration": 34,
+        "cover_image_url": "https://p16-sign.tiktokcdn-us.com/obj/cover-7391234567890123456?x-expires=1789400000",
+        "share_url": "https://www.tiktok.com/@adam.lawal/video/7391234567890123456",
+        "create_time": 1789000000,
+        "view_count": 128400,
+        "like_count": 9120,
+        "comment_count": 431,
+        "share_count": 288,
+        "is_aigc": false
+      }
+    ]
+  },
+  "error": {
+    "code": "ok",
+    "message": "",
+    "log_id": "20260914071500ABCDEF0123456789AB"
+  }
+}
