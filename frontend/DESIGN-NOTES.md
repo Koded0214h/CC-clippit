@@ -48,3 +48,13 @@ The final auth treatment keeps a single creator video as a desktop-only atmosphe
 `scripts/verify.py` exercises the landing page with a headless Chromium browser. It checks campaign filtering, brief dialogs, calculator values including zero and maximum, sample brief download, mobile navigation, the phone finale, reduced motion, and readable content with JavaScript disabled. Screenshots are saved under `tmp/qa/` for visual review.
 
 The in-app browser connection returned a sandbox metadata error, so local visual QA uses headless Playwright.
+
+## Creator product workspace
+
+The post-authentication experience treats Clippit as a creator control room rather than a generic SaaS dashboard. A persistent Ink studio rail gives desktop users Overview, Campaigns, Leaderboard, and Settings; compact mobile layouts use a thumb-first bottom dock. Lime remains reserved for movement and action, while Coin Gold exclusively carries rates, balances, payout values, and funded progress.
+
+Creator onboarding asks for a preferred display name, two to five content lanes, and the social platforms used for publishing. Brand onboarding is a separate routed journey for organisation identity, desired content, and campaign outcomes, presented as a live briefing room rather than a recolored creator form. Mobile removes the preview collage from both flows and keeps each setup task direct. Campaign detail pages are structured like production call sheets, with the rate, remaining pot, countdown, minimum threshold, creator cap, five-day hold, full-thousand payment rule, platform sources, checklist, exclusions, source materials, and campaign leaders all visible before a creator commits.
+
+Rate, remaining pot, and campaign duration are grouped into one animated campaign-vitals instrument. Rates count up inside Coin Gold price stamps, pots fill to their real remaining percentage with a moving proof marker, and active deadlines use a live clock sweep. The surrounding page stays still enough for those three values to own the visual hierarchy. The former payment-equation card was removed; its essential full-thousand counting rule remains in the compact campaign rules.
+
+All product icons are authored SVG linework. No emoji are used in onboarding or dashboard UI. `scripts/verify_product.py` exercises the setup journey, route navigation, campaign search, join state, required campaign disclosures, settings, leaderboard data, 320 px overflow behavior, and desktop/mobile screenshots.

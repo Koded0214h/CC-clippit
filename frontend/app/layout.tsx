@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Kalam } from "next/font/google";
 import type { ReactNode } from "react";
 import "./globals.css";
+import "../styles/product.css";
 
 const geist = Geist({
   subsets: ["latin"],

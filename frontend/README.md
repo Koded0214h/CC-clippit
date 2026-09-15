@@ -1,6 +1,6 @@
 # Clippit web app
 
-The Clippit frontend is a production-oriented Next.js application using the App Router, React, and strict TypeScript. It contains the creator-first marketing site and the complete authentication journey.
+The Clippit frontend is a production-oriented Next.js application using the App Router, React, and strict TypeScript. It contains the creator-first marketing site, authentication journey, onboarding flow, and creator campaign workspace.
 
 ## Requirements
 
@@ -28,29 +28,38 @@ npm run start
 
 ## Routes
 
-- `/` — marketing site and interactive product previews
-- `/auth/sign-up` — account type
-- `/auth/sign-up/creator` — creator registration
-- `/auth/sign-up/organisation` — organisation registration
-- `/auth/sign-in` — sign in
-- `/auth/forgot-password` — recovery email
-- `/auth/recovery-code` — recovery OTP
-- `/auth/reset-password` — new password
-- `/auth/verify-email` — registration OTP
-- `/auth/success` — completion state
+- `/` - marketing site and interactive product previews
+- `/auth/sign-up` - account type
+- `/auth/sign-up/creator` - creator registration
+- `/auth/sign-up/organisation` - organisation registration
+- `/auth/sign-in` - sign in
+- `/auth/forgot-password` - recovery email
+- `/auth/recovery-code` - recovery OTP
+- `/auth/reset-password` - new password
+- `/auth/verify-email` - registration OTP
+- `/auth/success` - completion state
+- `/onboarding/creator` - creator name, content lanes, and social platforms
+- `/onboarding/brand` - organisation identity, desired content, and campaign goal
+- `/dashboard` - creator overview, campaign activity, and earnings
+- `/dashboard/campaigns` - searchable funded campaign feed
+- `/dashboard/campaigns/[slug]` - campaign brief, timing, rules, and payment logic
+- `/dashboard/leaderboard` - verified-view rankings
+- `/dashboard/settings` - profile, socials, payout account, and notifications
 
 ## Structure
 
-- `app/` — App Router pages, layouts, metadata, and global foundations
-- `components/auth/` — typed auth flow, shell, forms, and OTP behavior
-- `components/landing/` — landing-page composition
-- `components/ui/` — shared brand and icon primitives
-- `lib/` — shared route metadata, types, and validation rules
-- `styles/` — the Clippit landing and auth visual systems
-- `public/assets/` — local images, video, and phone-throw frames
-- `scripts/` — Playwright browser verification
+- `app/` - App Router pages, layouts, metadata, and global foundations
+- `components/auth/` - typed auth flow, shell, forms, and OTP behavior
+- `components/onboarding/` - responsive account setup flow
+- `components/dashboard/` - product shell and campaign workspace screens
+- `components/landing/` - landing-page composition
+- `components/ui/` - shared brand and SVG icon primitives
+- `lib/` - shared route metadata, product data, types, and validation rules
+- `styles/` - the Clippit landing, auth, onboarding, and product visual systems
+- `public/assets/` - local images, video, and phone-throw frames
+- `scripts/` - Playwright browser verification
 
-The forms are ready for a production identity API. They deliberately do not fake sessions, mail delivery, payments, or account persistence in browser storage.
+The prototype forms and product actions are ready for production APIs. They deliberately do not fake sessions, mail delivery, payments, social connections, or account persistence in browser storage.
 
 ## Verification
 
@@ -59,6 +68,7 @@ Run the production server, then:
 ```powershell
 python -X utf8 -u scripts/verify.py
 python -X utf8 -u scripts/verify_auth.py
+python -X utf8 -u scripts/verify_product.py
 ```
 
-These checks cover landing interactions, routed auth flows, validation, OTP entry, password recovery, reduced motion, no-JavaScript rendering, and responsive widths from 320px to 1920px.
+These checks cover landing interactions, routed auth flows, onboarding, campaign search and joining, campaign-detail requirements, leaderboards, settings, fixed mobile navigation, validation, OTP entry, password recovery, reduced motion, no-JavaScript rendering, and responsive widths from 320px to 1920px.

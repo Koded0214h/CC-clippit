@@ -642,9 +642,21 @@ export function Success() {
       />
       <Link
         className="auth-button"
-        href={recovery ? "/auth/sign-in" : "/#campaigns"}
+        href={
+          recovery
+            ? "/auth/sign-in"
+            : signin
+              ? "/dashboard"
+              : role === "organisation"
+                ? "/onboarding/brand"
+                : "/onboarding/creator"
+        }
       >
-        {recovery ? "Sign in" : "Explore campaigns"}
+        {recovery
+          ? "Sign in"
+          : signin
+            ? "Open my dashboard"
+            : "Set up my Clippit"}
         <Icon name="arrow" />
       </Link>
     </section>
