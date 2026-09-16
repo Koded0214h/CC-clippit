@@ -31,7 +31,8 @@ backend/
       providers/                one file per OAuth platform (tiktok, facebook, instagram, threads)
     campaigns/                <- Campaign Management (Koded) — see below
     submissions/               <- Content Submission (Koded) — see below
-    intelligence/              <- Performance & Trust Intelligence (Adam) — see below
+    creators/                   <- Creators / bank details (Koded) — see below
+    intelligence/                <- Performance & Trust Intelligence (Adam) — see below
   service-test/               <- earlier standalone OAuth/platform prototypes, kept for reference
   tests/                       <- pytest suite (SQLite in-memory; see conftest.py)
 ```
@@ -234,6 +235,35 @@ become a setting. Flagging for Adam rather than editing his module here.
 No automated tests yet, same as Campaign Management — smoke-tested
 end-to-end against real Postgres, including cross-creator/cross-org
 visibility isolation and the rejection-audit path above.
+
+## Creators (Koded)
+
+Scoped to bank details only — the one piece Payment Orchestration is
+actually blocked on. Profile fields (bio, interests, used for campaign
+notification matching per the plan's §19.2) are real work but not on the
+critical path to a payout, so they're deferred rather than built
+speculatively alongside this.
+
+| Route | Auth | Purpose |
+|---|---|---|
+| `PUT /creators/me/bank-details` | creator | set or replace; always resets `verified` to `false` |
+| `GET /creators/me/bank-details` | creator | own details, `account_number` masked to last 4 digits |
+| `GET /creators/{creator_id}/bank-details` | admin only | dispute/support access — an organisation has no reason to see this, so it doesn't follow campaigns'/submissions' owner-or-admin pattern |
+
+One bank account per creator (`creator_id` is the primary key). This
+module only **stores** what a creator enters — it does not call a payment
+provider to resolve or verify an account name. `verified`/`verified_at`/
+`account_name` exist on the table and stay `null`/`false` until Payment
+Orchestration (next) sets them after actually checking with the provider;
+Payments owns the provider abstraction, this module owns the data.
+Replacing bank details always resets `verified`, so a changed payout
+destination can never coast on an old verification.
+
+No automated tests yet, same as the other core-backend modules —
+smoke-tested against real Postgres: role enforcement, masking, the
+verification-resets-on-change guarantee, and access isolation (a creator
+can't see another creator's details, an organisation can't see any
+creator's details, only admin can via the support route).
 
 ## Performance & Trust Intelligence (Adam)
 
