@@ -16,7 +16,9 @@ backend/
   .env.example
   alembic.ini, alembic/      <- schema migrations (source of truth for the DB)
   core/                      <- shared: config, async db session, JWT/password hashing,
-                                 rate limiter, tiny TTL cache, the canonical Platform enum
+                                 rate limiter, tiny TTL cache, the canonical Platform enum,
+                                 internal_client.py (in-process client for calling another
+                                 module's /internal/* routes over the real ASGI contract)
   integrations/social/       <- platform adapters (Adam) — see Performance & Trust Intelligence below
   modules/
     auth/                    <- Auth & Accounts + Social OAuth (Koded)
@@ -28,6 +30,7 @@ backend/
       internal_router.py       /internal/* — called by other modules, not the browser
       providers/                one file per OAuth platform (tiktok, facebook, instagram, threads)
     campaigns/                <- Campaign Management (Koded) — see below
+    submissions/               <- Content Submission (Koded) — see below
     intelligence/              <- Performance & Trust Intelligence (Adam) — see below
   service-test/               <- earlier standalone OAuth/platform prototypes, kept for reference
   tests/                       <- pytest suite (SQLite in-memory; see conftest.py)
@@ -192,6 +195,45 @@ No automated tests yet (verified so far by a manual Postgres smoke test
 covering every role/state transition above) — bringing this module's
 coverage up to the intelligence suite's standard is the next thing to do
 here, not a gap to carry forward silently.
+
+## Content Submission (Koded)
+
+A creator submits a link against an `active` campaign. This module owns
+only the submission's *own* lifecycle — performance and trust are never
+copied onto it; every read goes live to Intelligence's internal API via
+`core/internal_client.py` (`httpx.ASGITransport` against this same app —
+no socket, but the real routes, the real `X-Internal-Secret` dependency,
+the real `PerformanceResult`/error contract).
+
+| Route | Auth | Purpose |
+|---|---|---|
+| `POST /submissions` | creator | validates campaign is active + accepts the platform + creator has that platform connected, then registers with Intelligence |
+| `GET /submissions` | Bearer | creator: own. organisation: submissions against its campaigns. admin: all. `?campaign_id=` filters any of them |
+| `GET /submissions/{id}` | Bearer | same visibility rule, 404s (not 403) when it's not yours to see |
+| `POST /submissions/{id}/withdraw` | creator (own) or admin | terminal; org cannot withdraw a creator's submission |
+| `GET /submissions/{id}/performance` | Bearer | visibility-checked proxy onto Intelligence's `GET .../performance`; pass `?since_snapshot_id=` for `billable_views` (decision D18) |
+
+**Registration failure is not silently dropped.** If Intelligence rejects
+the URL (unreadable, content unavailable, creator's token expired, rate
+limited, ...), the submission row is still kept — `status: rejected` with
+`rejection_code`/`rejection_message` from Intelligence's own error body —
+and the same error is returned to the creator. There's an audit trail for
+"why wasn't this accepted" instead of a submission just not existing.
+
+**A real integration gap this surfaced, not caused:** Intelligence's own
+`InternalApiTokenSource` (`modules/intelligence/tokens.py`) calls Auth's
+token endpoint over a real HTTP loopback to a **hardcoded**
+`http://127.0.0.1:8000` (decision D14 — deliberately a real network call,
+not an in-process one, unlike this module's `internal_client.py`). Run
+the app on any other port and that lookup fails with `upstream_error`
+until someone notices the 502. Confirmed the failure path itself is
+correct — a submission made this way is honestly marked `rejected` with
+the real reason, never silently wrong — but the hardcoded port should
+become a setting. Flagging for Adam rather than editing his module here.
+
+No automated tests yet, same as Campaign Management — smoke-tested
+end-to-end against real Postgres, including cross-creator/cross-org
+visibility isolation and the rejection-audit path above.
 
 ## Performance & Trust Intelligence (Adam)
 
