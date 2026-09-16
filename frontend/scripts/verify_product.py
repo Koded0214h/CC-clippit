@@ -90,6 +90,30 @@ with sync_playwright() as playwright:
     assert page.locator(".social-account.is-connected").count() == 2
     page.screenshot(path=str(OUT / "07-settings-desktop.png"), full_page=True)
 
+    # Laptop and tablet widths used to inherit desktop minimums and overflow.
+    responsive_routes = [
+        "/onboarding/creator",
+        "/onboarding/brand",
+        "/dashboard",
+        "/dashboard/campaigns",
+        "/dashboard/campaigns/indomie-no-long-thing",
+        "/dashboard/leaderboard",
+        "/dashboard/settings",
+    ]
+    for width, height in [(1366, 768), (1024, 768), (820, 1180)]:
+        page.set_viewport_size({"width": width, "height": height})
+        for route in responsive_routes:
+            page.goto(f"{BASE}{route}", wait_until="networkidle")
+            assert_no_horizontal_overflow(page)
+        page.goto(f"{BASE}/dashboard", wait_until="networkidle")
+        if width > 900:
+            assert page.locator(".studio-rail").is_visible()
+            assert not page.locator(".mobile-dock").is_visible()
+        else:
+            assert not page.locator(".studio-rail").is_visible()
+            assert page.locator(".mobile-dock").is_visible()
+        page.screenshot(path=str(OUT / f"08-dashboard-{width}.png"), full_page=True)
+
     page.set_viewport_size({"width": 390, "height": 844})
     page.goto(f"{BASE}/onboarding/creator", wait_until="networkidle")
     assert not page.locator(".signal-board").is_visible()
