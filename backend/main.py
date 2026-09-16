@@ -21,7 +21,9 @@ from modules.auth.profile_router import router as auth_profile_router
 from modules.auth.router import router as auth_router
 from modules.auth.social_router import router as auth_social_router
 from modules.campaigns.router import router as campaigns_router
+from modules.creators.router import router as creators_router
 from modules.intelligence.internal_router import router as intelligence_internal_router
+from modules.submissions.router import router as submissions_router
 
 settings = get_settings()
 
@@ -58,6 +60,8 @@ app.include_router(intelligence_internal_router)
 
 # --- Campaign Management, Content Submission, Payouts, Admin (Koded) ---
 app.include_router(campaigns_router)
+app.include_router(submissions_router)
+app.include_router(creators_router)
 # app.include_router(payouts_router)
 
 
