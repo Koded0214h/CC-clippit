@@ -17,7 +17,16 @@ from datetime import datetime, timedelta
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .models import ContentFeature, ContentTracking, MetricSnapshot, SocialContent
+from core.platforms import Platform
+
+from .models import (
+    ContentFeature,
+    ContentTracking,
+    MetricSnapshot,
+    SocialContent,
+    TrustEvaluation,
+    TrustReview,
+)
 from .scheduling import TrackingStatus
 
 
@@ -115,6 +124,78 @@ async def add_feature(db: AsyncSession, feature: ContentFeature) -> ContentFeatu
     db.add(feature)
     await db.flush()
     return feature
+
+
+async def features_for_content(
+    db: AsyncSession, content_id: uuid.UUID, *, until: datetime | None = None
+) -> list[ContentFeature]:
+    """A post's feature rows in observation order.
+
+    Ordered by the *snapshot's* time rather than by `computed_at`, because
+    a recompute stamps every row with the same moment — sorting by that
+    would scramble the series into insertion order.
+    """
+    stmt = (
+        sa.select(ContentFeature)
+        .join(MetricSnapshot, MetricSnapshot.id == ContentFeature.snapshot_id)
+        .where(ContentFeature.content_id == content_id)
+        .order_by(MetricSnapshot.captured_at.asc())
+    )
+    if until is not None:
+        stmt = stmt.where(MetricSnapshot.captured_at <= until)
+    return list(await db.scalars(stmt))
+
+
+async def count_duplicate_content(
+    db: AsyncSession, platform: Platform, platform_content_id: str, *, exclude_id: uuid.UUID
+) -> int:
+    """How many *other* submissions point at this same post.
+
+    The index on `(platform, platform_content_id)` exists for this query
+    and no other — the schema allows the duplicate precisely so the trust
+    engine can see it.
+    """
+    return int(
+        await db.scalar(
+            sa.select(sa.func.count())
+            .select_from(SocialContent)
+            .where(
+                SocialContent.platform == platform,
+                SocialContent.platform_content_id == platform_content_id,
+                SocialContent.id != exclude_id,
+            )
+        )
+        or 0
+    )
+
+
+async def evaluation_for_snapshot(
+    db: AsyncSession, snapshot_id: uuid.UUID
+) -> TrustEvaluation | None:
+    return await db.scalar(
+        sa.select(TrustEvaluation).where(TrustEvaluation.snapshot_id == snapshot_id)
+    )
+
+
+async def latest_evaluation(db: AsyncSession, content_id: uuid.UUID) -> TrustEvaluation | None:
+    return await db.scalar(
+        sa.select(TrustEvaluation)
+        .where(TrustEvaluation.content_id == content_id)
+        .order_by(TrustEvaluation.evaluated_at.desc())
+        .limit(1)
+    )
+
+
+async def add_evaluation(db: AsyncSession, evaluation: TrustEvaluation) -> TrustEvaluation:
+    db.add(evaluation)
+    await db.flush()
+    return evaluation
+
+
+async def add_review(db: AsyncSession, review: TrustReview) -> TrustReview:
+    db.add(review)
+    await db.flush()
+    return review
 
 
 async def tracking_for_content(db: AsyncSession, content_id: uuid.UUID) -> ContentTracking | None:

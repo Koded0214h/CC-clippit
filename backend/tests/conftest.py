@@ -25,6 +25,8 @@ INTELLIGENCE_TABLES = [
     models.MetricSnapshot.__table__,
     models.ContentFeature.__table__,
     models.ContentTracking.__table__,
+    models.TrustEvaluation.__table__,
+    models.TrustReview.__table__,
 ]
 
 

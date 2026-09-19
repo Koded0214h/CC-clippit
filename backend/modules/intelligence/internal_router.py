@@ -34,10 +34,12 @@ from integrations.social.base import (
     UpstreamError,
 )
 
-from . import performance, repository
-from .contracts import PerformanceResult, SubmissionRef
+from . import performance, repository, trust
+from .contracts import PerformanceResult, SubmissionRef, TrustResult, TrustReviewIn
 from .errors import MissingCreatorToken, TokenLookupFailed, UrlNotRecognized
+from .models import TrustReview
 from .polling import PollingCoordinator
+from .trust_service import TrustService
 from .worker import build_coordinator
 
 router = APIRouter(
@@ -179,6 +181,83 @@ async def read_performance(
             },
         )
     return result
+
+
+@router.get("/submissions/{submission_id}/trust", response_model=TrustResult)
+async def read_trust(submission_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    """Does this submission's performance look credible, and why.
+
+    Note what this never returns: an instruction. No "block the payout",
+    no "ban the creator". It reports what was observed, against which
+    threshold, in a sentence a human can read to the creator in a
+    dispute. What that costs anyone is the earnings and admin domains'
+    decision, not ours.
+    """
+    result = await TrustService(db).result_for_submission(submission_id)
+    if result is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "no_evaluation",
+                "message": "No trust evaluation recorded for this submission.",
+            },
+        )
+    return result
+
+
+@router.post("/submissions/{submission_id}/trust/review", status_code=status.HTTP_201_CREATED)
+async def record_review(
+    submission_id: uuid.UUID,
+    payload: TrustReviewIn,
+    db: AsyncSession = Depends(get_db),
+):
+    """Record what a human concluded — the label-capture endpoint.
+
+    Every row this writes is a future training example, which is why
+    `source` is required: a label drawn from our own flagged queue tells
+    us about precision and nothing whatsoever about recall. Admin tooling
+    should be sending a steady trickle of `random_audit` reviews on
+    submissions we called normal.
+
+    The review is attached to the evaluation the reviewer was looking at,
+    so the label always keeps the evidence that produced it.
+    """
+    content_id = await repository.content_id_for_submission(db, submission_id)
+    if content_id is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail={"code": "unknown_submission", "message": "No such submission here."},
+        )
+
+    evaluation = await repository.latest_evaluation(db, content_id)
+    review = await repository.add_review(
+        db,
+        TrustReview(
+            content_id=content_id,
+            evaluation_id=evaluation.id if evaluation else None,
+            outcome=payload.outcome,
+            source=payload.source,
+            reviewer_id=payload.reviewer_id,
+            notes=payload.notes,
+        ),
+    )
+    await db.commit()
+    return {
+        "review_id": str(review.id),
+        "evaluation_id": str(evaluation.id) if evaluation else None,
+        "outcome": review.outcome.value,
+        "source": review.source.value,
+    }
+
+
+@router.get("/trust/rules")
+async def read_rules():
+    """The thresholds currently in force.
+
+    Exposed so an admin screen can show what the rules actually are
+    instead of them becoming folklore that only this file knows.
+    """
+    return trust.describe()
 
 
 def _as_http_error(error: Exception) -> HTTPException:

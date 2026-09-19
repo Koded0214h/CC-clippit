@@ -161,6 +161,45 @@ class SignalSeverity(str, enum.Enum):
     critical = "critical"
 
 
+class ReviewOutcome(str, enum.Enum):
+    """What a human concluded about a submission. These are the labels a
+    supervised model will eventually train on, which is the real reason
+    the review queue exists at all."""
+
+    legitimate = "legitimate"
+    fraudulent = "fraudulent"
+    inconclusive = "inconclusive"
+
+
+class ReviewSource(str, enum.Enum):
+    """Why this submission reached a reviewer — the most important field
+    in the review table.
+
+    If humans only ever review what we flagged, every label is
+    conditioned on our own detector: precision becomes measurable, recall
+    never does, and a model trained on those labels learns to imitate our
+    rules rather than to find fraud. A steady trickle of `random_audit`
+    reviews on *unflagged* submissions is the only thing that gives an
+    unbiased view of what we're missing. It looks like wasted reviewer
+    time; it is the difference between having a dataset and having a
+    mirror.
+    """
+
+    flagged_queue = "flagged_queue"
+    random_audit = "random_audit"
+    dispute = "dispute"
+
+
+class TrustReviewIn(BaseModel):
+    """A human's verdict, recorded against the evaluation they were
+    looking at — so a label always keeps the evidence that produced it."""
+
+    outcome: ReviewOutcome
+    source: ReviewSource
+    reviewer_id: uuid.UUID
+    notes: str | None = None
+
+
 class TrustSignal(BaseModel):
     """One reason, in a form a human can argue with.
 

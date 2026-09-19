@@ -325,6 +325,96 @@ async def test_the_internal_secret_is_required(api):
     assert response.status_code == 401
 
 
+async def test_trust_is_evaluated_alongside_every_reading(api):
+    """A stored observation is never readable without a verdict attached,
+    because they're written in the same transaction."""
+    submission_id, _ = await _register(api)
+
+    response = await api.client.get(f"/internal/submissions/{submission_id}/trust")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "insufficient_data", "one reading is not enough to judge"
+    assert body["signals"] == []
+    assert 0.0 <= body["anomaly_score"] <= 1.0
+
+
+async def test_a_flag_arrives_with_an_explanation_a_human_can_read(api):
+    """Stage 5's exit condition, over the wire."""
+    submission_id, _ = await _register(api)
+
+    for hours, views in ((1, 1200), (2, 1400), (3, 90_000)):
+        api.clock.advance(timedelta(hours=1))
+        api.platform.views = views
+        await api.client.post(f"/internal/submissions/{submission_id}/metrics")
+
+    body = (await api.client.get(f"/internal/submissions/{submission_id}/trust")).json()
+
+    assert body["status"] == "flagged"
+    assert body["signals"], "a flag with no stated reason is not defensible"
+    signal = body["signals"][0]
+    assert {"code", "severity", "explanation", "observed_value", "threshold"} <= set(signal)
+    assert signal["threshold"] is not None
+
+
+async def test_trust_says_nothing_about_money(api):
+    """This module reports what it sees. Whether a flag withholds a
+    payout belongs to earnings and admin, and the response shape should
+    make that impossible to confuse."""
+    submission_id, _ = await _register(api)
+
+    body = (await api.client.get(f"/internal/submissions/{submission_id}/trust")).json()
+
+    assert set(body) == {
+        "submission_id",
+        "status",
+        "anomaly_score",
+        "signals",
+        "evaluated_at",
+    }
+
+
+async def test_a_human_verdict_can_be_recorded_against_the_evidence(api):
+    submission_id, _ = await _register(api)
+
+    response = await api.client.post(
+        f"/internal/submissions/{submission_id}/trust/review",
+        json={
+            "outcome": "legitimate",
+            "source": "random_audit",
+            "reviewer_id": str(uuid.uuid4()),
+            "notes": "Checked the account manually; looks like a real creator.",
+        },
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["evaluation_id"], "a label must keep the evaluation it was made against"
+    assert body["source"] == "random_audit"
+
+
+async def test_a_review_needs_a_source(api):
+    """Without knowing why a submission reached a reviewer, the label
+    can't be used to measure anything."""
+    submission_id, _ = await _register(api)
+
+    response = await api.client.post(
+        f"/internal/submissions/{submission_id}/trust/review",
+        json={"outcome": "legitimate", "reviewer_id": str(uuid.uuid4())},
+    )
+
+    assert response.status_code == 422
+
+
+async def test_the_active_thresholds_are_inspectable(api):
+    """So the rules are visible to an admin instead of being folklore
+    only the source file knows."""
+    body = (await api.client.get("/internal/trust/rules")).json()
+
+    assert body["velocity_spike_multiple"]
+    assert body["min_like_view_ratio"]["tiktok"]
+
+
 async def test_no_provider_payload_escapes_the_boundary(api):
     """`raw` is kept on every stored row for diagnosis, and must never be
     part of what another module reads."""

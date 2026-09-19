@@ -50,6 +50,7 @@ from .scheduling import (
     interval_for_age,
 )
 from .timeutils import as_utc, utcnow
+from .trust_service import TrustService
 
 logger = logging.getLogger(__name__)
 
@@ -238,6 +239,9 @@ class PollingCoordinator:
         await FeatureService(session, clock=self._clock).record_for_snapshot(
             content_id, outcome.snapshot_id
         )
+        # Trust runs straight after features, in the same transaction, so
+        # no observation is ever readable without a verdict attached.
+        await TrustService(session, clock=self._clock).evaluate_latest(content_id)
 
     def _schedule_next(
         self,

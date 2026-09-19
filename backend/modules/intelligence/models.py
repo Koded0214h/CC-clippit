@@ -44,6 +44,7 @@ from core.database import Base
 from core.platforms import Platform
 from integrations.social.base import ContentKind, PostType
 
+from .contracts import ReviewOutcome, ReviewSource, TrustStatus
 from .scheduling import TrackingStatus
 
 #: JSONB in production, plain JSON on SQLite under test.
@@ -205,6 +206,93 @@ class ContentFeature(Base):
     like_view_ratio: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
     comment_view_ratio: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
     share_view_ratio: Mapped[float | None] = mapped_column(sa.Float, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+    )
+
+
+class TrustEvaluation(Base):
+    """One verdict, with the evidence that produced it, frozen in place.
+
+    Written after every observation, so there's a trail rather than a
+    single current opinion — "when did this first look wrong" is a
+    question disputes actually ask.
+
+    `signals` is stored as JSON rather than as rows in a child table, and
+    that's a deliberate trade. The signal *set* will change often as rules
+    are added and retuned, and a schema migration per rule change would
+    make the tuning loop painful. More importantly, each stored signal
+    keeps the threshold it was compared against, so a decision from three
+    months ago stays readable after the thresholds have moved — which a
+    normalized table joined to live threshold config could not promise.
+    """
+
+    __tablename__ = "trust_evaluations"
+    __table_args__ = (
+        # One verdict per observation: recomputing overwrites rather than
+        # accumulating duplicate opinions about the same evidence.
+        sa.UniqueConstraint("snapshot_id", name="uq_trust_evaluation_snapshot"),
+        sa.Index("ix_trust_evaluations_content_evaluated", "content_id", "evaluated_at"),
+        # The admin queue: worst first, newest first.
+        sa.Index("ix_trust_evaluations_status", "status", "anomaly_score"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(sa.Uuid, primary_key=True, default=uuid.uuid4)
+    content_id: Mapped[uuid.UUID] = mapped_column(
+        sa.ForeignKey("social_content.id", ondelete="CASCADE"), nullable=False
+    )
+    snapshot_id: Mapped[uuid.UUID] = mapped_column(
+        sa.ForeignKey("metric_snapshots.id", ondelete="CASCADE"), nullable=False
+    )
+    evaluated_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
+
+    status: Mapped[TrustStatus] = mapped_column(
+        _checked_enum(TrustStatus, "trust_evaluation_status"), nullable=False
+    )
+    anomaly_score: Mapped[float] = mapped_column(sa.Float, nullable=False, default=0.0)
+    signals: Mapped[list[dict[str, Any]]] = mapped_column(RawJSON, nullable=False, default=list)
+
+    created_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
+    )
+
+
+class TrustReview(Base):
+    """A human's conclusion — and the closest thing to ground truth this
+    system will ever have.
+
+    Every row is a training label. `source` records *why* the submission
+    reached a reviewer, because labels drawn only from our own flags can
+    measure precision and can never measure recall.
+
+    Append-only like the snapshots: a reviewer changing their mind is a
+    second review, not an edited one. Someone will eventually need to know
+    what was believed at the moment a payout was released.
+    """
+
+    __tablename__ = "trust_reviews"
+    __table_args__ = (sa.Index("ix_trust_reviews_content", "content_id", "created_at"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(sa.Uuid, primary_key=True, default=uuid.uuid4)
+    content_id: Mapped[uuid.UUID] = mapped_column(
+        sa.ForeignKey("social_content.id", ondelete="CASCADE"), nullable=False
+    )
+    #: The evaluation the reviewer was looking at, so a label always keeps
+    #: the evidence that produced it. Null if they reviewed a post we had
+    #: never evaluated — which is exactly what a random audit does.
+    evaluation_id: Mapped[uuid.UUID | None] = mapped_column(
+        sa.ForeignKey("trust_evaluations.id", ondelete="SET NULL"), nullable=True
+    )
+    outcome: Mapped[ReviewOutcome] = mapped_column(
+        _checked_enum(ReviewOutcome, "trust_review_outcome"), nullable=False
+    )
+    source: Mapped[ReviewSource] = mapped_column(
+        _checked_enum(ReviewSource, "trust_review_source"), nullable=False
+    )
+    #: Whoever signed off. No foreign key — `users` is Koded's table.
+    reviewer_id: Mapped[uuid.UUID] = mapped_column(sa.Uuid, nullable=False)
+    notes: Mapped[str | None] = mapped_column(sa.String(2000), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
