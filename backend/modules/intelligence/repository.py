@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.platforms import Platform
 
 from .models import (
+    ContentComment,
     ContentFeature,
     ContentTracking,
     MetricSnapshot,
@@ -196,6 +197,51 @@ async def add_review(db: AsyncSession, review: TrustReview) -> TrustReview:
     db.add(review)
     await db.flush()
     return review
+
+
+async def upsert_comment(db: AsyncSession, comment: ContentComment) -> ContentComment:
+    """Insert, or refresh `last_seen_at` if we already have this comment.
+
+    A comment is a thing that exists, not an observation — rewriting
+    last-seen is correct here in a way it never is for a snapshot.
+    """
+    existing = await db.scalar(
+        sa.select(ContentComment).where(
+            ContentComment.content_id == comment.content_id,
+            ContentComment.platform_comment_id == comment.platform_comment_id,
+        )
+    )
+    if existing is None:
+        db.add(comment)
+        await db.flush()
+        return comment
+
+    existing.last_seen_at = comment.last_seen_at
+    existing.text = comment.text
+    existing.likes = comment.likes
+    existing.author_username = comment.author_username
+    await db.flush()
+    return existing
+
+
+async def comments_for_content(
+    db: AsyncSession, content_id: uuid.UUID, *, until: datetime | None = None
+) -> list[ContentComment]:
+    """Comments visible at `until`.
+
+    Prefers the platform's `posted_at` when we have it, so a replay of an
+    old snapshot doesn't see comments that hadn't been written yet. Falls
+    back to `first_seen_at` when the adapter didn't give a timestamp.
+    """
+    stmt = sa.select(ContentComment).where(ContentComment.content_id == content_id)
+    if until is not None:
+        stmt = stmt.where(
+            sa.or_(
+                sa.and_(ContentComment.posted_at.is_not(None), ContentComment.posted_at <= until),
+                sa.and_(ContentComment.posted_at.is_(None), ContentComment.first_seen_at <= until),
+            )
+        )
+    return list(await db.scalars(stmt.order_by(ContentComment.first_seen_at.asc())))
 
 
 async def tracking_for_content(db: AsyncSession, content_id: uuid.UUID) -> ContentTracking | None:

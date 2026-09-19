@@ -109,6 +109,9 @@ class SocialContent(Base):
     tracking: Mapped["ContentTracking | None"] = relationship(
         back_populates="content", cascade="all, delete-orphan", uselist=False
     )
+    comments: Mapped[list["ContentComment"]] = relationship(
+        back_populates="content", cascade="all, delete-orphan"
+    )
 
 
 class MetricSnapshot(Base):
@@ -297,6 +300,47 @@ class TrustReview(Base):
     created_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
     )
+
+
+class ContentComment(Base):
+    """One comment on a submitted post, as the platform showed it.
+
+    Identity is `(content_id, platform_comment_id)` — re-fetching the same
+    thread upserts rather than duplicating, because a comment is a thing
+    that exists, not an observation that happened. `first_seen_at` /
+    `last_seen_at` are *our* clocks, so a replay can still restrict itself
+    to comments that existed at a given snapshot.
+
+    Sentiment is deliberately not a column. Scoring polarity would smuggle
+    a model into the evidence layer and make every flag harder to explain.
+    """
+
+    __tablename__ = "content_comments"
+    __table_args__ = (
+        sa.UniqueConstraint(
+            "content_id", "platform_comment_id", name="uq_content_comment_identity"
+        ),
+        sa.Index("ix_content_comments_content_created", "content_id", "posted_at"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(sa.Uuid, primary_key=True, default=uuid.uuid4)
+    content_id: Mapped[uuid.UUID] = mapped_column(
+        sa.ForeignKey("social_content.id", ondelete="CASCADE"), nullable=False
+    )
+    platform_comment_id: Mapped[str] = mapped_column(sa.String(128), nullable=False)
+    author_platform_user_id: Mapped[str | None] = mapped_column(sa.String(128), nullable=True)
+    author_username: Mapped[str | None] = mapped_column(sa.String(255), nullable=True)
+    text: Mapped[str] = mapped_column(sa.Text, nullable=False)
+    likes: Mapped[int | None] = mapped_column(sa.Integer, nullable=True)
+    #: When the *platform* says the comment was posted. Null if the
+    #: adapter didn't get a timestamp — the burst rule then skips it
+    #: rather than inventing one.
+    posted_at: Mapped[datetime | None] = mapped_column(sa.DateTime(timezone=True), nullable=True)
+    first_seen_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(sa.DateTime(timezone=True), nullable=False)
+    raw: Mapped[dict[str, Any]] = mapped_column(RawJSON, nullable=False, default=dict)
+
+    content: Mapped["SocialContent"] = relationship(back_populates="comments")
 
 
 class ContentTracking(Base):

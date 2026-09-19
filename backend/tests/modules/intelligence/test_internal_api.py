@@ -371,7 +371,9 @@ async def test_trust_says_nothing_about_money(api):
         "anomaly_score",
         "signals",
         "evaluated_at",
+        "comments_sampled",
     }
+    assert body["comments_sampled"] == 0
 
 
 async def test_a_human_verdict_can_be_recorded_against_the_evidence(api):

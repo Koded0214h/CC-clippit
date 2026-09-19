@@ -27,6 +27,7 @@ INTELLIGENCE_TABLES = [
     models.ContentTracking.__table__,
     models.TrustEvaluation.__table__,
     models.TrustReview.__table__,
+    models.ContentComment.__table__,
 ]
 
 

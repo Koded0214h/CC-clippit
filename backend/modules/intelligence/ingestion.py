@@ -34,7 +34,7 @@ from core.platforms import Platform
 from integrations.social import get_adapter
 from integrations.social.base import SocialPlatformAdapter
 
-from . import normalizer, repository
+from . import comments, normalizer, repository
 from .contracts import SubmissionRef
 from .errors import UrlNotRecognized
 from .models import MetricSnapshot, SocialContent
@@ -105,6 +105,9 @@ class IngestionService:
         snapshot = await repository.add_snapshot(
             self._db, normalizer.build_snapshot(content.id, metrics, adapter.source)
         )
+        # Comments are evidence, not the money path. A failed sample must
+        # not roll back the observation we just wrote.
+        await comments.sync(self._db, content, adapter, access_token=token)
         return IngestOutcome(
             content_id=content.id,
             snapshot_id=snapshot.id,

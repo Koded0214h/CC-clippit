@@ -211,6 +211,10 @@ compared against, and a sentence that can be read to a creator during a
 dispute. Whether `flagged` withholds money is earnings' and admin's call
 (D22).
 
+**`TrustResult.comments_sampled`** is how many comments the verdict was
+allowed to see. Zero means we have no sample (TikTok, or not yet fetched)
+— not that the thread is empty.
+
 **`/trust/review` is the label factory.** Its `source` field is
 mandatory: reviews drawn only from our own flagged queue can measure
 precision and can never measure recall (D21).
@@ -314,8 +318,8 @@ unresolved decision written down is fixable; one buried in code is not.
 | D6 | Canonical metric names: views, likes, comments, shares, saves, reach, impressions; nullable; raw retained | Adam | 2026-09-13 | decided |
 | D7 | Snapshots append-only; polling cadence policy by content age | Adam | 2026-09-14 | decided — 30min / 2h / 12h by age, stop at 30 days (see §3b) |
 | D8 | X metrics via twitterapi.io (third party) behind the adapter | Adam | 2026-09-13 | decided — cost/ToS to revisit before launch |
-| D9 | Comments fetched continuously or sampled | Adam | — | open — Stage 6 |
-| D10 | Trust score formula and first thresholds | Adam | — | decided (provisional) — severity-weighted sum capped at 1.0, any `critical` signal flags on its own (never averaged away). Six rules in `trust.py`; thresholds are plausibility guesses, not statistics |
+| D9 | Comments fetched continuously or sampled | Adam | 2026-09-19 | decided — sampled: 3 pages / 200 comments per successful observation. Upsert by platform comment id. TikTok is a no-op (`supports_comments=False`) |
+| D10 | Trust score formula and first thresholds | Adam | — | decided (provisional) — severity-weighted sum capped at 1.0, any `critical` signal flags on its own (never averaged away). Metric rules plus three comment-text rules (near-duplicate, burst, author flood); no sentiment |
 | D20 | Trust thresholds must be replaced by empirical per-platform percentiles | Adam | — | open — needs production traffic. Use median/MAD, not mean/stdev: the population contains the fraud we're detecting and a few extreme cases would drag a mean until the detector stops detecting |
 | D21 | Admin must send random audits, not only review what we flagged | Adam + Koded | — | open — `POST /trust/review` requires `source`; without a trickle of `random_audit` on unflagged submissions we can measure precision but never recall, and any future model just learns to imitate today's rules |
 | D22 | Who acts on a flag | Koded | — | open — Intelligence reports, it never withholds money. Earnings/admin decide whether `flagged` blocks a payout |
@@ -339,7 +343,7 @@ unresolved decision written down is fixable; one buried in code is not.
 | **3. Polling & jobs** ✅ | Job runtime, cadence by content age, backoff, retries, dead-letter | One submission grows a time series over hours, unattended |
 | **4. Performance features** ✅ | Feature table + `/internal/submissions/{id}/performance` | Earnings can bill from our output alone |
 | **5. Trust & anomaly v1** ✅ | Explainable rules, scores, signals, review outcomes as labels + `/trust` | Every flag can be explained to a human in the admin queue |
-| **6. Comment intelligence** | Comment ingestion, near-duplicate/timing/coordination signals | Comment evidence appears in a trust result; sentiment stays out |
+| **6. Comment intelligence** ✅ | Comment ingestion, near-duplicate/timing/coordination signals | Comment evidence appears in a trust result; sentiment stays out |
 
 Stages 1–4 are the spine — URL to a billable number. 5 and 6 are the trust
 work and can land after the money path is proven.

@@ -229,6 +229,10 @@ class TrustResult(BaseModel):
     anomaly_score: float = Field(ge=0.0, le=1.0)
     signals: list[TrustSignal] = Field(default_factory=list)
     evaluated_at: datetime
+    #: How many comments the verdict was allowed to see. Zero on TikTok
+    #: (no text API) and on any post we have not sampled yet — not the
+    #: same as "the thread is empty".
+    comments_sampled: int = 0
 
 
 class IntelligenceResult(BaseModel):

@@ -25,7 +25,7 @@ from . import repository, trust
 from .contracts import TrustResult, TrustSignal
 from .models import MetricSnapshot, SocialContent, TrustEvaluation
 from .timeutils import as_utc, utcnow
-from .trust import Thresholds, TrustInput
+from .trust import CommentEvidence, Thresholds, TrustInput
 
 
 class TrustService:
@@ -82,6 +82,7 @@ class TrustService:
             # were written, possibly months ago.
             signals=[TrustSignal.model_validate(s) for s in evaluation.signals],
             evaluated_at=as_utc(evaluation.evaluated_at),
+            comments_sampled=len(await repository.comments_for_content(self._db, content.id)),
         )
 
     # --- internals ---------------------------------------------------
@@ -127,6 +128,7 @@ class TrustService:
             if as_utc(s.captured_at) <= as_utc(cutoff)
         ]
         features = await repository.features_for_content(self._db, content_id, until=cutoff)
+        stored = await repository.comments_for_content(self._db, content_id, until=cutoff)
 
         return TrustInput(
             platform=content.platform,
@@ -135,6 +137,15 @@ class TrustService:
             duplicate_submissions=await repository.count_duplicate_content(
                 self._db, content.platform, content.platform_content_id, exclude_id=content_id
             ),
+            comments=[
+                CommentEvidence(
+                    platform_comment_id=row.platform_comment_id,
+                    text=row.text,
+                    author_platform_user_id=row.author_platform_user_id,
+                    posted_at=row.posted_at,
+                )
+                for row in stored
+            ],
         )
 
 

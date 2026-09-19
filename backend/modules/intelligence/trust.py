@@ -33,9 +33,11 @@ from __future__ import annotations
 
 import statistics
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 
 from core.platforms import Platform
 
+from .comments import normalize_text
 from .contracts import ReviewOutcome, ReviewSource, SignalSeverity, TrustSignal, TrustStatus  # noqa: F401
 from .models import ContentFeature, MetricSnapshot
 from .timeutils import as_utc
@@ -108,8 +110,41 @@ class Thresholds:
     #: Score at or above this is worth a look, below it is business as usual.
     watch_score: float = 0.3
 
+    #: Comment rules stay quiet until there's a sample big enough to mean
+    #: something. Three identical "nice" on a quiet post is not a farm.
+    min_comments: int = 8
+    #: Same normalized text from this many comments, covering this share
+    #: of the sample — copy-paste farms. Critical only when both the
+    #: count and the share are extreme.
+    duplicate_comment_count: int = 5
+    duplicate_comment_share: float = 0.3
+    duplicate_comment_critical_count: int = 10
+    duplicate_comment_critical_share: float = 0.5
+    #: Many comments landing inside a short window. Organic threads
+    #: spread out; bought ones often arrive as a dump.
+    comment_burst_window: timedelta = field(default_factory=lambda: timedelta(seconds=90))
+    comment_burst_count: int = 8
+    comment_burst_critical_count: int = 15
+    #: One account posting most of the thread.
+    comment_author_flood: int = 5
+    comment_author_flood_critical: int = 10
+
 
 DEFAULT_THRESHOLDS = Thresholds()
+
+
+@dataclass(frozen=True)
+class CommentEvidence:
+    """The slice of a stored comment the rules are allowed to see.
+
+    Kept as its own type so the rules don't import the ORM, and so a test
+    can build a thread without standing up a database.
+    """
+
+    platform_comment_id: str
+    text: str
+    author_platform_user_id: str | None = None
+    posted_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -127,6 +162,7 @@ class TrustInput:
     #: How many *other* submissions point at this same post. Not a
     #: constraint violation by design (see the schema notes) — it's this.
     duplicate_submissions: int = 0
+    comments: list[CommentEvidence] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -147,6 +183,9 @@ def evaluate(inp: TrustInput, thresholds: Thresholds = DEFAULT_THRESHOLDS) -> Tr
             _engagement_absent,
             _engagement_implausibly_high,
             _duplicate_submission,
+            _near_duplicate_comments,
+            _comment_burst,
+            _comment_author_flood,
         )
         for signal in rule(inp, thresholds)
     ]
@@ -391,6 +430,129 @@ def _duplicate_submission(inp: TrustInput, t: Thresholds) -> list[TrustSignal]:
     ]
 
 
+def _near_duplicate_comments(inp: TrustInput, t: Thresholds) -> list[TrustSignal]:
+    """Copy-pasted comments from many accounts.
+
+    Sentiment stays out of this on purpose: "nice" vs "scam" is a model
+    call. Repeating the same string is a fact a human can verify by
+    reading the thread.
+    """
+    if len(inp.comments) < t.min_comments:
+        return []
+
+    buckets: dict[str, int] = {}
+    for comment in inp.comments:
+        key = normalize_text(comment.text)
+        if not key:
+            continue
+        buckets[key] = buckets.get(key, 0) + 1
+    if not buckets:
+        return []
+
+    phrase, count = max(buckets.items(), key=lambda item: item[1])
+    share = count / len(inp.comments)
+    if count < t.duplicate_comment_count or share < t.duplicate_comment_share:
+        return []
+
+    critical = (
+        count >= t.duplicate_comment_critical_count
+        and share >= t.duplicate_comment_critical_share
+    )
+    preview = phrase if len(phrase) <= 40 else phrase[:37] + "..."
+    return [
+        TrustSignal(
+            code="near_duplicate_comments",
+            severity=SignalSeverity.critical if critical else SignalSeverity.warn,
+            explanation=(
+                f"{count} of {len(inp.comments)} sampled comments share the same text "
+                f"({share:.0%}): “{preview}”."
+            ),
+            observed_value=round(share, 4),
+            threshold=(
+                t.duplicate_comment_critical_share if critical else t.duplicate_comment_share
+            ),
+        )
+    ]
+
+
+def _comment_burst(inp: TrustInput, t: Thresholds) -> list[TrustSignal]:
+    """A dump of comments in a short window.
+
+    Bought engagement often arrives as a batch. Organic threads spread
+    out. Comments without a platform timestamp are ignored rather than
+    assigned one — missing time is not evidence of coordination.
+    """
+    stamped = sorted(
+        (as_utc(c.posted_at) for c in inp.comments if c.posted_at is not None)
+    )
+    if len(stamped) < t.min_comments:
+        return []
+
+    window = t.comment_burst_window
+    peak = 0
+    left = 0
+    for right, moment in enumerate(stamped):
+        while moment - stamped[left] > window:
+            left += 1
+        peak = max(peak, right - left + 1)
+
+    if peak < t.comment_burst_count:
+        return []
+
+    critical = peak >= t.comment_burst_critical_count
+    seconds = int(window.total_seconds())
+    return [
+        TrustSignal(
+            code="comment_burst",
+            severity=SignalSeverity.critical if critical else SignalSeverity.warn,
+            explanation=(
+                f"{peak} comments arrived within {seconds} seconds "
+                f"(sample of {len(stamped)} timestamped comments)."
+            ),
+            observed_value=float(peak),
+            threshold=float(
+                t.comment_burst_critical_count if critical else t.comment_burst_count
+            ),
+        )
+    ]
+
+
+def _comment_author_flood(inp: TrustInput, t: Thresholds) -> list[TrustSignal]:
+    """One account writing most of the thread — sockpuppets, or a
+    creator padding their own comments. Either way, worth a look."""
+    if len(inp.comments) < t.min_comments:
+        return []
+
+    counts: dict[str, int] = {}
+    for comment in inp.comments:
+        if not comment.author_platform_user_id:
+            continue
+        counts[comment.author_platform_user_id] = (
+            counts.get(comment.author_platform_user_id, 0) + 1
+        )
+    if not counts:
+        return []
+
+    author, count = max(counts.items(), key=lambda item: item[1])
+    if count < t.comment_author_flood:
+        return []
+
+    critical = count >= t.comment_author_flood_critical
+    return [
+        TrustSignal(
+            code="comment_author_flood",
+            severity=SignalSeverity.critical if critical else SignalSeverity.warn,
+            explanation=(
+                f"One account wrote {count} of {len(inp.comments)} sampled comments."
+            ),
+            observed_value=float(count),
+            threshold=float(
+                t.comment_author_flood_critical if critical else t.comment_author_flood
+            ),
+        )
+    ]
+
+
 def describe(thresholds: Thresholds = DEFAULT_THRESHOLDS) -> dict[str, object]:
     """The active rule set, for an admin screen or a tuning review. Cheap
     to expose and it keeps the thresholds from becoming folklore."""
@@ -401,6 +563,9 @@ def describe(thresholds: Thresholds = DEFAULT_THRESHOLDS) -> dict[str, object]:
         "min_like_view_ratio": {p.value: v for p, v in thresholds.min_like_view_ratio.items()},
         "max_like_view_ratio": {p.value: v for p, v in thresholds.max_like_view_ratio.items()},
         "watch_score": thresholds.watch_score,
+        "min_comments": thresholds.min_comments,
+        "duplicate_comment_share": thresholds.duplicate_comment_share,
+        "comment_burst_count": thresholds.comment_burst_count,
     }
 
 

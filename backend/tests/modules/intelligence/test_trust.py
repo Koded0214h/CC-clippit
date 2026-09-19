@@ -15,10 +15,12 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
+from dataclasses import replace
+
 from core.platforms import Platform
 from modules.intelligence.contracts import SignalSeverity, TrustStatus
 from modules.intelligence.models import ContentFeature, MetricSnapshot
-from modules.intelligence.trust import DEFAULT_THRESHOLDS, TrustInput, evaluate
+from modules.intelligence.trust import CommentEvidence, DEFAULT_THRESHOLDS, TrustInput, evaluate
 
 T0 = datetime(2026, 9, 14, 9, 0, tzinfo=timezone.utc)
 
@@ -278,3 +280,103 @@ def test_every_signal_can_be_explained_to_a_human(points, likes_ratio):
         assert signal.threshold is not None, "a decision without its threshold is unreadable later"
         assert len(signal.explanation) > 20
         assert signal.explanation.endswith(".")
+
+
+def _thread(*rows: tuple[str, str, float | None]) -> list[CommentEvidence]:
+    """(comment_id, text, hours after T0 | None). Authors default to the id
+    so a flood test can override afterwards."""
+    comments = []
+    for comment_id, text, hours in rows:
+        comments.append(
+            CommentEvidence(
+                platform_comment_id=comment_id,
+                text=text,
+                author_platform_user_id=comment_id,
+                posted_at=None if hours is None else T0 + timedelta(hours=hours),
+            )
+        )
+    return comments
+
+
+def test_copy_pasted_comments_are_caught():
+    inp = replace(
+        _series([(0, 1000), (1, 1800), (2, 2500), (3, 3100)]),
+        comments=_thread(*[(f"c{i}", "Nice!! http://spam.example", 0.01 * i) for i in range(12)]),
+    )
+    verdict = evaluate(inp)
+
+    assert "near_duplicate_comments" in _codes(verdict)
+    assert verdict.status is TrustStatus.flagged
+
+
+def test_a_normal_thread_is_not_a_farm():
+    inp = replace(
+        _series([(0, 1000), (1, 1800), (2, 2500), (3, 3100)]),
+        comments=_thread(*[(f"c{i}", f"thought number {i} about this", 0.5 * i) for i in range(12)]),
+    )
+    verdict = evaluate(inp)
+
+    assert "near_duplicate_comments" not in _codes(verdict)
+
+
+def test_three_identical_comments_are_not_evidence():
+    """A small genuine thread saying 'fire' three times is not a farm.
+    The min_comments floor exists so we don't flag quiet posts."""
+    inp = replace(
+        _series([(0, 1000), (1, 1800), (2, 2500), (3, 3100)]),
+        comments=_thread(*[(f"c{i}", "fire", 0.1 * i) for i in range(3)]),
+    )
+
+    assert "near_duplicate_comments" not in _codes(evaluate(inp))
+
+
+def test_a_comment_dump_in_a_short_window_is_caught():
+    inp = replace(
+        _series([(0, 1000), (1, 1800), (2, 2500), (3, 3100)]),
+        comments=_thread(
+            *[(f"c{i}", f"msg {i}", 0.002 * i) for i in range(16)]  # ~7 seconds apart? 0.002 hours = 7.2s, 16 * 7s = 2 min
+        ),
+    )
+    # 0.002 hours * 15 intervals = 0.03 hours = 108 seconds. Peak in 90s window
+    # should still be well above 8.
+    verdict = evaluate(inp)
+
+    assert "comment_burst" in _codes(verdict)
+
+
+def test_one_account_padding_the_thread_is_caught():
+    comments = [
+        CommentEvidence(
+            platform_comment_id=f"c{i}",
+            text=f"line {i}",
+            author_platform_user_id="sock",
+            posted_at=T0 + timedelta(hours=i),
+        )
+        for i in range(10)
+    ]
+    inp = replace(_series([(0, 1000), (1, 1800), (2, 2500), (3, 3100)]), comments=comments)
+
+    assert "comment_author_flood" in _codes(evaluate(inp))
+
+
+def test_comments_without_timestamps_do_not_invent_a_burst():
+    inp = replace(
+        _series([(0, 1000), (1, 1800), (2, 2500), (3, 3100)]),
+        comments=_thread(*[(f"c{i}", f"msg {i}", None) for i in range(16)]),
+    )
+
+    assert "comment_burst" not in _codes(evaluate(inp))
+
+
+def test_comment_evidence_appears_on_the_verdict_with_an_explanation():
+    """Stage 6's exit condition: a human can be shown the comment evidence."""
+    inp = replace(
+        _series([(0, 1000), (1, 1800), (2, 2500), (3, 3100)]),
+        comments=_thread(*[(f"c{i}", "Great video!!!", 0.01 * i) for i in range(12)]),
+    )
+    verdict = evaluate(inp)
+    comment_signals = [s for s in verdict.signals if s.code.startswith("near_duplicate")]
+
+    assert comment_signals
+    assert comment_signals[0].threshold is not None
+    assert "comments" in comment_signals[0].explanation
