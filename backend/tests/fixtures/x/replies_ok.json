@@ -1,0 +1,12 @@
+{
+  "tweets": [
+    {
+      "id": "r1",
+      "text": "nice",
+      "likeCount": 0,
+      "createdAt": "2026-09-01T12:01:00Z",
+      "author": {"id": "99", "userName": "bot"}
+    }
+  ],
+  "has_next_page": false
+}

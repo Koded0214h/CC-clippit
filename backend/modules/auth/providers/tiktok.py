@@ -1,8 +1,7 @@
 """TikTok Login Kit (OAuth 2.0 + PKCE).
 
-Ported from the working prototype in backend/service-test/tt/service.py —
-same endpoints, same PKCE handshake. Requires user.info.basic + video.list
-scopes for the Intelligence Engine to later read view/like counts.
+Requires user.info.basic + video.list so Intelligence can later read
+view and like counts on the connected account's videos.
 """
 
 import base64

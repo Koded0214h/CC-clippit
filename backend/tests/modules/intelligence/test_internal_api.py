@@ -428,3 +428,26 @@ async def test_no_provider_payload_escapes_the_boundary(api):
     for leak in ("secret_provider_field", "another_provider_field", "raw_metrics", "raw_content"):
         assert leak not in serialized
     assert set(body) == {"submission_id", "content", "metrics", "features", "provenance", "tracking"}
+
+
+async def test_core_can_stop_and_resume_tracking(api):
+    """Withdraw / campaign close must actually stop polling (D17)."""
+    submission_id, _ = await _register(api)
+
+    stopped = await api.client.post(f"/internal/submissions/{submission_id}/tracking/stop")
+    assert stopped.status_code == 200
+    assert stopped.json() == {"stopped": True}
+
+    after_stop = (
+        await api.client.get(f"/internal/submissions/{submission_id}/performance")
+    ).json()
+    assert after_stop["tracking"]["status"] == "stopped"
+
+    resumed = await api.client.post(f"/internal/submissions/{submission_id}/tracking/resume")
+    assert resumed.status_code == 200
+    assert resumed.json() == {"resumed": True}
+
+    after_resume = (
+        await api.client.get(f"/internal/submissions/{submission_id}/performance")
+    ).json()
+    assert after_resume["tracking"]["status"] == "active"

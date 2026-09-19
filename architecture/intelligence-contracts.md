@@ -200,6 +200,8 @@ POST /internal/submissions/{id}/metrics       trigger an observation now   ✅
 GET  /internal/submissions/{id}/performance   -> PerformanceResult         ✅
 GET  /internal/submissions/{id}/trust         -> TrustResult               ✅
 POST /internal/submissions/{id}/trust/review  record a human's verdict     ✅
+POST /internal/submissions/{id}/tracking/stop    Core closes / creator withdraws  ✅
+POST /internal/submissions/{id}/tracking/resume  reopen after a mistaken close   ✅
 GET  /internal/trust/rules                    active thresholds            ✅
 GET  /internal/campaigns/{id}/performance     aggregate                    Stage 5+
 GET  /internal/creators/{id}/performance      aggregate                    Stage 5+
@@ -314,7 +316,7 @@ unresolved decision written down is fixable; one buried in code is not.
 | D2 | TikTok is the first production adapter | Adam | 2026-09-13 | decided |
 | D3 | Intelligence ships inside the existing FastAPI monolith: `modules/intelligence/` + `integrations/social/` | Adam | 2026-09-13 | decided |
 | D4 | Background job runtime: Inngest Python SDK vs Celery/RQ vs APScheduler | Adam | — | **open, but no longer blocking.** Scheduling policy and the worker are runtime-agnostic; a runtime only calls `coordinator.run_due()` on a timer. `modules/intelligence/worker.py` is a plain asyncio loop standing in until this is decided, and is the only file a decision replaces |
-| D5 | `Platform` canonical in `core/platforms.py`; auth's DB enum migrated to match | Koded | — | open — needs his migration. Now has teeth: auth's token endpoint `422`s on `x`/`youtube`, so those adapters can't read a creator token until it lands |
+| D5 | `Platform` canonical in `core/platforms.py`; auth's DB enum migrated to match | Adam | 2026-09-19 | decided — `social_accounts.platform` now includes `x` and `youtube`; token path no longer 422s |
 | D6 | Canonical metric names: views, likes, comments, shares, saves, reach, impressions; nullable; raw retained | Adam | 2026-09-13 | decided |
 | D7 | Snapshots append-only; polling cadence policy by content age | Adam | 2026-09-14 | decided — 30min / 2h / 12h by age, stop at 30 days (see §3b) |
 | D8 | X metrics via twitterapi.io (third party) behind the adapter | Adam | 2026-09-13 | decided — cost/ToS to revisit before launch |
@@ -329,7 +331,7 @@ unresolved decision written down is fixable; one buried in code is not.
 | D14 | Intelligence reads creator tokens over auth's `/internal/social-accounts/…/token` endpoint behind a `TokenSource` port — never by importing auth's models or querying `social_accounts` | Adam | 2026-09-14 | decided — swap to an in-process impl later without touching ingestion |
 | D15 | A re-read with identical counters inside 60s is not stored as a new snapshot; anything that moved, or any reading after the window, always is | Adam | 2026-09-14 | decided — window may need tuning once Stage 3 sets cadence |
 | D16 | Cadence tiers, the 6-failure dead-letter threshold and the 5-minute claim lease are first guesses, not measured | Adam | — | open — revisit against real campaign traffic; no production data exists to tune against yet |
-| D17 | Core tells us when to stop tracking (campaign ended, submission withdrawn) via `stop()`/`resume()`; until then a 30-day age cap stands in | Adam + Koded | — | **open — needs Koded**, cheap to wire once campaigns exist |
+| D17 | Core tells us when to stop tracking (campaign ended, submission withdrawn) via `stop()`/`resume()`; until then a 30-day age cap stands in | Adam + Koded | 2026-09-19 | decided — `POST /internal/submissions/{id}/tracking/stop` and `/resume`; withdraw and campaign close call stop. 30-day cap remains the backstop |
 | D18 | Earnings bills from `billable_views` against a caller-supplied `since_snapshot_id`, not from `incremental_views`. Earnings stores the last snapshot it settled; we stay stateless about money | Adam + Koded | — | **open — needs Koded.** Implemented and tested on our side |
 | D19 | Features are stored per snapshot and recomputable; the trust engine reads the stored series, never recomputes ad hoc, so a payout and an audit always see the same numbers | Adam | 2026-09-14 | decided |
 

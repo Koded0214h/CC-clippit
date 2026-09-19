@@ -1,18 +1,12 @@
 """Walk a real submission through the whole system and print what happens.
 
-Brand signs up, creates a campaign, creator signs up, submits a link.
-That submission crosses the module boundary into Intelligence, which
-calls the platform for real, stores an observation, derives features and
-judges trust. Then we read the numbers back the way earnings would.
+    python scripts/demo_end_to_end.py --platform tiktok --url "https://www.tiktok.com/@you/video/123..."
 
-    python scripts/demo_end_to_end.py --url "https://www.tiktok.com/@you/video/123..."
-
-This exists because everything up to now has been proven against
-recorded payloads and an in-memory database. None of that tells you
-whether the pieces fit together against a live platform and real
-Postgres — which is the only question this script asks.
-
-Add --skip-connect if the creator account has already linked TikTok.
+`--platform` can be tiktok, instagram, facebook, threads, or x. The
+creator must connect that account in the browser (the printed URL
+includes the JWT). `--skip-connect` only works if that same creator
+already has the account linked — this script still signs up a new user
+each run, so you normally want the connect step.
 """
 
 from __future__ import annotations
@@ -60,7 +54,7 @@ def auth(token: str) -> dict[str, str]:
 
 async def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--url", required=True, help="A real TikTok post URL owned by the connected account")
+    parser.add_argument("--url", required=True, help="A real post URL owned by the connected account")
     parser.add_argument("--platform", default="tiktok")
     parser.add_argument("--skip-connect", action="store_true")
     args = parser.parse_args()
@@ -96,13 +90,12 @@ async def main() -> int:
         creator_email, creator_token = await signup(client, "creator")
         if not args.skip_connect:
             print(f"\n{'═' * 70}")
-            print("2. Connect the TikTok account that owns that post.")
+            print(f"2. Connect the {args.platform} account that owns that post.")
             print(f"{'═' * 70}")
-            print("   Open this URL in your browser and complete the TikTok login:\n")
-            print(f"   {API}/social/{args.platform}/login")
+            print("   Open this URL in your browser and complete the login:\n")
+            print(f"   {API}/social/{args.platform}/login?token={creator_token}")
             print(f"\n   Log in as the creator first: {creator_email} / DemoPassword123!")
-            print("   The Display API only ever returns the authorized account's own")
-            print("   posts, so this has to be the account that published the URL.\n")
+            print("   This has to be the account that published the URL.\n")
             input("   Press Enter once the account is connected... ")
 
         accounts = await client.get("/social/accounts", headers=auth(creator_token))
@@ -126,7 +119,7 @@ async def main() -> int:
         submission_id = submission["id"]
 
         # 4. The read path earnings uses. No platform call here by design:
-        #    nobody's payout should wait on TikTok's uptime.
+        #    nobody's payout should wait on a platform's uptime.
         perf = await client.get(
             f"/submissions/{submission_id}/performance", headers=auth(creator_token)
         )

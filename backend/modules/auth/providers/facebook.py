@@ -1,10 +1,8 @@
-"""Facebook Login. Ported from backend/service-test/meta_fb/service.py.
+"""Facebook Login.
 
-Only the account-connection handshake lives here (short-lived -> long-lived
-user token + the user's Facebook id). Page selection and Page-level access
-tokens are a Content Submission / Intelligence Engine concern for whichever
-module later needs to read a specific Page's posts — not part of connecting
-the account.
+Only the account-connection handshake lives here (short-lived → long-lived
+user token + the user's Facebook id). Reading Page posts is the Facebook
+adapter's job, not part of connecting the account.
 """
 
 from urllib.parse import urlencode

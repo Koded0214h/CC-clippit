@@ -57,9 +57,9 @@ async def get_social_token(user_id: uuid.UUID, platform: models.Platform, db: As
     if not account:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No connected account for this platform")
     if account.expires_at and account.expires_at < datetime.now(timezone.utc):
-        # TikTok's token can be refreshed with account.refresh_token; the other
-        # three providers don't expose a refresh flow in the ported prototypes
-        # yet — the caller gets a 409 rather than a silently stale token.
+        # This read does not refresh. TikTok and X store a refresh_token;
+        # Facebook/Instagram/Threads do not. An expired row is 409 so the
+        # creator reconnects rather than us serving a silently stale token.
         raise HTTPException(status.HTTP_409_CONFLICT, "Token expired; re-connect this account")
     return schemas.InternalTokenOut(
         access_token=account.access_token,

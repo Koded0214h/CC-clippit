@@ -1,7 +1,7 @@
-"""Threads Login. Ported from backend/service-test/meta_threads/service.py.
+"""Threads Login.
 
-Threads requires an https redirect URI even in dev — tunnel with ngrok /
-cloudflared and set THREADS_REDIRECT_URI to the tunnel's https URL.
+Requires an https redirect URI even in dev — tunnel with ngrok /
+cloudflared and set THREADS_REDIRECT_URI to that public https URL.
 """
 
 from urllib.parse import urlencode

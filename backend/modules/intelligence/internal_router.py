@@ -1,18 +1,21 @@
 """The only way into this module from the rest of Clippit.
 
-Two routes, guarded by the same `X-Internal-Secret` the auth module uses.
-Everything they return is a model from `contracts.py` — no ORM objects, no
-provider payloads, no platform vocabulary. If Koded's earnings code can
-bill from these responses without knowing what TikTok's Display API is,
-the boundary is doing its job.
+Guarded by the same `X-Internal-Secret` the auth module uses. Everything
+these routes return is a model from `contracts.py` — no ORM objects, no
+provider payloads. If Koded's earnings code can bill from the responses
+without knowing what TikTok's Display API is, the boundary is doing its job.
 
-    POST /internal/submissions/{id}/metrics       observe now
-    GET  /internal/submissions/{id}/performance   read what we know
+    POST /internal/submissions/{id}/metrics          observe now
+    GET  /internal/submissions/{id}/performance      read what we know
+    GET  /internal/submissions/{id}/trust            latest verdict
+    POST /internal/submissions/{id}/trust/review     record a human label
+    GET  /internal/trust/rules                       thresholds in force
+    POST /internal/submissions/{id}/tracking/stop    Core closed / withdrew
+    POST /internal/submissions/{id}/tracking/resume  put it back on the queue
 
-The split between them matters: the POST talks to a platform and can
-therefore be slow or fail, while the GET only reads our own tables and
-never can. A billing run uses the GET, so nobody's payout waits on
-TikTok's uptime.
+The metrics POST talks to a platform and can therefore be slow or fail.
+The performance GET only reads our tables. A billing run uses the GET, so
+nobody's payout waits on a platform's uptime.
 """
 
 from __future__ import annotations
@@ -36,7 +39,7 @@ from integrations.social.base import (
 
 from . import performance, repository, trust
 from .contracts import PerformanceResult, SubmissionRef, TrustResult, TrustReviewIn
-from .errors import MissingCreatorToken, TokenLookupFailed, UrlNotRecognized
+from .errors import IneligibleContent, MissingCreatorToken, TokenLookupFailed, UrlNotRecognized
 from .models import TrustReview
 from .polling import PollingCoordinator
 from .trust_service import TrustService
@@ -72,6 +75,7 @@ def get_coordinator() -> PollingCoordinator:
 #: the number is the stable part.
 _HTTP_FAILURES: tuple[tuple[type[Exception], int, str], ...] = (
     (UrlNotRecognized, 422, "url_not_recognised"),
+    (IneligibleContent, 422, "ineligible_content"),
     (ContentNotFound, status.HTTP_404_NOT_FOUND, "content_not_found"),
     (ContentUnavailable, status.HTTP_409_CONFLICT, "content_unavailable"),
     (CreatorTokenExpired, status.HTTP_409_CONFLICT, "creator_reconnect_required"),
@@ -258,6 +262,40 @@ async def read_rules():
     instead of them becoming folklore that only this file knows.
     """
     return trust.describe()
+
+
+@router.post("/submissions/{submission_id}/tracking/stop")
+async def stop_tracking(
+    submission_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    coordinator: PollingCoordinator = Depends(get_coordinator),
+):
+    """Core tells us the campaign ended or the submission was withdrawn."""
+    content_id = await repository.content_id_for_submission(db, submission_id)
+    if content_id is None:
+        return {"stopped": False, "reason": "unknown_submission"}
+    await coordinator.stop(
+        content_id,
+        code="stopped_by_core",
+        message="Core asked us to stop tracking this submission.",
+    )
+    return {"stopped": True}
+
+
+@router.post("/submissions/{submission_id}/tracking/resume")
+async def resume_tracking(
+    submission_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    coordinator: PollingCoordinator = Depends(get_coordinator),
+):
+    content_id = await repository.content_id_for_submission(db, submission_id)
+    if content_id is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail={"code": "unknown_submission", "message": "No such submission here."},
+        )
+    await coordinator.resume(content_id)
+    return {"resumed": True}
 
 
 def _as_http_error(error: Exception) -> HTTPException:

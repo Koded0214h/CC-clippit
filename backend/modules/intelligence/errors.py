@@ -27,3 +27,9 @@ class TokenLookupFailed(IntelligenceError):
     """We couldn't ask the auth module at all (network, wrong internal
     secret, unexpected status). This is our infrastructure misbehaving
     rather than a creator problem, and is worth retrying."""
+
+
+class IneligibleContent(IntelligenceError):
+    """The URL resolved, but the post isn't a campaign-submittable type
+    (X reposts and replies). Not retryable — the creator has to submit
+    an original or a quote."""

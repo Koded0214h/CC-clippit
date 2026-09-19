@@ -10,10 +10,18 @@ life of the process — they hold configuration, never per-request state.
 from core.platforms import Platform
 
 from .base import SocialPlatformAdapter
+from .facebook import FacebookAdapter
+from .instagram import InstagramAdapter
+from .threads import ThreadsAdapter
 from .tiktok import TikTokAdapter
+from .x import XAdapter
 
 REGISTRY: dict[Platform, SocialPlatformAdapter] = {
     Platform.tiktok: TikTokAdapter(),
+    Platform.instagram: InstagramAdapter(),
+    Platform.facebook: FacebookAdapter(),
+    Platform.threads: ThreadsAdapter(),
+    Platform.x: XAdapter(),
 }
 
 

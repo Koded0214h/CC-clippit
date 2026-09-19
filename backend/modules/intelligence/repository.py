@@ -51,6 +51,23 @@ async def content_id_for_submission(db: AsyncSession, submission_id: uuid.UUID) 
     )
 
 
+async def content_ids_for_campaign(db: AsyncSession, campaign_id: uuid.UUID) -> list[uuid.UUID]:
+    return list(
+        await db.scalars(sa.select(SocialContent.id).where(SocialContent.campaign_id == campaign_id))
+    )
+    """Just the ID, as a plain value rather than an ORM instance.
+
+    Used where the caller has to survive a transaction boundary. A loaded
+    object is bound to its session and gets *expired* by a commit or
+    rollback, so touching an attribute afterwards triggers a lazy reload —
+    which in async SQLAlchemy raises `MissingGreenlet` rather than quietly
+    working. A UUID has no such attachment.
+    """
+    return await db.scalar(
+        sa.select(SocialContent.id).where(SocialContent.submission_id == submission_id)
+    )
+
+
 async def add_content(db: AsyncSession, content: SocialContent) -> SocialContent:
     db.add(content)
     # Flush rather than commit: the row gets its primary key so the first

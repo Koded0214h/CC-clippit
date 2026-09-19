@@ -1,0 +1,8 @@
+{
+  "data": [
+    {"name": "views", "values": [{"value": 1200}]},
+    {"name": "likes", "values": [{"value": 80}]},
+    {"name": "replies", "values": [{"value": 9}]},
+    {"name": "reposts", "values": [{"value": 4}]}
+  ]
+}

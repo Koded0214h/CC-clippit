@@ -1,4 +1,4 @@
-"""Instagram Business Login. Ported from backend/service-test/meta_insta/service.py."""
+"""Instagram Business Login — short-lived token, then long-lived exchange."""
 
 from urllib.parse import urlencode
 

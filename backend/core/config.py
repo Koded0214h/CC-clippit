@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     # Shared secret used between internal modules/services if any of this
     # backend is ever split out later. Not exposed to the browser.
     internal_service_secret: str = "dev-only-not-secret"
-    frontend_origin: str = "http://localhost:3000"
+    frontend_origin: str = "http://localhost:5174"
 
     # In-memory by default (fine for one process/dev). Point this at Redis
     # (e.g. redis://localhost:6379) once this runs as more than one worker,
@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     threads_app_id: str = ""
     threads_app_secret: str = ""
     threads_redirect_uri: str = "http://localhost:8000/social/threads/callback"
+
+    x_client_id: str = ""
+    x_client_secret: str = ""
+    x_redirect_uri: str = "http://localhost:8000/social/x/callback"
+    twitterapi_io_key: str = ""
 
     @property
     def sync_database_url(self) -> str:

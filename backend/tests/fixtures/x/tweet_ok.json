@@ -1,0 +1,15 @@
+{
+  "tweets": [
+    {
+      "id": "1976592797731082295",
+      "text": "Ship the adapter",
+      "url": "https://x.com/adam__lawal/status/1976592797731082295",
+      "likeCount": 42,
+      "viewCount": 1500,
+      "replyCount": 6,
+      "retweetCount": 3,
+      "createdAt": "2026-09-01T12:00:00Z",
+      "author": {"id": "12", "userName": "adam__lawal"}
+    }
+  ]
+}

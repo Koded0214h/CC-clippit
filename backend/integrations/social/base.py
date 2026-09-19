@@ -44,7 +44,7 @@ class PostType(str, enum.Enum):
     Learned the hard way while validating X: a creator's timeline is mostly
     reposts of other people's work. Only `original` and `quote` represent
     content the creator produced, so only those can be submitted against a
-    campaign. See `backend/service-test/X/service.py`.
+    campaign.
     """
 
     original = "original"

@@ -28,7 +28,7 @@ backend/
       social_router.py         /social/{platform}/login|callback, /social/accounts
       profile_router.py        /profile, /profile/preferences
       internal_router.py       /internal/* — called by other modules, not the browser
-      providers/                one file per OAuth platform (tiktok, facebook, instagram, threads)
+      providers/                one file per OAuth platform (tiktok, facebook, instagram, threads, x)
     campaigns/                <- Campaign Management (Koded) — see below
     submissions/               <- Content Submission (Koded) — see below
     creators/                   <- Creators / bank details (Koded) — see below
@@ -40,19 +40,22 @@ backend/
 ## Run it
 
 ```sh
+# From the repo root: Postgres on host 5433 (avoids a Homebrew server on 5432)
+docker compose up -d
 cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env        # fill in DATABASE_URL + provider credentials
-alembic upgrade head        # creates/updates the schema — see Migrations below
+cp .env.example .env        # DATABASE_URL should use localhost:5433
+alembic upgrade head
 uvicorn main:app --reload --port 8000
+
+# In a second terminal — grows time series while the API is up
+cd backend && python -m modules.intelligence.worker
 ```
 
-Needs a running Postgres reachable at `DATABASE_URL` (an `asyncpg` URL,
-e.g. `postgresql+asyncpg://user:pass@host/db` — the app talks to Postgres
-asynchronously end to end, including the OAuth token exchanges, which use
-`httpx.AsyncClient` rather than `requests`).
+The Next.js app (`frontend/`) is on port **5174**. `FRONTEND_ORIGIN` must
+include `http://localhost:5174` so the browser can call this API and so
+OAuth callbacks land on `/dashboard/settings`.
+
+Needs a running Postgres reachable at `DATABASE_URL` (an `asyncpg` URL).
 
 ## Migrations (Alembic)
 
@@ -92,18 +95,18 @@ action taken after a normal signup, handled entirely by the endpoints below.
 A default preferences row is created at signup; `/profile/preferences`
 lazily creates one for any account that predates this table.
 
-## Social OAuth (connect-only, from the profile)
+## Social OAuth (connect-only, from settings)
 
 | Route | Auth | Purpose |
 |---|---|---|
-| `GET /social/{platform}/login?token=<jwt>` | JWT (query, see note) | starts OAuth for tiktok/facebook/instagram/threads |
-| `GET /social/{platform}/callback` | — | provider redirects here; stores the connection; redirects to `{FRONTEND_ORIGIN}/profile?...` |
+| `GET /social/{platform}/login?token=<jwt>` | JWT (query, see note) | starts OAuth for tiktok/facebook/instagram/threads/x |
+| `GET /social/{platform}/callback` | — | provider redirects here; stores the connection; redirects to `{FRONTEND_ORIGIN}/dashboard/settings?...` |
 | `GET /social/accounts` | Bearer | list the current user's connected platforms |
 | `DELETE /social/{platform}` | Bearer | disconnect a platform |
 
 `/social/{platform}/login` takes the token as a query param instead of a
 header because the frontend reaches it via a plain browser navigation from
-the profile page (clicking "Connect TikTok"), which can't attach an
+settings (clicking "Connect TikTok"), which can't attach an
 `Authorization` header. The CSRF/PKCE-carrying `state` param is what
 actually secures the OAuth round trip; the query token only identifies who's
 connecting.
@@ -158,7 +161,7 @@ shape, now on `httpx.AsyncClient` instead of `requests`. Only the
 endpoints (video list, Page posts, Threads insights, etc.) belong to the
 Intelligence Engine module, not Auth.
 
-- **tiktok** — PKCE required.
+- **tiktok**, **x** — PKCE required.
 - **facebook**, **instagram**, **threads** — short-lived token → long-lived
   token exchange. No refresh-token flow ported yet; a token that's expired
   by the time `/internal/social-accounts/.../token` is called returns 409
@@ -276,6 +279,10 @@ boundary, the canonical data model, and the decisions register.
 | Platform | Adapter | Needs creator token | Comment text |
 |---|---|---|---|
 | tiktok | `integrations/social/tiktok.py` | yes | no (Display API exposes counts only) |
+| instagram | `integrations/social/instagram.py` | yes | yes |
+| facebook | `integrations/social/facebook.py` | yes | yes |
+| threads | `integrations/social/threads.py` | yes | yes |
+| x | `integrations/social/x.py` | no (twitterapi.io key) | yes |
 
 Ingestion (`modules/intelligence/ingestion.py`) turns a submission into
 stored observations:
@@ -334,6 +341,11 @@ scheduler's handler body is `await coordinator.run_due()`.
 |---|---|---|
 | `POST /internal/submissions/{id}/metrics` | Register a submission (`SubmissionRef` body → 201) or force a fresh reading | yes |
 | `GET /internal/submissions/{id}/performance` | Everything we know, from our tables | never |
+| `GET /internal/submissions/{id}/trust` | Latest trust verdict | never |
+| `POST /internal/submissions/{id}/trust/review` | Record a human label | never |
+| `GET /internal/trust/rules` | Thresholds currently in force | never |
+| `POST /internal/submissions/{id}/tracking/stop` | Campaign closed or creator withdrew | never |
+| `POST /internal/submissions/{id}/tracking/resume` | Put a stopped submission back on the queue | never |
 
 Billing uses the GET, so a payout run is never slow or wrong because
 TikTok is down. Pass `?since_snapshot_id=` — the `provenance.snapshot_id`
@@ -349,13 +361,12 @@ of requiring a refetch.
 
 ```sh
 pip install -r requirements-dev.txt
-pytest                      # no credentials, no database, no network
+pytest                      # adapters + intelligence: fixtures / in-memory SQLite
 ```
 
-Adapters are tested against recorded payloads; ingestion runs on in-memory
-SQLite, which is why the intelligence models avoid Postgres-only column
-types. That catches logic bugs, not Postgres-specific ones — run the
-migration against a real database before shipping.
+Adapter tests use recorded JSON, no live logins. Intelligence uses
+in-memory SQLite. Auth / campaigns / submissions HTTP tests need Docker
+Postgres on **5433** (`tests/http_app.py`) and skip if it isn't up.
 
 ## Known gaps (next optimization pass)
 

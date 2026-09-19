@@ -49,14 +49,12 @@ async def login(
     platform: str,
     user: models.User = Depends(get_current_user_allow_query),
 ):
-    """Reached from the profile page (see profile_router.py), not from a
-    signup/login screen — connecting a platform never creates or authenticates
-    an account by itself. The frontend links here as
-    `/social/{platform}/login?token=<jwt>` — a plain browser navigation can't
-    carry an Authorization header, so the already-issued access token rides
-    in the query string. The signed `state` minted below is what actually
-    secures the OAuth round trip; this query token only identifies who's
-    connecting."""
+    """Reached from settings (or any already-signed-in screen), not from
+    signup/login — connecting a platform never creates an account. The
+    frontend navigates to `/social/{platform}/login?token=<jwt>` because a
+    plain browser request can't carry an Authorization header. The signed
+    `state` minted below secures the OAuth round trip; the query token only
+    identifies who's connecting."""
     try:
         provider = get_provider(platform)
     except KeyError as exc:
@@ -81,8 +79,11 @@ async def callback(
     except KeyError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
 
-    fail_url = f"{settings.frontend_origin}/profile?social={platform}&status=error"
-    success_url = f"{settings.frontend_origin}/profile?social={platform}&status=ok"
+    # FRONTEND_ORIGIN can be a comma-separated CORS list. The post-OAuth
+    # redirect can only go to one URL — the first origin is the app itself.
+    origin = settings.frontend_origin.split(",")[0].strip()
+    fail_url = f"{origin}/dashboard/settings?social={platform}&status=error"
+    success_url = f"{origin}/dashboard/settings?social={platform}&status=ok"
 
     if error:
         return RedirectResponse(f"{fail_url}&reason={error_description or error}")

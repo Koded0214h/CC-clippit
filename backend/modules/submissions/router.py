@@ -25,13 +25,6 @@ from . import models, schemas
 
 router = APIRouter(prefix="/submissions", tags=["submissions"])
 
-#: Platforms auth's `social_accounts` table can actually store today (its
-#: native enum has 4 of core.platforms.Platform's 6 values — decision D5,
-#: unresolved). A creator can't have a connected account on the other two
-#: yet, so a submission against them is rejected before it ever reaches a
-#: query that would otherwise fail on an invalid enum value at the DB.
-_CONNECTABLE_PLATFORMS = {p.value for p in AuthPlatform}
-
 
 async def _get_visible_submission(submission_id: uuid.UUID, user: User, db: AsyncSession) -> models.Submission:
     """404, not 403, when the submission exists but isn't this user's to
@@ -74,16 +67,15 @@ async def create_submission(
             f"This campaign doesn't accept {payload.platform.value} submissions",
         )
 
-    has_account = False
-    if payload.platform.value in _CONNECTABLE_PLATFORMS:
-        has_account = (
-            await db.scalar(
-                select(SocialAccount.id).where(
-                    SocialAccount.user_id == user.id, SocialAccount.platform == payload.platform.value
-                )
+    has_account = (
+        await db.scalar(
+            select(SocialAccount.id).where(
+                SocialAccount.user_id == user.id,
+                SocialAccount.platform == AuthPlatform(payload.platform.value),
             )
-            is not None
         )
+        is not None
+    )
     if not has_account:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
@@ -164,12 +156,9 @@ async def withdraw_submission(
     submission_id: uuid.UUID,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    client: httpx.AsyncClient = Depends(get_internal_client),
 ):
-    """Marks the submission withdrawn on our side only. Intelligence isn't
-    told to stop tracking it — there's no endpoint for that yet (decision
-    D17 in intelligence-contracts.md is still open); its own 30-day age
-    cap is what eventually stops polling. Cheap follow-up once D17 lands,
-    not a correctness problem today."""
+    """Withdraw locally and tell Intelligence to stop polling (D17)."""
     submission = await _get_visible_submission(submission_id, user, db)
     if user.role == Role.creator and submission.creator_id != user.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Not your submission")
@@ -180,6 +169,12 @@ async def withdraw_submission(
 
     submission.status = models.SubmissionStatus.withdrawn
     await db.commit()
+    try:
+        await client.post(f"/internal/submissions/{submission_id}/tracking/stop")
+    except httpx.HTTPError:
+        # The row is withdrawn either way; the 30-day cap is the backstop
+        # if this call misses.
+        pass
     return submission
 
 

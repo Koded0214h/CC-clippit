@@ -1,12 +1,9 @@
 """TikTok adapter — Display API v2.
 
-Ported from the working prototype in `backend/service-test/tt/service.py`,
-with three changes that matter:
-
-- it fetches **one known video** (`/v2/video/query/`) instead of listing a
-  creator's whole feed, because ingestion starts from a submitted URL;
-- it returns the canonical dataclasses from `base.py` rather than raw JSON;
-- it raises the typed errors, so the Stage 3 poller can decide what to do.
+Fetches **one known video** (`/v2/video/query/`) instead of listing a
+creator's whole feed, because ingestion starts from a submitted URL.
+Returns the canonical dataclasses from `base.py` and raises typed errors
+so the poller can decide retry vs stop vs reconnect.
 
 **Ownership is structural here.** TikTok's docs are explicit that
 `/v2/video/query/` "verifies that the videos belong to the user" — it only

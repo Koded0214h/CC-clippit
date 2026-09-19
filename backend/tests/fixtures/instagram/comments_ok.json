@@ -1,0 +1,12 @@
+{
+  "data": [
+    {
+      "id": "c1",
+      "text": "Fire fit",
+      "username": "friend",
+      "timestamp": "2026-09-01T13:00:00+0000",
+      "like_count": 2
+    }
+  ],
+  "paging": {"cursors": {}}
+}

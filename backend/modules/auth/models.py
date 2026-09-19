@@ -16,10 +16,16 @@ class Role(str, enum.Enum):
 
 
 class Platform(str, enum.Enum):
+    """Same six values as `core.platforms.Platform`. Kept as a local enum
+    so the existing Postgres type named `platform` stays the column type
+    (decision D5). Values must stay spelled identically."""
+
     tiktok = "tiktok"
     facebook = "facebook"
     instagram = "instagram"
     threads = "threads"
+    x = "x"
+    youtube = "youtube"
 
 
 class Theme(str, enum.Enum):

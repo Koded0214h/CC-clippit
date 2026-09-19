@@ -1,13 +1,16 @@
 import uuid
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from core.deps import get_db
+from core.internal_client import get_internal_client
 from modules.auth.deps import get_current_user
 from modules.auth.models import Role, User
+from modules.submissions.models import Submission
 
 from . import models, schemas
 
@@ -168,6 +171,7 @@ async def close_campaign(
     campaign_id: uuid.UUID,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    client: httpx.AsyncClient = Depends(get_internal_client),
 ):
     campaign = await _get_campaign(campaign_id, db)
     _ensure_can_manage(campaign, user)
@@ -175,5 +179,13 @@ async def close_campaign(
         raise HTTPException(status.HTTP_409_CONFLICT, "Campaign is already closed")
 
     campaign.status = models.CampaignStatus.closed
+    submission_ids = list(
+        await db.scalars(select(Submission.id).where(Submission.campaign_id == campaign_id))
+    )
     await db.commit()
+    for submission_id in submission_ids:
+        try:
+            await client.post(f"/internal/submissions/{submission_id}/tracking/stop")
+        except httpx.HTTPError:
+            pass
     return await _get_campaign(campaign_id, db)

@@ -32,11 +32,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.platforms import Platform
 from integrations.social import get_adapter
-from integrations.social.base import SocialPlatformAdapter
+from integrations.social.base import PostType, SocialPlatformAdapter
 
 from . import comments, normalizer, repository
 from .contracts import SubmissionRef
-from .errors import UrlNotRecognized
+from .errors import IneligibleContent, UrlNotRecognized
 from .models import MetricSnapshot, SocialContent
 from .timeutils import as_utc
 from .tokens import TokenSource
@@ -128,6 +128,11 @@ class IngestionService:
             )
 
         platform_content = await adapter.get_content(content_id, access_token=token)
+        if platform_content.post_type not in (PostType.original, PostType.quote):
+            raise IneligibleContent(
+                f"A {platform_content.post_type.value} cannot be submitted — "
+                "only original posts and quotes count."
+            )
         return await repository.add_content(
             self._db, normalizer.build_content(submission, platform_content)
         )
