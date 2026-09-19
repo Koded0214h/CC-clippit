@@ -1,0 +1,54 @@
+# Local development dependencies. The app itself runs on the host
+# (uvicorn/next dev), so reloads stay instant — only the stateful pieces
+# live in containers.
+#
+#   docker compose up -d        start
+#   docker compose down         stop, keep data
+#   docker compose down -v      stop and wipe the database
+#
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: clippit-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: clippit
+      POSTGRES_PASSWORD: clippit
+      POSTGRES_DB: clippit
+    ports:
+      # Host 5433, not 5432. A Homebrew Postgres already listens on 5432
+      # on at least one dev machine, and because it binds localhost while
+      # Docker binds the wildcard, both start successfully and which one
+      # you reach depends on whether localhost resolves to ::1 or
+      # 127.0.0.1. Migrations silently landed in the wrong server once
+      # already. Picking a free port makes the ambiguity impossible.
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # Migrations and the app should wait for readiness, not just for
+      # the container to exist — Postgres accepts connections a moment
+      # after the process starts.
+      test: ["CMD-SHELL", "pg_isready -U clippit -d clippit"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    # Not required yet: rate limiting defaults to in-memory and the
+    # poller leases work through Postgres row locks. Here because both
+    # become wrong the moment this runs as more than one process, and
+    # discovering that in production is worse than an idle container.
+    image: redis:7-alpine
+    container_name: clippit-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres_data:
