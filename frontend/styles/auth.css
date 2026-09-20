@@ -2140,3 +2140,664 @@ fieldset {
     animation: none;
   }
 }
+
+/* Viewport-fit auth: every route remains fully visible without page scrolling. */
+.auth-root,
+.auth-layout {
+  height: 100svh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.auth-nav {
+  min-height: 66px;
+  padding: 13px clamp(20px, 3vw, 40px);
+}
+
+.auth-workspace {
+  height: 100svh;
+  min-height: 0;
+  padding: clamp(74px, 9vh, 94px) clamp(34px, 5vw, 72px) clamp(14px, 2.5vh, 28px);
+  overflow: hidden;
+}
+
+.auth-workspace__inner {
+  max-height: 100%;
+}
+
+.route-meter {
+  margin-bottom: clamp(10px, 1.8vh, 20px);
+}
+
+.auth-kicker {
+  margin-bottom: clamp(6px, 1vh, 10px);
+}
+
+.auth-screen h1 {
+  font-size: clamp(41px, 4.5vw, 62px);
+  line-height: 0.92;
+}
+
+.auth-intro {
+  margin-top: clamp(8px, 1.3vh, 14px);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.auth-form {
+  gap: clamp(8px, 1.25vh, 13px);
+  margin-top: clamp(12px, 2vh, 20px);
+}
+
+.google-auth-button,
+.field > input,
+.field__control {
+  min-height: 46px;
+}
+
+.field > input {
+  padding-block: 10px;
+}
+
+.field__control input {
+  padding-block: 10px;
+}
+
+.field {
+  gap: 4px;
+}
+
+.field__hint,
+.field__error {
+  font-size: 9px;
+}
+
+.auth-button {
+  min-height: 48px;
+  padding-block: 11px;
+}
+
+.role-form {
+  gap: 11px;
+}
+
+.role-form fieldset {
+  gap: 7px;
+}
+
+.role-card {
+  min-height: 68px;
+  padding: 9px 12px;
+}
+
+.role-card__icon {
+  width: 43px;
+  height: 43px;
+}
+
+.auth-legal,
+.switch-line,
+.resend-line {
+  margin-top: clamp(8px, 1.4vh, 14px);
+}
+
+.back-link {
+  margin-bottom: clamp(7px, 1.2vh, 13px);
+}
+
+.otp-inputs input {
+  height: 51px;
+}
+
+@media (max-height: 820px) and (min-width: 861px) {
+  .auth-workspace {
+    padding-top: 70px;
+    padding-bottom: 10px;
+  }
+
+  .auth-screen h1 {
+    font-size: clamp(38px, 4vw, 52px);
+  }
+
+  .auth-intro {
+    margin-top: 7px;
+    font-size: 11px;
+  }
+
+  .auth-form {
+    gap: 8px;
+    margin-top: 11px;
+  }
+}
+
+@media (max-width: 860px) {
+  .auth-nav {
+    min-height: 58px;
+    padding: 9px 16px;
+  }
+
+  .auth-nav .brand img {
+    width: 32px;
+    height: 32px;
+  }
+
+  .auth-nav .brand > span {
+    font-size: 24px;
+  }
+
+  .auth-nav__aside {
+    gap: 8px;
+  }
+
+  .auth-nav__aside span {
+    display: none;
+  }
+
+  .auth-nav__aside a {
+    min-width: 68px;
+    padding: 7px 10px;
+    box-shadow: 2px 2px 0 var(--ink);
+  }
+
+  .auth-layout,
+  .auth-workspace {
+    height: 100svh;
+    min-height: 0;
+  }
+
+  .auth-workspace {
+    display: grid;
+    padding: 72px clamp(18px, 6vw, 38px) 14px;
+  }
+
+  .auth-workspace__inner {
+    width: min(100%, 570px);
+    margin: 0 auto;
+  }
+
+  .route-meter {
+    margin-bottom: clamp(11px, 1.8vh, 17px);
+  }
+
+  .auth-kicker {
+    margin-bottom: 8px;
+    font-size: 11px;
+  }
+
+  .auth-kicker span {
+    font-size: 16px;
+  }
+
+  .auth-screen h1 {
+    font-size: clamp(38px, 10vw, 50px);
+    line-height: 0.94;
+  }
+
+  .auth-intro {
+    margin-top: 10px;
+    font-size: 12px;
+    line-height: 1.42;
+  }
+
+  .auth-form {
+    gap: 9px;
+    margin-top: 14px;
+  }
+
+  .field-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .field > span:first-child,
+  .field__label-line {
+    font-size: 11px;
+  }
+
+  .google-auth-button,
+  .field > input,
+  .field__control {
+    min-height: 46px;
+  }
+
+  .google-auth-button {
+    padding-block: 7px;
+  }
+
+  .auth-divider {
+    font-size: 9px;
+  }
+
+  .auth-button {
+    min-height: 48px;
+    padding: 10px 15px;
+    font-size: 13px;
+  }
+
+  .role-card {
+    min-height: 68px;
+  }
+
+  .role-card__icon {
+    width: 42px;
+    height: 42px;
+  }
+
+  .role-card__copy strong {
+    font-size: 13px;
+  }
+
+  .role-card__copy small {
+    font-size: 10px;
+  }
+
+  .check-field {
+    font-size: 10px;
+  }
+
+  .back-link {
+    margin-bottom: 7px;
+  }
+
+  .otp-inputs input {
+    height: 46px;
+  }
+}
+
+@media (max-height: 740px) and (max-width: 860px) {
+  .auth-workspace {
+    padding-top: 64px;
+    padding-bottom: 8px;
+  }
+
+  .route-meter {
+    margin-bottom: 8px;
+    font-size: 9px;
+  }
+
+  .auth-kicker {
+    margin-bottom: 6px;
+    font-size: 10px;
+  }
+
+  .auth-screen h1 {
+    font-size: clamp(34px, 9.4vw, 41px);
+  }
+
+  .auth-intro {
+    margin-top: 7px;
+    font-size: 10.5px;
+  }
+
+  .auth-form {
+    gap: 7px;
+    margin-top: 10px;
+  }
+
+  .google-auth-button,
+  .field > input,
+  .field__control {
+    min-height: 42px;
+  }
+
+  .field > span:first-child,
+  .field__label-line {
+    font-size: 10px;
+  }
+
+  .field__hint,
+  .field__error {
+    font-size: 8px;
+  }
+
+  .auth-button {
+    min-height: 44px;
+    padding-block: 8px;
+  }
+
+  .auth-legal,
+  .switch-line,
+  .resend-line {
+    margin-top: 8px;
+    font-size: 9px;
+  }
+
+  .role-card {
+    min-height: 60px;
+    padding-block: 7px;
+  }
+
+  .role-card__icon {
+    width: 37px;
+    height: 37px;
+  }
+
+  .back-link {
+    margin-bottom: 4px;
+  }
+
+  .otp-inputs input {
+    height: 40px;
+  }
+}
+
+/* Final auth rhythm: full-height mobile composition, relaxed scrollable desktop. */
+@media (max-width: 860px) {
+  .auth-root,
+  .auth-layout,
+  .auth-workspace {
+    height: 100svh;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .auth-workspace {
+    box-sizing: border-box;
+    padding: 70px clamp(18px, 6vw, 38px) 12px;
+  }
+
+  .auth-workspace__inner {
+    display: flex;
+    flex-direction: column;
+    width: min(100%, 570px);
+    height: 100%;
+    min-height: 0;
+    margin: 0 auto;
+  }
+
+  .route-meter {
+    flex: 0 0 auto;
+    margin-bottom: 12px;
+  }
+
+  .auth-screen {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 0;
+  }
+
+  .auth-heading,
+  .auth-form {
+    flex: 0 0 auto;
+  }
+
+  .auth-form,
+  .auth-legal,
+  .switch-line,
+  .resend-line,
+  .back-link {
+    margin-top: 0;
+    margin-bottom: 0;
+  }
+
+  .back-link {
+    align-self: flex-start;
+  }
+
+  .auth-screen h1 {
+    font-size: clamp(38px, 10.4vw, 52px);
+  }
+
+  .auth-intro {
+    margin-top: 10px;
+    font-size: 12px;
+    line-height: 1.45;
+  }
+
+  .auth-form {
+    gap: 9px;
+  }
+
+  .google-auth-button,
+  .field > input,
+  .field__control {
+    min-height: 47px;
+  }
+
+  .auth-button {
+    min-height: 49px;
+  }
+
+  .role-card {
+    min-height: 69px;
+  }
+}
+
+@media (max-width: 860px) and (max-height: 740px) {
+  .auth-workspace {
+    padding-top: 63px;
+    padding-bottom: 8px;
+  }
+
+  .route-meter {
+    margin-bottom: 8px;
+  }
+
+  .auth-screen h1 {
+    font-size: clamp(34px, 9.5vw, 41px);
+  }
+
+  .auth-intro {
+    margin-top: 7px;
+    font-size: 10.5px;
+  }
+
+  .auth-form {
+    gap: 7px;
+  }
+
+  .google-auth-button,
+  .field > input,
+  .field__control {
+    min-height: 42px;
+  }
+
+  .auth-button {
+    min-height: 44px;
+  }
+
+  .role-card {
+    min-height: 60px;
+  }
+}
+
+@media (min-width: 861px) {
+  .auth-root,
+  .auth-layout {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .auth-nav {
+    position: relative;
+    width: 100%;
+    min-height: 72px;
+    padding: 12px 32px 12px 40px;
+    background: var(--paper);
+    border-bottom: 1px solid var(--ink);
+  }
+
+  .auth-layout {
+    min-height: calc(100svh - 72px);
+  }
+
+  .auth-workspace {
+    height: auto;
+    min-height: calc(100svh - 72px);
+    padding: clamp(48px, 7vh, 72px) clamp(48px, 5vw, 76px) clamp(44px, 6vh, 68px);
+    overflow: visible;
+  }
+
+  .auth-workspace__inner {
+    max-height: none;
+  }
+
+  .route-meter {
+    margin-bottom: 30px;
+  }
+
+  .auth-kicker {
+    margin-bottom: 14px;
+  }
+
+  .auth-screen h1 {
+    font-size: clamp(50px, 5vw, 72px);
+    line-height: 0.96;
+  }
+
+  .auth-intro {
+    margin-top: 18px;
+    font-size: 14px;
+    line-height: 1.65;
+  }
+
+  .auth-form {
+    gap: 16px;
+    margin-top: 28px;
+  }
+
+  .google-auth-button,
+  .field > input,
+  .field__control {
+    min-height: 52px;
+  }
+
+  .auth-button {
+    min-height: 56px;
+    padding-block: 14px;
+  }
+
+  .role-form {
+    gap: 18px;
+  }
+
+  .role-form fieldset {
+    gap: 10px;
+  }
+
+  .role-card {
+    min-height: 84px;
+    padding: 13px 15px;
+  }
+
+  .auth-legal,
+  .switch-line,
+  .resend-line {
+    margin-top: 20px;
+  }
+
+  .back-link {
+    margin-bottom: 20px;
+  }
+
+  .auth-story {
+    min-height: calc(100svh - 72px);
+  }
+}
+
+/* Mobile auth uses every available row without becoming scrollable. */
+@media (max-width: 860px) {
+  .auth-screen {
+    box-sizing: border-box;
+    padding: clamp(8px, 1.45svh, 13px) 0 1px;
+  }
+
+  .auth-screen h1 {
+    font-size: clamp(40px, 10.8vw, 54px);
+  }
+
+  .auth-intro {
+    font-size: clamp(11px, 3vw, 13px);
+  }
+
+  .auth-form {
+    gap: clamp(10px, 1.45svh, 14px);
+  }
+
+  .google-auth-button,
+  .field > input,
+  .field__control {
+    min-height: clamp(46px, 6.25svh, 54px);
+  }
+
+  .auth-button {
+    min-height: clamp(48px, 6.6svh, 57px);
+    font-size: clamp(13px, 3.5vw, 15px);
+  }
+
+  .field {
+    gap: 6px;
+  }
+
+  .field-row {
+    gap: 10px;
+  }
+
+  .field > span:first-child,
+  .field__label-line {
+    font-size: clamp(10px, 2.7vw, 12px);
+  }
+
+  .role-form {
+    gap: clamp(12px, 1.8svh, 16px);
+  }
+
+  .role-form fieldset {
+    gap: clamp(10px, 1.4svh, 13px);
+  }
+
+  .role-card {
+    min-height: clamp(102px, 16svh, 136px);
+    padding: clamp(14px, 2.2svh, 20px);
+    gap: clamp(14px, 4vw, 19px);
+  }
+
+  .role-card__icon {
+    width: clamp(48px, 13vw, 58px);
+    height: clamp(48px, 13vw, 58px);
+  }
+
+  .role-card__copy {
+    gap: 6px;
+  }
+
+  .role-card__copy strong {
+    font-size: clamp(14px, 3.7vw, 16px);
+  }
+
+  .role-card__copy small {
+    font-size: clamp(10px, 2.8vw, 12px);
+    line-height: 1.45;
+  }
+
+  .role-form .auth-button {
+    min-height: clamp(52px, 7svh, 60px);
+  }
+}
+
+@media (max-width: 360px) and (max-height: 740px) {
+  .auth-screen {
+    padding-top: 7px;
+  }
+
+  .auth-screen h1 {
+    font-size: 35px;
+  }
+
+  .auth-form {
+    gap: 8px;
+  }
+
+  .role-card {
+    min-height: 96px;
+    padding: 12px;
+  }
+
+  .role-card__icon {
+    width: 43px;
+    height: 43px;
+  }
+}

@@ -32,13 +32,13 @@ function Header({
   intro: React.ReactNode;
 }) {
   return (
-    <>
+    <div className="auth-heading">
       <p className="auth-kicker">
         <span>✳</span> {kicker}
       </p>
       <h1>{title}</h1>
       <p className="auth-intro">{intro}</p>
-    </>
+    </div>
   );
 }
 
@@ -156,27 +156,18 @@ export function SignUpDetails({ role }: { role: AccountRole }) {
   const flow = useAuthFlow();
   const [errors, setErrors] = useState<Errors>({});
   const organisation = role === "organisation";
+  const enterDemo = (email = "") => {
+    setErrors({});
+    if (email.trim()) flow.setEmail(email.trim());
+    flow.setRole(role);
+    flow.setCompletion("signup");
+    router.push(organisation ? "/onboarding/brand" : "/onboarding/creator");
+  };
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const email = String(data.get("email") ?? "");
-    const password = String(data.get("password") ?? "");
-    const next: Errors = {};
-    if (organisation && !String(data.get("organisation") ?? "").trim())
-      next.organisation = "Enter your organisation name.";
-    if (!organisation && !String(data.get("firstName") ?? "").trim())
-      next.firstName = "Enter your first name.";
-    if (!organisation && !String(data.get("lastName") ?? "").trim())
-      next.lastName = "Enter your last name.";
-    if (!isEmail(email)) next.email = "Enter a valid email address.";
-    if (!isStrongPassword(password))
-      next.password = "Use 8+ characters with at least one number.";
-    setErrors(next);
-    if (Object.keys(next).length) return;
-    flow.setEmail(email.trim());
-    flow.setRole(role);
-    flow.setCompletion("signup");
-    router.push("/auth/verify-email");
+    enterDemo(email);
   };
   return (
     <section className="auth-screen" aria-labelledby="details-title">
@@ -218,7 +209,7 @@ export function SignUpDetails({ role }: { role: AccountRole }) {
         onSubmit={submit}
         noValidate
       >
-        <GoogleAuthButton intent="signup" />
+        <GoogleAuthButton intent="signup" onClick={() => enterDemo()} />
         <AuthDivider />
         {organisation ? (
           <TextField
@@ -275,19 +266,17 @@ export function SignIn() {
   const router = useRouter();
   const flow = useAuthFlow();
   const [errors, setErrors] = useState<Errors>({});
+  const enterDemo = (email = "") => {
+    setErrors({});
+    if (email.trim()) flow.setEmail(email.trim());
+    flow.setCompletion("signin");
+    router.push(flow.role === "organisation" ? "/onboarding/brand" : "/onboarding/creator");
+  };
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     const email = String(data.get("email") ?? "");
-    const password = String(data.get("password") ?? "");
-    const next: Errors = {};
-    if (!isEmail(email)) next.email = "Enter a valid email address.";
-    if (!password) next.password = "Enter your password.";
-    setErrors(next);
-    if (Object.keys(next).length) return;
-    flow.setEmail(email.trim());
-    flow.setCompletion("signin");
-    router.push("/auth/success");
+    enterDemo(email);
   };
   return (
     <section className="auth-screen" aria-labelledby="signin-title">
@@ -307,7 +296,7 @@ export function SignIn() {
         }
       />
       <form id="signinForm" className="auth-form" onSubmit={submit} noValidate>
-        <GoogleAuthButton intent="signin" />
+        <GoogleAuthButton intent="signin" onClick={() => enterDemo()} />
         <AuthDivider />
         <TextField
           label="Email address"
@@ -645,17 +634,15 @@ export function Success() {
         href={
           recovery
             ? "/auth/sign-in"
-            : signin
-              ? "/dashboard"
-              : role === "organisation"
-                ? "/onboarding/brand"
-                : "/onboarding/creator"
+            : role === "organisation"
+              ? "/onboarding/brand"
+              : "/onboarding/creator"
         }
       >
         {recovery
           ? "Sign in"
           : signin
-            ? "Open my dashboard"
+            ? "Continue my setup"
             : "Set up my Clippit"}
         <Icon name="arrow" />
       </Link>

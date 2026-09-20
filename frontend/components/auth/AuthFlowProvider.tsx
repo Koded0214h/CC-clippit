@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useEffect,
   useContext,
   useMemo,
   useState,
@@ -22,8 +23,21 @@ const AuthFlowContext = createContext<AuthFlowState | null>(null);
 
 export function AuthFlowProvider({ children }: { children: ReactNode }) {
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<AccountRole>("creator");
+  const [role, setRoleState] = useState<AccountRole>("creator");
   const [completion, setCompletion] = useState<CompletionKind>("signup");
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const stored = window.localStorage.getItem("clippit:account-role");
+      if (stored === "creator" || stored === "organisation") setRoleState(stored);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  const setRole = (nextRole: AccountRole) => {
+    setRoleState(nextRole);
+    window.localStorage.setItem("clippit:account-role", nextRole);
+  };
   const value = useMemo(
     () => ({ email, role, completion, setEmail, setRole, setCompletion }),
     [email, role, completion],

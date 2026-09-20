@@ -3,6 +3,7 @@ import { Geist, Kalam } from "next/font/google";
 import type { ReactNode } from "react";
 import "./globals.css";
 import "../styles/product.css";
+import "../styles/creator.css";
 
 const geist = Geist({
   subsets: ["latin"],

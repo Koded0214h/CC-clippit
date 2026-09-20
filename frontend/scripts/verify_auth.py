@@ -1,9 +1,10 @@
 """Browser checks for the routed authentication flow."""
 
+import os
 from pathlib import Path
 from playwright.sync_api import sync_playwright
 
-BASE = "http://127.0.0.1:5174/auth"
+BASE = f"{os.getenv('CLIPPIT_BASE', 'http://127.0.0.1:5174')}/auth"
 OUT = Path(__file__).resolve().parents[1] / "tmp/qa-auth"
 OUT.mkdir(parents=True, exist_ok=True)
 
@@ -34,26 +35,16 @@ with sync_playwright() as playwright:
     page.wait_for_url("**/auth/sign-up/creator")
     assert page.locator('[data-google-auth="signup"]').is_visible()
     page.locator("#creatorForm button[type=submit]").click()
-    assert page.locator("#creatorForm .has-error").count() == 4
-    page.locator("input[name=firstName]").fill("Tomi")
-    page.locator("input[name=lastName]").fill("Adeyemi")
-    page.locator("input[name=email]").fill("tomi@example.com")
-    page.locator("input[name=password]").fill("clippit2026")
-    page.locator("#creatorForm button[type=submit]").click()
-    page.wait_for_url("**/auth/verify-email")
-    assert "tomi@example.com" in page.locator(".auth-intro").inner_text()
-    fill_code(page)
-    page.locator("form button[type=submit]").click()
-    page.wait_for_url("**/auth/success")
+    page.wait_for_url("**/onboarding/creator")
 
     page.goto(f"{BASE}/sign-in", wait_until="domcontentloaded")
     assert page.locator('[data-google-auth="signin"]').is_visible()
     page.locator("#signinForm button[type=submit]").click()
-    assert page.locator("#signinForm .has-error").count() == 2
-    page.locator("input[name=email]").fill("tomi@example.com")
-    page.locator("input[name=password]").fill("clippit2026")
-    page.locator("#signinForm button[type=submit]").click()
-    page.wait_for_url("**/auth/success")
+    page.wait_for_url("**/onboarding/creator")
+
+    page.goto(f"{BASE}/sign-in", wait_until="domcontentloaded")
+    page.locator('[data-google-auth="signin"]').click()
+    page.wait_for_url("**/onboarding/creator")
 
     page.goto(f"{BASE}/forgot-password", wait_until="domcontentloaded")
     page.locator("input[name=email]").fill("tomi@example.com")
@@ -67,6 +58,14 @@ with sync_playwright() as playwright:
     assert page.locator(".password-rules .is-met").count() == 2
     page.locator("form button[type=submit]").click()
     page.wait_for_url("**/auth/success")
+
+    # Account type chosen during auth persists and selects the right setup.
+    page.goto(f"{BASE}/sign-up", wait_until="domcontentloaded")
+    page.locator("input[value=organisation]").check()
+    page.locator("#roleForm button").click()
+    page.wait_for_url("**/auth/sign-up/organisation")
+    page.locator("#brandForm button[type=submit]").click()
+    page.wait_for_url("**/onboarding/brand")
 
     for width, height in [(390, 844), (768, 1024), (1024, 800), (1920, 1080), (320, 720)]:
         page.set_viewport_size({"width": width, "height": height})

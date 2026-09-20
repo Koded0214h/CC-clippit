@@ -5,21 +5,32 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
+import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
+import { ProfileAvatar, useStoredProfile, type StoredProfile } from "@/components/ui/ProfilePhotoPicker";
+
+const CREATOR_PROFILE_FALLBACK: StoredProfile = { name: "Tobi On Cam", bio: "", photo: "" };
 
 const navItems: Array<{ href: string; label: string; icon: ProductIconName }> = [
   { href: "/dashboard", label: "Overview", icon: "home" },
   { href: "/dashboard/campaigns", label: "Campaigns", icon: "campaigns" },
+  { href: "/dashboard/clips", label: "My clips", icon: "play" },
+  { href: "/dashboard/earnings", label: "Earnings", icon: "wallet" },
   { href: "/dashboard/leaderboard", label: "Leaderboard", icon: "trophy" },
   { href: "/dashboard/settings", label: "Settings", icon: "settings" },
 ];
 
+const mobileNavItems = navItems.filter((item) => item.label !== "Leaderboard");
+
 function isCurrent(pathname: string, href: string) {
   if (href === "/dashboard") return pathname === href;
+  if (href === "/dashboard/settings" && pathname === "/dashboard/accounts") return true;
   return pathname.startsWith(href);
 }
 
 export function ProductShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const profile = useStoredProfile("creator", CREATOR_PROFILE_FALLBACK);
+  const initials = profile.name.trim().split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase() || "TO";
 
   return (
     <div className="product-shell">
@@ -50,9 +61,9 @@ export function ProductShell({ children }: { children: ReactNode }) {
             </span>
           </div>
           <Link className="rail-profile" href="/dashboard/settings">
-            <span className="avatar">TO</span>
+            <ProfileAvatar profile={profile} fallback={initials} className="avatar" />
             <span>
-              <strong>Tobi On Cam</strong>
+              <strong>{profile.name}</strong>
               <small>Creator</small>
             </span>
             <ProductIcon name="chevron" />
@@ -71,17 +82,17 @@ export function ProductShell({ children }: { children: ReactNode }) {
             Views last checked 2 min ago
           </div>
           <div className="topbar-actions">
-            <Link className="wallet-pill" href="/dashboard/settings#payouts">
+            <Link className="wallet-pill" href="/dashboard/earnings">
               <ProductIcon name="wallet" />
               <span>Payable</span>
-              <strong>₦18,400</strong>
+              <strong><AnimatedNumber value={18400} format="money" duration={1000} /></strong>
             </Link>
             <button className="icon-button" type="button" aria-label="Notifications">
               <ProductIcon name="bell" />
               <i />
             </button>
             <Link className="topbar-avatar" href="/dashboard/settings" aria-label="Open profile settings">
-              TO
+              {profile.photo ? <Image src={profile.photo} alt="" fill unoptimized sizes="48px" /> : initials}
             </Link>
           </div>
         </header>
@@ -89,7 +100,7 @@ export function ProductShell({ children }: { children: ReactNode }) {
       </div>
 
       <nav className="mobile-dock" aria-label="Mobile navigation">
-        {navItems.map((item) => (
+        {mobileNavItems.map((item) => (
           <Link
             key={item.href}
             href={item.href}

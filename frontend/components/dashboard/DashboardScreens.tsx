@@ -2,9 +2,17 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
-import { campaigns, compactNumber, leaderboard, money, type Campaign } from "@/lib/product";
+import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
+import { ProfileAvatar, ProfilePhotoPicker, saveStoredProfile, useStoredProfile, type StoredProfile } from "@/components/ui/ProfilePhotoPicker";
+import { campaigns, leaderboard, type Campaign } from "@/lib/product";
+
+const CREATOR_PROFILE_FALLBACK: StoredProfile = {
+  name: "Tobi On Cam",
+  bio: "Comedy, food and everyday Lagos stories. I make the ad feel like the timeline.",
+  photo: "",
+};
 
 function PageHeading({
   title,
@@ -12,7 +20,7 @@ function PageHeading({
   note,
 }: {
   title: string;
-  copy: string;
+  copy?: string;
   note?: string;
 }) {
   return (
@@ -20,7 +28,7 @@ function PageHeading({
       <div>
         {note && <p className="marker-label">{note}</p>}
         <h1>{title}</h1>
-        <p>{copy}</p>
+        {copy && <p>{copy}</p>}
       </div>
     </header>
   );
@@ -46,37 +54,14 @@ function Countdown({ campaign }: { campaign: Campaign }) {
   return (
     <span className="countdown">
       <ProductIcon name="clock" />
-      <strong>{campaign.daysLeft}d {campaign.hoursLeft}h</strong>
+      <strong><AnimatedNumber value={campaign.daysLeft} suffix="d " duration={800} /><AnimatedNumber value={campaign.hoursLeft} suffix="h" duration={900} delay={90} /></strong>
       <small>left</small>
     </span>
   );
 }
 
-function useCountUp(target: number, duration = 1250) {
-  const [value, setValue] = useState(0);
-
-  useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      const reducedMotionFrame = window.requestAnimationFrame(() => setValue(target));
-      return () => window.cancelAnimationFrame(reducedMotionFrame);
-    }
-    let frame = 0;
-    const started = performance.now();
-    const update = (now: number) => {
-      const progress = Math.min(1, (now - started) / duration);
-      const eased = 1 - Math.pow(1 - progress, 4);
-      setValue(Math.round(target * eased));
-      if (progress < 1) frame = window.requestAnimationFrame(update);
-    };
-    frame = window.requestAnimationFrame(update);
-    return () => window.cancelAnimationFrame(frame);
-  }, [duration, target]);
-
-  return value;
-}
-
 function AnimatedMoney({ value }: { value: number }) {
-  return <>{money(useCountUp(value))}</>;
+  return <AnimatedNumber value={value} format="money" />;
 }
 
 function LiveDuration({ campaign, compact = false }: { campaign: Campaign; compact?: boolean }) {
@@ -110,9 +95,10 @@ function CampaignVitals({ campaign, includeMinimum = false }: { campaign: Campai
         <div><small>Live rate</small><strong><AnimatedMoney value={campaign.rate} /></strong><p>per 1K verified views</p></div>
       </div>
       <div className="campaign-vital campaign-vital--pot">
+        <Image className="campaign-vital__generated-art" src="/assets/illustrations/clippit-icons/funding-pot.webp" alt="" width={112} height={112} aria-hidden="true" />
         <div className="pot-label"><small>Money still in the pot</small><strong><AnimatedMoney value={campaign.remaining} /></strong></div>
         <div className="pot-meter" aria-label={`${potLevel}% of campaign pot remains`}><span className="pot-meter__fill" /><i className="pot-meter__proof"><ProductIcon name="shield" /></i></div>
-        <p><b>{potLevel}%</b> of {money(campaign.pot)} remains</p>
+        <p><b><AnimatedNumber value={potLevel} suffix="%" duration={900} /></b> of <AnimatedMoney value={campaign.pot} /> remains</p>
       </div>
       <div className="campaign-vital campaign-vital--time">
         <span className="time-orbit"><ProductIcon name="clock" /></span>
@@ -121,7 +107,7 @@ function CampaignVitals({ campaign, includeMinimum = false }: { campaign: Campai
       {includeMinimum && (
         <div className="campaign-vital campaign-vital--minimum">
           <ProductIcon name="play" />
-          <div><small>Starts earning at</small><strong>{compactNumber(campaign.minimumViews)}</strong><p>verified views</p></div>
+          <div><small>Starts earning at</small><strong><AnimatedNumber value={campaign.minimumViews} format="compact" /></strong><p>verified views</p></div>
         </div>
       )}
     </div>
@@ -149,14 +135,106 @@ function SectionTitle({
   );
 }
 
+const creatorFieldNotes = [
+  {
+    type: "video" as const,
+    src: "/assets/video/creator-studio-pexels-7480862.mp4",
+    poster: "/assets/photos/creator-vlogger-pexels-6954220.jpg",
+    kicker: "Video reference",
+    title: "Phone tripod setup",
+    lane: "Lifestyle setup",
+  },
+  {
+    type: "image" as const,
+    src: "/assets/photos/creator-fashion-pexels-7585630.jpg",
+    kicker: "Image reference",
+    title: "Plan movement before the transition",
+    lane: "Fashion",
+  },
+  {
+    type: "image" as const,
+    src: "/assets/photos/creator-studio-pexels-8359963.jpg",
+    kicker: "Image reference",
+    title: "Lighting a home setup",
+    lane: "Home studio",
+  },
+  {
+    type: "image" as const,
+    src: "/assets/photos/creator-vlogger-pexels-6954220.jpg",
+    kicker: "Image reference",
+    title: "Capture natural reactions",
+    lane: "Personality",
+  },
+];
+
+function AutoPreviewVideo({ src, poster }: { src: string; poster: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [active, setActive] = useState(false);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      setActive(entry.isIntersecting);
+    }, { threshold: 0.3 });
+    observer.observe(video);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (active) void video.play().catch(() => undefined);
+    else video.pause();
+  }, [active]);
+
+  return (
+    <video ref={videoRef} muted loop playsInline preload="none" poster={poster} aria-label="Creator setting up a phone to record">
+      {active && <source src={src} type="video/mp4" />}
+    </video>
+  );
+}
+
+function CreatorFieldNotes() {
+  return (
+    <section className="creator-field-notes" aria-labelledby="creator-field-notes-title">
+      <div className="creator-field-notes__heading">
+        <div>
+          <h2 id="creator-field-notes-title">Content references</h2>
+        </div>
+        <p>Use these references for framing, lighting and pacing.</p>
+      </div>
+      <div className="creator-reel">
+        {creatorFieldNotes.map((item, index) => (
+          <article key={item.src + item.kicker} className={`creator-reel__card${index === 0 ? " creator-reel__card--lead" : ""}`}>
+            <div className="creator-reel__media">
+              {item.type === "video" ? (
+                <AutoPreviewVideo src={item.src} poster={item.poster} />
+              ) : (
+                <Image src={item.src} alt="Creator filming content in a home studio" fill sizes="(max-width: 700px) 78vw, 24vw" />
+              )}
+              <span className="creator-reel__number">0{index + 1}</span>
+              {item.type === "video" && <span className="creator-reel__live"><i /> Playing now</span>}
+            </div>
+            <div className="creator-reel__copy">
+              <p>{item.kicker}</p>
+              <h3>{item.title}</h3>
+              <span><ProductIcon name={item.type === "video" ? "play" : "camera"} />{item.lane}</span>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function DashboardHome() {
   const feature = campaigns[0];
   return (
     <div className="dashboard-page dashboard-home">
       <PageHeading
-        note="Your feed is moving"
-        title="Morning, Tobi."
-        copy="Two briefs match your lanes. One joined campaign closes soon."
+        title="One campaign closes soon"
+        copy="No long thing closes in 4 days. Two new campaigns match your content preferences."
       />
 
       <section className="dashboard-lead" aria-label="Featured campaign and earnings">
@@ -171,7 +249,7 @@ export function DashboardHome() {
             </div>
           </div>
           <div className="feature-campaign__copy">
-            <span>{feature.brand} presents</span>
+            <span>{feature.brand}</span>
             <h2>{feature.title}</h2>
             <p>{feature.line}</p>
           </div>
@@ -185,28 +263,28 @@ export function DashboardHome() {
 
         <aside className="money-receipt">
           <div className="money-receipt__head">
-            <div><ProductIcon name="wallet" /><span>Your money</span></div>
+            <div><Image className="money-receipt__generated-art" src="/assets/illustrations/clippit-icons/payout-wallet.webp" alt="" width={36} height={36} aria-hidden="true" /><span>Your money</span></div>
             <small>15 Sep 2026</small>
           </div>
           <div className="money-total">
-            <span>Accrued across 3 clips</span>
-            <strong>₦42,850</strong>
-            <small>₦6,200 added this week</small>
+            <span>Total accrued</span>
+            <strong><AnimatedMoney value={42850} /></strong>
+            <small><b>Across 3 clips</b><i /><span><AnimatedMoney value={6200} /> added this week</span></small>
           </div>
           <dl>
-            <div><dt>Payable now</dt><dd>₦18,400</dd></div>
-            <div><dt>In 5-day hold</dt><dd>₦24,450</dd></div>
-            <div><dt>Paid all time</dt><dd>₦126,700</dd></div>
+            <div><dt>Payable now</dt><dd><AnimatedMoney value={18400} /></dd></div>
+            <div><dt>In 5-day hold</dt><dd><AnimatedMoney value={24450} /></dd></div>
+            <div><dt>Paid all time</dt><dd><AnimatedMoney value={126700} /></dd></div>
           </dl>
-          <Link href="/dashboard/settings#payouts" className="ink-button">
+          <Link href="/dashboard/withdraw" className="ink-button">
             Withdraw payable money<ProductIcon name="arrow" />
           </Link>
-          <p><ProductIcon name="shield" /> Every naira traces back to platform-reported views.</p>
+          <p><ProductIcon name="shield" /> Earnings use platform-reported views.</p>
         </aside>
       </section>
 
       <section className="dashboard-section">
-        <SectionTitle title="Campaigns worth opening" href="/dashboard/campaigns" />
+        <SectionTitle title="New campaigns" href="/dashboard/campaigns" />
         <div className="campaign-tape">
           {campaigns.slice(1).map((campaign) => (
             <Link key={campaign.slug} href={`/dashboard/campaigns/${campaign.slug}`} className="campaign-tape__item">
@@ -236,35 +314,37 @@ export function DashboardHome() {
         </div>
       </section>
 
+      <CreatorFieldNotes />
+
       <section className="dashboard-bottom-grid">
         <div className="proof-stream">
-          <SectionTitle title="Your clips, right now" />
+          <SectionTitle title="Recent clip activity" />
           <div className="proof-stream__line" aria-hidden="true" />
           <article>
             <span className="proof-node is-live"><ProductIcon name="play" /></span>
             <div><small>Posted</small><strong>Roommate ate my last pack</strong><p>Indomie · TikTok</p></div>
-            <b>43.2K <small>views</small></b>
+            <b><AnimatedNumber value={43200} format="compact" /> <small>views</small></b>
           </article>
           <article>
             <span className="proof-node"><ProductIcon name="shield" /></span>
             <div><small>Checking</small><strong>The transfer plot twist</strong><p>PalmPay · YouTube</p></div>
-            <b>2 min <small>ago</small></b>
+            <b><AnimatedNumber value={2} suffix=" min" duration={650} /> <small>ago</small></b>
           </article>
           <article>
             <span className="proof-node is-money"><ProductIcon name="wallet" /></span>
             <div><small>Payable</small><strong>Main character entrance</strong><p>Gbedu Records · Instagram</p></div>
-            <b>₦9,600</b>
+            <b><AnimatedMoney value={9600} /></b>
           </article>
         </div>
 
         <aside className="mini-leaderboard">
-          <SectionTitle title="Fastest moving" href="/dashboard/leaderboard" linkLabel="Full board" />
+          <SectionTitle title="Weekly leaderboard" href="/dashboard/leaderboard" linkLabel="Full board" />
           {leaderboard.slice(0, 4).map((person) => (
             <div key={person.rank} className={person.name === "Tobi On Cam" ? "is-you" : ""}>
-              <span>{String(person.rank).padStart(2, "0")}</span>
+              <span><AnimatedNumber value={person.rank} padStart={2} duration={600} /></span>
               <i>{person.name.slice(0, 2).toUpperCase()}</i>
               <p><strong>{person.name}</strong><small>{person.handle}</small></p>
-              <b>{compactNumber(person.views)}</b>
+              <b><AnimatedNumber value={person.views} format="compact" /></b>
             </div>
           ))}
         </aside>
@@ -293,9 +373,8 @@ export function CampaignDirectory() {
   return (
     <div className="dashboard-page campaigns-page">
       <PageHeading
-        note="Funded and ready"
-        title="Find your next brief."
-        copy="Rates, remaining money and rules are visible before you join."
+        title="Campaigns"
+        copy="Compare rates, remaining budgets and deadlines before joining."
       />
       <div className="campaign-tools">
         <div className="campaign-filters" aria-label="Campaign filters">
@@ -322,7 +401,7 @@ export function CampaignDirectory() {
               <span><small>{campaign.brand} · {campaign.category}</small><strong>{campaign.title}</strong><i>{campaign.status}</i></span>
             </div>
             <div className="ledger-rate"><strong><AnimatedMoney value={campaign.rate} /></strong><small>per 1K verified views</small></div>
-            <div className="ledger-pot"><strong><AnimatedMoney value={campaign.remaining} /></strong><span><i style={{ width: `${(campaign.remaining / campaign.pot) * 100}%` }} /></span><small>of {money(campaign.pot)}</small></div>
+            <div className="ledger-pot"><strong><AnimatedMoney value={campaign.remaining} /></strong><span><i style={{ width: `${(campaign.remaining / campaign.pot) * 100}%` }} /></span><small>of <AnimatedMoney value={campaign.pot} /></small></div>
             <Countdown campaign={campaign} />
             <span className="round-arrow"><ProductIcon name="arrow" /></span>
           </Link>
@@ -330,7 +409,7 @@ export function CampaignDirectory() {
         {!visible.length && (
           <div className="campaign-empty">
             <ProductIcon name="search" />
-            <h2>No funded brief matches that.</h2>
+            <h2>No campaigns match those filters.</h2>
             <p>Try another title, brand or category.</p>
           </div>
         )}
@@ -356,14 +435,14 @@ export function CampaignDetail({ campaign }: { campaign: Campaign }) {
           </div>
         </div>
         <div className="campaign-detail-hero__copy">
-          <p>{campaign.brand} presents</p>
+          <p>{campaign.brand}</p>
           <h1>{campaign.title}</h1>
           <span>{campaign.line}</span>
         </div>
         <div className="campaign-detail-hero__action">
-          <button className={joined ? "joined-button" : "lime-button"} type="button" onClick={() => setJoined(true)}>
-            {joined ? <><ProductIcon name="check" /> Campaign joined</> : <>Join campaign<ProductIcon name="arrow" /></>}
-          </button>
+          {joined
+            ? <Link className="lime-button" href={`/dashboard/campaigns/${campaign.slug}/submit`}>Submit your clip<ProductIcon name="arrow" /></Link>
+            : <button className="lime-button" type="button" onClick={() => setJoined(true)}>Join campaign<ProductIcon name="arrow" /></button>}
         </div>
       </section>
 
@@ -373,7 +452,7 @@ export function CampaignDetail({ campaign }: { campaign: Campaign }) {
         <div className="campaign-detail-main">
           <section className="brief-sheet">
             <div className="brief-sheet__heading"><span>Brief</span><small>Read this before you film</small></div>
-            <h2>The idea</h2>
+            <h2>Campaign brief</h2>
             <p className="brief-lead">{campaign.brief}</p>
             <div className="brief-rule-columns">
               <div>
@@ -388,7 +467,7 @@ export function CampaignDetail({ campaign }: { campaign: Campaign }) {
           </section>
 
           <section className="campaign-materials">
-            <SectionTitle title="Things to make with" />
+            <SectionTitle title="Campaign materials" />
             <div>
               <button type="button"><span><ProductIcon name="play" /></span><p><strong>Campaign sound</strong><small>Official audio · 00:24</small></p><ProductIcon name="arrow" /></button>
               <button type="button"><span><ProductIcon name="link" /></span><p><strong>Visual reference</strong><small>Mood and pacing guide</small></p><ProductIcon name="arrow" /></button>
@@ -398,29 +477,31 @@ export function CampaignDetail({ campaign }: { campaign: Campaign }) {
 
         <aside className="campaign-detail-aside">
           <section className="plain-rules">
-            <h2>Money rules, plainly</h2>
+            <h2>Earning rules</h2>
             <dl>
-              <div><dt>Creator cap</dt><dd>{money(campaign.creatorCap)}</dd></div>
-              <div><dt>Holding period</dt><dd>5 days</dd></div>
+              <div><dt>Creator cap</dt><dd><AnimatedMoney value={campaign.creatorCap} /></dd></div>
+              <div><dt>Holding period</dt><dd><AnimatedNumber value={5} suffix=" days" duration={700} /></dd></div>
               <div><dt>View counting</dt><dd>Full thousands only</dd></div>
               <div><dt>Platforms</dt><dd>{campaign.platforms.join(" + ")}</dd></div>
-              <div><dt>Content review</dt><dd>Usually under 5 min</dd></div>
+              <div><dt>Content review</dt><dd>Usually under <AnimatedNumber value={5} suffix=" min" duration={700} /></dd></div>
             </dl>
             <p><ProductIcon name="shield" /> Views come from the platforms. Partial thousands wait until the next full 1,000.</p>
           </section>
 
           <section className="campaign-leaders">
-            <SectionTitle title="Leading this brief" href="/dashboard/leaderboard" linkLabel="View board" />
+            <SectionTitle title="Campaign leaderboard" href="/dashboard/leaderboard" linkLabel="View board" />
             {leaderboard.slice(0, 3).map((person) => (
-              <div key={person.rank}><span>{person.rank}</span><i>{person.name.slice(0, 2).toUpperCase()}</i><p><strong>{person.name}</strong><small>{compactNumber(person.views)} views</small></p><b>{money(person.earned)}</b></div>
+              <div key={person.rank}><span><AnimatedNumber value={person.rank} duration={600} /></span><i>{person.name.slice(0, 2).toUpperCase()}</i><p><strong>{person.name}</strong><small><AnimatedNumber value={person.views} format="compact" /> views</small></p><b><AnimatedMoney value={person.earned} /></b></div>
             ))}
           </section>
         </aside>
       </div>
 
       <div className="mobile-campaign-action">
-        <div><small>{money(campaign.rate)} / 1K views</small><strong>{campaign.daysLeft}d {campaign.hoursLeft}h left</strong></div>
-        <button type="button" onClick={() => setJoined(true)}>{joined ? "Joined" : "Join campaign"}<ProductIcon name={joined ? "check" : "arrow"} /></button>
+        <div><small><AnimatedMoney value={campaign.rate} /> / 1K views</small><strong><AnimatedNumber value={campaign.daysLeft} suffix="d " duration={800} /><AnimatedNumber value={campaign.hoursLeft} suffix="h left" duration={900} delay={90} /></strong></div>
+        {joined
+          ? <Link href={`/dashboard/campaigns/${campaign.slug}/submit`}>Submit clip<ProductIcon name="arrow" /></Link>
+          : <button type="button" onClick={() => setJoined(true)}>Join campaign<ProductIcon name="arrow" /></button>}
       </div>
     </div>
   );
@@ -429,16 +510,16 @@ export function CampaignDetail({ campaign }: { campaign: Campaign }) {
 export function LeaderboardScreen() {
   return (
     <div className="dashboard-page leaderboard-page">
-      <PageHeading note="Real views, real movement" title="The board." copy="Creators ranked by verified views across live campaigns this week." />
+      <PageHeading  title="Leaderboard" copy="Weekly ranking by verified views across active campaigns." />
       <section className="podium-board">
-        <div className="podium-copy"><p className="marker-label">This week</p><h2>Attention, proved.</h2><p>Ranks refresh whenever a new platform reading lands.</p></div>
+        <div className="podium-copy"><h2>Top creators this week</h2><p>Updated after each verified view check.</p></div>
         {[leaderboard[1], leaderboard[0], leaderboard[2]].map((person) => (
           <article key={person.rank} className={`podium-person podium-person--${person.rank}`}>
-            <span>{person.rank}</span>
+            <span><AnimatedNumber value={person.rank} duration={600} /></span>
             <i>{person.name.slice(0, 2).toUpperCase()}</i>
             <strong>{person.name}</strong>
-            <small>{compactNumber(person.views)} verified views</small>
-            <b>{money(person.earned)}</b>
+            <small><AnimatedNumber value={person.views} format="compact" /> verified views</small>
+            <b><AnimatedMoney value={person.earned} /></b>
           </article>
         ))}
       </section>
@@ -448,10 +529,10 @@ export function LeaderboardScreen() {
         <div className="ranking-row ranking-row--labels"><span>Rank</span><span>Creator</span><span>Verified views</span><span>Earned</span></div>
         {leaderboard.map((person) => (
           <div key={person.rank} className={`ranking-row${person.name === "Tobi On Cam" ? " is-you" : ""}`}>
-            <span className="rank-number">{String(person.rank).padStart(2, "0")}</span>
+            <span className="rank-number"><AnimatedNumber value={person.rank} padStart={2} duration={600} /></span>
             <span className="rank-creator"><i>{person.name.slice(0, 2).toUpperCase()}</i><span><strong>{person.name}</strong><small>{person.handle}</small></span>{person.name === "Tobi On Cam" && <b>You</b>}</span>
-            <strong>{compactNumber(person.views)}</strong>
-            <strong className="rank-money">{money(person.earned)}</strong>
+            <strong><AnimatedNumber value={person.views} format="compact" /></strong>
+            <strong className="rank-money"><AnimatedMoney value={person.earned} /></strong>
           </div>
         ))}
       </section>
@@ -461,34 +542,75 @@ export function LeaderboardScreen() {
 
 export function SettingsScreen() {
   const [saved, setSaved] = useState(false);
+  const [activeSection, setActiveSection] = useState("profile");
+  const storedProfile = useStoredProfile("creator", CREATOR_PROFILE_FALLBACK);
+  const [profile, setProfile] = useState(CREATOR_PROFILE_FALLBACK);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setProfile(storedProfile));
+    return () => window.cancelAnimationFrame(frame);
+  }, [storedProfile]);
+
+  useEffect(() => {
+    const ids = ["profile", "accounts", "payouts", "notifications"];
+    const syncFromHash = () => {
+      const id = window.location.hash.slice(1);
+      setActiveSection(ids.includes(id) ? id : "profile");
+    };
+    syncFromHash();
+    window.addEventListener("hashchange", syncFromHash);
+    return () => {
+      window.removeEventListener("hashchange", syncFromHash);
+    };
+  }, []);
+
+  useEffect(() => {
+    const index = document.querySelector<HTMLElement>(".settings-index");
+    const link = index?.querySelector<HTMLElement>(`a[href="#${activeSection}"]`);
+    if (!index || !link) return;
+    index.scrollTo({
+      left: link.offsetLeft - (index.clientWidth - link.clientWidth) / 2,
+      behavior: "smooth",
+    });
+  }, [activeSection]);
+
+  const sectionLink = (id: string) => ({
+    href: `#${id}`,
+    className: activeSection === id ? "is-active" : "",
+    onClick: () => setActiveSection(id),
+    "aria-current": activeSection === id ? "location" as const : undefined,
+  });
   return (
     <div className="dashboard-page settings-page">
-      <PageHeading note="Your side of Clippit" title="Settings." copy="Keep the details behind your clips and payouts accurate." />
+      <PageHeading  title="Settings" copy="Manage your profile, connected accounts, payout account and alerts." />
       <div className="settings-layout">
         <nav className="settings-index" aria-label="Settings sections">
-          <a href="#profile" className="is-active"><ProductIcon name="settings" /> Profile</a>
-          <a href="#accounts"><ProductIcon name="link" /> Social accounts</a>
-          <a href="#payouts"><ProductIcon name="bank" /> Payout account</a>
-          <a href="#notifications"><ProductIcon name="bell" /> Notifications</a>
+          <a {...sectionLink("profile")}><ProductIcon name="settings" /> Profile</a>
+          <a {...sectionLink("accounts")}><ProductIcon name="link" /> Social accounts</a>
+          <a {...sectionLink("payouts")}><ProductIcon name="bank" /> Payout account</a>
+          <a {...sectionLink("notifications")}><ProductIcon name="bell" /> Notifications</a>
         </nav>
         <div className="settings-sheets">
           <section id="profile" className="settings-sheet">
-            <div className="settings-sheet__title"><div><h2>Creator profile</h2><p>What brands and leaderboards see.</p></div><span className="settings-avatar">TO</span></div>
-            <div className="settings-fields">
-              <label><span>Display name</span><input defaultValue="Tobi On Cam" /></label>
+            <div className="settings-sheet__title"><div><h2>Creator profile</h2><p>What brands and leaderboards see.</p></div><ProfileAvatar profile={profile} fallback="TO" className="settings-avatar" /></div>
+            <div className="settings-profile-editor">
+              <ProfilePhotoPicker value={profile.photo} name={profile.name} onChange={(photo) => setProfile((current) => ({ ...current, photo }))} compact />
+              <div className="settings-fields">
+              <label><span>Display name</span><input value={profile.name} onChange={(event) => setProfile((current) => ({ ...current, name: event.target.value.slice(0, 40) }))} /></label>
               <label><span>Handle</span><div className="prefix-input"><i>@</i><input defaultValue="tobioncam" /></div></label>
-              <label className="is-wide"><span>Creator bio</span><textarea defaultValue="Comedy, food and everyday Lagos stories. I make the ad feel like the timeline." /></label>
+              <label className="is-wide"><span>Creator bio</span><textarea value={profile.bio} onChange={(event) => setProfile((current) => ({ ...current, bio: event.target.value.slice(0, 180) }))} /></label>
               <label><span>Primary lane</span><select defaultValue="Comedy"><option>Comedy</option><option>Lifestyle</option><option>Food</option><option>Music</option></select></label>
               <label><span>Location</span><input defaultValue="Lagos, Nigeria" /></label>
+              </div>
             </div>
-            <button className="lime-button" type="button" onClick={() => { setSaved(true); window.setTimeout(() => setSaved(false), 2200); }}>{saved ? <><ProductIcon name="check" /> Changes saved</> : <>Save profile<ProductIcon name="arrow" /></>}</button>
+            <button className="lime-button" type="button" disabled={profile.name.trim().length < 2 || profile.bio.trim().length < 2} onClick={() => { saveStoredProfile("creator", { ...profile, name: profile.name.trim(), bio: profile.bio.trim() }); setSaved(true); window.setTimeout(() => setSaved(false), 2200); }}>{saved ? <><ProductIcon name="check" /> Changes saved</> : <>Save profile<ProductIcon name="arrow" /></>}</button>
           </section>
 
           <section id="accounts" className="settings-sheet">
             <div className="settings-sheet__title"><div><h2>Connected socials</h2><p>We read views directly from these platforms.</p></div><ProductIcon name="shield" /></div>
             <div className="social-account is-connected"><span><ProductIcon name="tiktok" /></span><p><strong>TikTok</strong><small>@tobioncam · Last checked 2 min ago</small></p><b><i /> Connected</b><button type="button"><ProductIcon name="more" /></button></div>
             <div className="social-account is-connected"><span><ProductIcon name="instagram" /></span><p><strong>Instagram</strong><small>@tobioncam · Last checked 4 min ago</small></p><b><i /> Connected</b><button type="button"><ProductIcon name="more" /></button></div>
-            <div className="social-account"><span><ProductIcon name="youtube" /></span><p><strong>YouTube</strong><small>Add a channel to join YouTube briefs.</small></p><button className="connect-button" type="button">Connect<ProductIcon name="arrow" /></button></div>
+            <div className="social-account"><span><ProductIcon name="youtube" /></span><p><strong>YouTube</strong><small>Add a channel to join YouTube briefs.</small></p><Link className="connect-button" href="/dashboard/accounts">Connect<ProductIcon name="arrow" /></Link></div>
           </section>
 
           <section id="payouts" className="settings-sheet payout-sheet">
@@ -498,9 +620,9 @@ export function SettingsScreen() {
           </section>
 
           <section id="notifications" className="settings-sheet">
-            <div className="settings-sheet__title"><div><h2>Notifications</h2><p>Choose what deserves your attention.</p></div><ProductIcon name="bell" /></div>
+            <div className="settings-sheet__title"><div><h2>Notifications</h2><p>Choose which events send a notification.</p></div><ProductIcon name="bell" /></div>
             {["New campaigns in my lanes", "Submission verdicts", "Earnings become payable", "Campaign closing reminders"].map((label, index) => (
-              <label className="toggle-row" key={label}><span><strong>{label}</strong><small>{index === 0 ? "A short list, never a noisy blast." : "Delivered by email and in your Clippit inbox."}</small></span><input type="checkbox" defaultChecked={index !== 3} /><i /></label>
+              <label className="toggle-row" key={label}><span><strong>{label}</strong><small>{index === 0 ? "Matched campaigns only." : "Delivered by email and in your Clippit inbox."}</small></span><input type="checkbox" defaultChecked={index !== 3} /><i /></label>
             ))}
           </section>
         </div>

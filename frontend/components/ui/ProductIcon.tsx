@@ -5,6 +5,8 @@ export type ProductIconName =
   | "bank"
   | "beauty"
   | "bell"
+  | "brief"
+  | "building"
   | "calendar"
   | "camera"
   | "campaigns"
@@ -15,16 +17,19 @@ export type ProductIconName =
   | "fitness"
   | "food"
   | "game"
+  | "eye"
   | "home"
   | "instagram"
   | "link"
   | "more"
   | "music"
   | "play"
+  | "person"
   | "search"
   | "settings"
   | "shield"
   | "spark"
+  | "source"
   | "tiktok"
   | "tech"
   | "trophy"
@@ -52,6 +57,18 @@ export function ProductIcon({
       </>
     ),
     bell: <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Zm-8 13h4" />,
+    brief: (
+      <>
+        <path d="M7 3h10v4H7zM5 5H3v16h18V5h-2" />
+        <path d="M7 12h10M7 16h7" />
+      </>
+    ),
+    building: (
+      <>
+        <path d="M4 21V5l8-3 8 3v16M2 21h20" />
+        <path d="M8 7h2m4 0h2M8 11h2m4 0h2M8 15h2m4 0h2M10 21v-3h4v3" />
+      </>
+    ),
     calendar: (
       <>
         <rect x="3" y="5" width="18" height="16" rx="2" />
@@ -84,6 +101,12 @@ export function ProductIcon({
     food: (
       <>
         <path d="M5 3v8m3-8v8M5 7h3m-1.5 4v10M16 3v18m0-18c3 2 4 5 4 8h-4" />
+      </>
+    ),
+    eye: (
+      <>
+        <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z" />
+        <circle cx="12" cy="12" r="2.7" />
       </>
     ),
     game: (
@@ -127,6 +150,12 @@ export function ProductIcon({
       </>
     ),
     play: <path d="m9 7 8 5-8 5V7Z" />,
+    person: (
+      <>
+        <circle cx="12" cy="8" r="4" />
+        <path d="M4 21c.5-5 3.2-7.5 8-7.5s7.5 2.5 8 7.5" />
+      </>
+    ),
     search: (
       <>
         <circle cx="10.5" cy="10.5" r="6.5" />
@@ -141,6 +170,16 @@ export function ProductIcon({
     ),
     shield: <path d="M12 3 5 6v5c0 4.7 2.3 8 7 10 4.7-2 7-5.3 7-10V6l-7-3Zm-3 9 2 2 4-5" />,
     spark: <path d="m12 2 1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2Zm7 14 .7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7L19 16Z" />,
+    source: (
+      <>
+        <path d="M12 3v7m0 4v7M3 12h7m4 0h7" />
+        <circle cx="12" cy="12" r="2" />
+        <circle cx="12" cy="3" r="1.5" />
+        <circle cx="21" cy="12" r="1.5" />
+        <circle cx="12" cy="21" r="1.5" />
+        <circle cx="3" cy="12" r="1.5" />
+      </>
+    ),
     tiktok: <path d="M14 4v10.5a4.5 4.5 0 1 1-4-4.5v3a1.7 1.7 0 1 0 1 1.6V4h3Zm0 0c.4 2.5 1.8 3.8 4 4" />,
     tech: (
       <>
