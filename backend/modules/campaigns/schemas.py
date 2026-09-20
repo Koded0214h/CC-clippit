@@ -44,6 +44,22 @@ class CampaignUpdate(BaseModel):
     platforms: list[Platform] | None = Field(default=None, min_length=1)
 
 
+class PoolOut(BaseModel):
+    """Read-only view of promised spend vs what current views would cost.
+
+    Units match `rate_per_1000_views`. This is not a transfer and not a
+    ledger balance — see `pool.py`.
+    """
+
+    campaign_id: uuid.UUID
+    pot: float
+    allocated: float
+    remaining: float
+    percent_given: float
+    percent_remaining: float
+    submissions_counted: int
+
+
 class CampaignOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

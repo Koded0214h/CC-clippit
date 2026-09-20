@@ -57,6 +57,51 @@ OAuth callbacks land on `/dashboard/settings`.
 
 Needs a running Postgres reachable at `DATABASE_URL` (an `asyncpg` URL).
 
+## Status — what's in, what's next
+
+Backend MVP is in. A creator can sign up, connect a platform, submit a
+URL on an active campaign, and read performance + trust. Intelligence
+owns adapters, snapshots, features, comments, and trust. Core already
+has auth, campaigns, submissions, and creator bank-detail rows.
+
+**Done (Adam, live-proven unless noted)**
+
+- Adapters: TikTok, Instagram, Facebook, Threads, X. YouTube is on the
+  enum only — no adapter, no OAuth.
+- OAuth for those five. Callback lands on
+  `{FRONTEND_ORIGIN}/dashboard/settings?social=…&status=ok|error`
+  (first origin if the env var is a CORS list). Default origin is
+  `http://localhost:5174`.
+- Withdraw and campaign close call
+  `POST /internal/submissions/{id}/tracking/stop`. The 30-day age cap
+  is the backstop.
+- `GET /campaigns/{id}/pool` — promised pot
+  (`expected_views / 1000 × rate_per_1000_views`) vs what current view
+  totals would cost. Returns `pot`, `allocated`, `remaining`,
+  `percent_given`, `percent_remaining`. Not a transfer and not a ledger.
+- Live against real accounts: TikTok, Instagram, Threads, X. Facebook
+  login works; we only read **Page** posts, so a user with no Pages has
+  nothing to ingest.
+
+**Next (Koded / frontend)**
+
+- Wire the Next.js app to these endpoints. `frontend/lib/product.ts` is
+  still mock data (including pot / remaining).
+- Payouts / ledger / Paystack — still the commented stub in `main.py`.
+  Bill from Intelligence `features.billable_views` with a
+  `since_snapshot_id` you store (decision D18). Decide whether a
+  `flagged` trust verdict blocks a payout (D22).
+- YouTube adapter + OAuth, when there are credentials.
+- Email verify / forgot-password (UI exists, API does not).
+- Confirm the ownership split in
+  `../architecture/intelligence-contracts.md` §1 (decision D1). Do not
+  treat `../architecture/backend-modules.md` as current — it inverts
+  who owns what.
+
+Contracts and the decision register:
+`../architecture/intelligence-contracts.md`. Endpoint detail is in the
+sections below.
+
 ## Migrations (Alembic)
 
 The schema is defined by `modules/*/models.py` and versioned in
@@ -184,6 +229,7 @@ a campaign from any state, including cancelling a draft outright.
 | `PATCH /campaigns/{id}` | owner or admin | edits allowed only while `draft` (admin bypasses the lock) |
 | `PUT /campaigns/{id}/payout-rule` | owner or admin | replace the rule; same draft-only lock |
 | `POST /campaigns/{id}/activate` | owner or admin | `draft` → `active`; 409 without a payout rule set |
+| `GET /campaigns/{id}/pool` | same visibility as the campaign | promised pot vs what current views would cost (`percent_given`) — not a transfer |
 | `POST /campaigns/{id}/close` | owner or admin | `draft` or `active` → `closed` (terminal) |
 
 `platforms` validates against `core.platforms.Platform` (the same

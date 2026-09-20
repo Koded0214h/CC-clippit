@@ -28,3 +28,13 @@ async def test_organisation_creates_and_activates_a_campaign(api):
     listed = await api.get("/campaigns", headers=_auth(org))
     assert listed.status_code == 200
     assert any(c["id"] == campaign_id for c in listed.json())
+
+    pot = await api.get(f"/campaigns/{campaign_id}/pool", headers=_auth(org))
+    assert pot.status_code == 200, pot.text
+    body = pot.json()
+    assert body["pot"] == 1.5
+    assert body["allocated"] == 0
+    assert body["remaining"] == 1.5
+    assert body["percent_given"] == 0
+    assert body["percent_remaining"] == 100
+    assert body["submissions_counted"] == 0

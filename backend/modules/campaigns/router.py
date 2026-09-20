@@ -6,13 +6,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from dataclasses import asdict
+
 from core.deps import get_db
 from core.internal_client import get_internal_client
 from modules.auth.deps import get_current_user
 from modules.auth.models import Role, User
-from modules.submissions.models import Submission
+from modules.submissions.models import Submission, SubmissionStatus
 
-from . import models, schemas
+from . import models, pool, schemas
 
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
 
@@ -88,6 +90,55 @@ async def list_campaigns(
     query = query.order_by(models.Campaign.created_at.desc())
     campaigns = await db.scalars(query)
     return list(campaigns)
+
+
+@router.get("/{campaign_id}/pool", response_model=schemas.PoolOut)
+async def read_pool(
+    campaign_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    client: httpx.AsyncClient = Depends(get_internal_client),
+):
+    """What share of the promised pot current submissions would take."""
+    campaign = await _get_campaign(campaign_id, db)
+    _ensure_visible(campaign, user)
+    if campaign.payout_rule is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "This campaign has no payout rule")
+
+    rule = campaign.payout_rule
+    size = pool.pot_size(campaign.expected_views, rule.rate_per_1000_views)
+    submission_ids = list(
+        await db.scalars(
+            select(Submission.id).where(
+                Submission.campaign_id == campaign_id,
+                Submission.status == SubmissionStatus.submitted,
+            )
+        )
+    )
+    obligations: list[float] = []
+    for submission_id in submission_ids:
+        views = await _latest_views(client, submission_id)
+        obligations.append(
+            pool.obligation(
+                views,
+                rate_per_1000_views=rule.rate_per_1000_views,
+                min_views_threshold=rule.min_views_threshold,
+                cap_amount=rule.cap_amount,
+            )
+        )
+    summary = pool.summarize(size, obligations)
+    return schemas.PoolOut(campaign_id=campaign.id, **asdict(summary))
+
+
+async def _latest_views(client: httpx.AsyncClient, submission_id: uuid.UUID) -> int:
+    try:
+        resp = await client.get(f"/internal/submissions/{submission_id}/performance")
+    except httpx.HTTPError:
+        return 0
+    if resp.status_code >= 400:
+        return 0
+    views = (resp.json().get("metrics") or {}).get("views")
+    return int(views) if views is not None else 0
 
 
 @router.get("/{campaign_id}", response_model=schemas.CampaignOut)
