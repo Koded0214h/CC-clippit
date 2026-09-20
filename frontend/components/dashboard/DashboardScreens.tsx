@@ -5,7 +5,14 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
+import { ProfileAvatar, ProfilePhotoPicker, saveStoredProfile, useStoredProfile, type StoredProfile } from "@/components/ui/ProfilePhotoPicker";
 import { campaigns, leaderboard, type Campaign } from "@/lib/product";
+
+const CREATOR_PROFILE_FALLBACK: StoredProfile = {
+  name: "Tobi On Cam",
+  bio: "Comedy, food and everyday Lagos stories. I make the ad feel like the timeline.",
+  photo: "",
+};
 
 function PageHeading({
   title,
@@ -13,7 +20,7 @@ function PageHeading({
   note,
 }: {
   title: string;
-  copy: string;
+  copy?: string;
   note?: string;
 }) {
   return (
@@ -21,7 +28,7 @@ function PageHeading({
       <div>
         {note && <p className="marker-label">{note}</p>}
         <h1>{title}</h1>
-        <p>{copy}</p>
+        {copy && <p>{copy}</p>}
       </div>
     </header>
   );
@@ -133,29 +140,29 @@ const creatorFieldNotes = [
     type: "video" as const,
     src: "/assets/video/creator-studio-pexels-7480862.mp4",
     poster: "/assets/photos/creator-vlogger-pexels-6954220.jpg",
-    kicker: "Behind the clip",
-    title: "The tripod goes up. The room becomes a set.",
+    kicker: "Video reference",
+    title: "Phone tripod setup",
     lane: "Lifestyle setup",
   },
   {
     type: "image" as const,
     src: "/assets/photos/creator-fashion-pexels-7585630.jpg",
-    kicker: "Frame study 01",
-    title: "Style the movement before the transition.",
+    kicker: "Image reference",
+    title: "Plan movement before the transition",
     lane: "Fashion",
   },
   {
     type: "image" as const,
     src: "/assets/photos/creator-studio-pexels-8359963.jpg",
-    kicker: "Frame study 02",
-    title: "A living room can still feel cinematic.",
+    kicker: "Image reference",
+    title: "Lighting a home setup",
     lane: "Home studio",
   },
   {
     type: "image" as const,
     src: "/assets/photos/creator-vlogger-pexels-6954220.jpg",
-    kicker: "Frame study 03",
-    title: "Let the camera catch the real laugh.",
+    kicker: "Image reference",
+    title: "Capture natural reactions",
     lane: "Personality",
   },
 ];
@@ -193,10 +200,9 @@ function CreatorFieldNotes() {
     <section className="creator-field-notes" aria-labelledby="creator-field-notes-title">
       <div className="creator-field-notes__heading">
         <div>
-          <p className="marker-label">Fresh from the creator desk</p>
-          <h2 id="creator-field-notes-title">Make the room part of the story.</h2>
+          <h2 id="creator-field-notes-title">Content references</h2>
         </div>
-        <p>Four visual prompts for your next brief. Borrow the rhythm, then make it unmistakably yours.</p>
+        <p>Use these references for framing, lighting and pacing.</p>
       </div>
       <div className="creator-reel">
         {creatorFieldNotes.map((item, index) => (
@@ -227,9 +233,8 @@ export function DashboardHome() {
   return (
     <div className="dashboard-page dashboard-home">
       <PageHeading
-        note="Your feed is moving"
-        title="Morning, Tobi."
-        copy="Two briefs match your lanes. One joined campaign closes soon."
+        title="One campaign closes soon"
+        copy="No long thing closes in 4 days. Two new campaigns match your content preferences."
       />
 
       <section className="dashboard-lead" aria-label="Featured campaign and earnings">
@@ -244,7 +249,7 @@ export function DashboardHome() {
             </div>
           </div>
           <div className="feature-campaign__copy">
-            <span>{feature.brand} presents</span>
+            <span>{feature.brand}</span>
             <h2>{feature.title}</h2>
             <p>{feature.line}</p>
           </div>
@@ -274,12 +279,12 @@ export function DashboardHome() {
           <Link href="/dashboard/withdraw" className="ink-button">
             Withdraw payable money<ProductIcon name="arrow" />
           </Link>
-          <p><ProductIcon name="shield" /> Every naira traces back to platform-reported views.</p>
+          <p><ProductIcon name="shield" /> Earnings use platform-reported views.</p>
         </aside>
       </section>
 
       <section className="dashboard-section">
-        <SectionTitle title="Campaigns worth opening" href="/dashboard/campaigns" />
+        <SectionTitle title="New campaigns" href="/dashboard/campaigns" />
         <div className="campaign-tape">
           {campaigns.slice(1).map((campaign) => (
             <Link key={campaign.slug} href={`/dashboard/campaigns/${campaign.slug}`} className="campaign-tape__item">
@@ -313,7 +318,7 @@ export function DashboardHome() {
 
       <section className="dashboard-bottom-grid">
         <div className="proof-stream">
-          <SectionTitle title="Your clips, right now" />
+          <SectionTitle title="Recent clip activity" />
           <div className="proof-stream__line" aria-hidden="true" />
           <article>
             <span className="proof-node is-live"><ProductIcon name="play" /></span>
@@ -333,7 +338,7 @@ export function DashboardHome() {
         </div>
 
         <aside className="mini-leaderboard">
-          <SectionTitle title="Fastest moving" href="/dashboard/leaderboard" linkLabel="Full board" />
+          <SectionTitle title="Weekly leaderboard" href="/dashboard/leaderboard" linkLabel="Full board" />
           {leaderboard.slice(0, 4).map((person) => (
             <div key={person.rank} className={person.name === "Tobi On Cam" ? "is-you" : ""}>
               <span><AnimatedNumber value={person.rank} padStart={2} duration={600} /></span>
@@ -368,9 +373,8 @@ export function CampaignDirectory() {
   return (
     <div className="dashboard-page campaigns-page">
       <PageHeading
-        note="Funded and ready"
-        title="Find your next brief."
-        copy="Rates, remaining money and rules are visible before you join."
+        title="Campaigns"
+        copy="Compare rates, remaining budgets and deadlines before joining."
       />
       <div className="campaign-tools">
         <div className="campaign-filters" aria-label="Campaign filters">
@@ -405,7 +409,7 @@ export function CampaignDirectory() {
         {!visible.length && (
           <div className="campaign-empty">
             <ProductIcon name="search" />
-            <h2>No funded brief matches that.</h2>
+            <h2>No campaigns match those filters.</h2>
             <p>Try another title, brand or category.</p>
           </div>
         )}
@@ -431,7 +435,7 @@ export function CampaignDetail({ campaign }: { campaign: Campaign }) {
           </div>
         </div>
         <div className="campaign-detail-hero__copy">
-          <p>{campaign.brand} presents</p>
+          <p>{campaign.brand}</p>
           <h1>{campaign.title}</h1>
           <span>{campaign.line}</span>
         </div>
@@ -448,7 +452,7 @@ export function CampaignDetail({ campaign }: { campaign: Campaign }) {
         <div className="campaign-detail-main">
           <section className="brief-sheet">
             <div className="brief-sheet__heading"><span>Brief</span><small>Read this before you film</small></div>
-            <h2>The idea</h2>
+            <h2>Campaign brief</h2>
             <p className="brief-lead">{campaign.brief}</p>
             <div className="brief-rule-columns">
               <div>
@@ -463,7 +467,7 @@ export function CampaignDetail({ campaign }: { campaign: Campaign }) {
           </section>
 
           <section className="campaign-materials">
-            <SectionTitle title="Things to make with" />
+            <SectionTitle title="Campaign materials" />
             <div>
               <button type="button"><span><ProductIcon name="play" /></span><p><strong>Campaign sound</strong><small>Official audio · 00:24</small></p><ProductIcon name="arrow" /></button>
               <button type="button"><span><ProductIcon name="link" /></span><p><strong>Visual reference</strong><small>Mood and pacing guide</small></p><ProductIcon name="arrow" /></button>
@@ -473,7 +477,7 @@ export function CampaignDetail({ campaign }: { campaign: Campaign }) {
 
         <aside className="campaign-detail-aside">
           <section className="plain-rules">
-            <h2>Money rules, plainly</h2>
+            <h2>Earning rules</h2>
             <dl>
               <div><dt>Creator cap</dt><dd><AnimatedMoney value={campaign.creatorCap} /></dd></div>
               <div><dt>Holding period</dt><dd><AnimatedNumber value={5} suffix=" days" duration={700} /></dd></div>
@@ -485,7 +489,7 @@ export function CampaignDetail({ campaign }: { campaign: Campaign }) {
           </section>
 
           <section className="campaign-leaders">
-            <SectionTitle title="Leading this brief" href="/dashboard/leaderboard" linkLabel="View board" />
+            <SectionTitle title="Campaign leaderboard" href="/dashboard/leaderboard" linkLabel="View board" />
             {leaderboard.slice(0, 3).map((person) => (
               <div key={person.rank}><span><AnimatedNumber value={person.rank} duration={600} /></span><i>{person.name.slice(0, 2).toUpperCase()}</i><p><strong>{person.name}</strong><small><AnimatedNumber value={person.views} format="compact" /> views</small></p><b><AnimatedMoney value={person.earned} /></b></div>
             ))}
@@ -506,9 +510,9 @@ export function CampaignDetail({ campaign }: { campaign: Campaign }) {
 export function LeaderboardScreen() {
   return (
     <div className="dashboard-page leaderboard-page">
-      <PageHeading note="Real views, real movement" title="The board." copy="Creators ranked by verified views across live campaigns this week." />
+      <PageHeading  title="Leaderboard" copy="Weekly ranking by verified views across active campaigns." />
       <section className="podium-board">
-        <div className="podium-copy"><p className="marker-label">This week</p><h2>Attention, proved.</h2><p>Ranks refresh whenever a new platform reading lands.</p></div>
+        <div className="podium-copy"><h2>Top creators this week</h2><p>Updated after each verified view check.</p></div>
         {[leaderboard[1], leaderboard[0], leaderboard[2]].map((person) => (
           <article key={person.rank} className={`podium-person podium-person--${person.rank}`}>
             <span><AnimatedNumber value={person.rank} duration={600} /></span>
@@ -539,6 +543,13 @@ export function LeaderboardScreen() {
 export function SettingsScreen() {
   const [saved, setSaved] = useState(false);
   const [activeSection, setActiveSection] = useState("profile");
+  const storedProfile = useStoredProfile("creator", CREATOR_PROFILE_FALLBACK);
+  const [profile, setProfile] = useState(CREATOR_PROFILE_FALLBACK);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => setProfile(storedProfile));
+    return () => window.cancelAnimationFrame(frame);
+  }, [storedProfile]);
 
   useEffect(() => {
     const ids = ["profile", "accounts", "payouts", "notifications"];
@@ -571,7 +582,7 @@ export function SettingsScreen() {
   });
   return (
     <div className="dashboard-page settings-page">
-      <PageHeading note="Your side of Clippit" title="Settings." copy="Keep the details behind your clips and payouts accurate." />
+      <PageHeading  title="Settings" copy="Manage your profile, connected accounts, payout account and alerts." />
       <div className="settings-layout">
         <nav className="settings-index" aria-label="Settings sections">
           <a {...sectionLink("profile")}><ProductIcon name="settings" /> Profile</a>
@@ -581,15 +592,18 @@ export function SettingsScreen() {
         </nav>
         <div className="settings-sheets">
           <section id="profile" className="settings-sheet">
-            <div className="settings-sheet__title"><div><h2>Creator profile</h2><p>What brands and leaderboards see.</p></div><span className="settings-avatar">TO</span></div>
-            <div className="settings-fields">
-              <label><span>Display name</span><input defaultValue="Tobi On Cam" /></label>
+            <div className="settings-sheet__title"><div><h2>Creator profile</h2><p>What brands and leaderboards see.</p></div><ProfileAvatar profile={profile} fallback="TO" className="settings-avatar" /></div>
+            <div className="settings-profile-editor">
+              <ProfilePhotoPicker value={profile.photo} name={profile.name} onChange={(photo) => setProfile((current) => ({ ...current, photo }))} compact />
+              <div className="settings-fields">
+              <label><span>Display name</span><input value={profile.name} onChange={(event) => setProfile((current) => ({ ...current, name: event.target.value.slice(0, 40) }))} /></label>
               <label><span>Handle</span><div className="prefix-input"><i>@</i><input defaultValue="tobioncam" /></div></label>
-              <label className="is-wide"><span>Creator bio</span><textarea defaultValue="Comedy, food and everyday Lagos stories. I make the ad feel like the timeline." /></label>
+              <label className="is-wide"><span>Creator bio</span><textarea value={profile.bio} onChange={(event) => setProfile((current) => ({ ...current, bio: event.target.value.slice(0, 180) }))} /></label>
               <label><span>Primary lane</span><select defaultValue="Comedy"><option>Comedy</option><option>Lifestyle</option><option>Food</option><option>Music</option></select></label>
               <label><span>Location</span><input defaultValue="Lagos, Nigeria" /></label>
+              </div>
             </div>
-            <button className="lime-button" type="button" onClick={() => { setSaved(true); window.setTimeout(() => setSaved(false), 2200); }}>{saved ? <><ProductIcon name="check" /> Changes saved</> : <>Save profile<ProductIcon name="arrow" /></>}</button>
+            <button className="lime-button" type="button" disabled={profile.name.trim().length < 2 || profile.bio.trim().length < 2} onClick={() => { saveStoredProfile("creator", { ...profile, name: profile.name.trim(), bio: profile.bio.trim() }); setSaved(true); window.setTimeout(() => setSaved(false), 2200); }}>{saved ? <><ProductIcon name="check" /> Changes saved</> : <>Save profile<ProductIcon name="arrow" /></>}</button>
           </section>
 
           <section id="accounts" className="settings-sheet">
@@ -606,9 +620,9 @@ export function SettingsScreen() {
           </section>
 
           <section id="notifications" className="settings-sheet">
-            <div className="settings-sheet__title"><div><h2>Notifications</h2><p>Choose what deserves your attention.</p></div><ProductIcon name="bell" /></div>
+            <div className="settings-sheet__title"><div><h2>Notifications</h2><p>Choose which events send a notification.</p></div><ProductIcon name="bell" /></div>
             {["New campaigns in my lanes", "Submission verdicts", "Earnings become payable", "Campaign closing reminders"].map((label, index) => (
-              <label className="toggle-row" key={label}><span><strong>{label}</strong><small>{index === 0 ? "A short list, never a noisy blast." : "Delivered by email and in your Clippit inbox."}</small></span><input type="checkbox" defaultChecked={index !== 3} /><i /></label>
+              <label className="toggle-row" key={label}><span><strong>{label}</strong><small>{index === 0 ? "Matched campaigns only." : "Delivered by email and in your Clippit inbox."}</small></span><input type="checkbox" defaultChecked={index !== 3} /><i /></label>
             ))}
           </section>
         </div>

@@ -1,5 +1,6 @@
 """Browser checks for onboarding and the creator product workspace."""
 
+import base64
 import os
 from pathlib import Path
 
@@ -33,6 +34,15 @@ with sync_playwright() as playwright:
     page.screenshot(path=str(OUT / "01-onboarding-name-desktop.png"), full_page=True)
     page.locator("input[autocomplete=nickname]").fill("Tobi On Cam")
     page.locator(".setup-next").click()
+    assert "Put a face to the name." in page.locator("h1").inner_text()
+    assert page.get_by_text("Optional.").is_visible()
+    page.locator(".profile-photo-input").set_input_files({
+        "name": "creator.png",
+        "mimeType": "image/png",
+        "buffer": base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="),
+    })
+    page.wait_for_selector(".profile-photo-frame img")
+    page.locator(".setup-next").click()
     assert "Where are you creating from?" in page.locator("h1").inner_text()
     assert page.locator(".typeform-field input").count() == 1
     page.locator("input[autocomplete=address-level2]").fill("Lagos, Nigeria")
@@ -59,6 +69,9 @@ with sync_playwright() as playwright:
     page.goto(f"{BASE}/onboarding/brand", wait_until="networkidle")
     assert page.locator("h1").inner_text() == "What would you like to be called?"
     page.locator("input[autocomplete=nickname]").fill("Amara")
+    page.locator(".setup-next").click()
+    assert "Add your profile photo." in page.locator("h1").inner_text()
+    assert "Skip for now" in page.locator(".setup-next").inner_text()
     page.locator(".setup-next").click()
     assert "Where are you based?" in page.locator("h1").inner_text()
     assert page.locator(".typeform-field input").count() == 1
@@ -100,11 +113,12 @@ with sync_playwright() as playwright:
     page.wait_for_timeout(550)
     page.screenshot(path=str(OUT / "02b-brand-onboarding-desktop.png"), full_page=True)
     page.locator(".setup-next").click()
-    page.wait_for_url("**/dashboard/campaigns")
+    page.wait_for_url("**/brand")
 
     # The individual branch must skip registration, organisation, and workflow.
     page.goto(f"{BASE}/onboarding/brand", wait_until="networkidle")
     page.locator("input[autocomplete=nickname]").fill("Kemi")
+    page.locator(".setup-next").click()
     page.locator(".setup-next").click()
     page.locator("input[autocomplete=address-level2]").fill("Abuja, Nigeria")
     page.locator(".setup-next").click()
@@ -171,6 +185,13 @@ with sync_playwright() as playwright:
 
     page.goto(f"{BASE}/dashboard/settings", wait_until="domcontentloaded")
     assert page.locator(".social-account.is-connected").count() == 2
+    assert page.locator(".settings-profile-editor").is_visible()
+    page.wait_for_selector(".settings-avatar img")
+    page.locator(".settings-fields input").first.fill("Tobi Adeyemi")
+    page.locator(".settings-fields textarea").fill("Comedy and everyday Lagos stories.")
+    page.locator("#profile .lime-button").click()
+    page.wait_for_timeout(150)
+    assert page.locator(".rail-profile strong").inner_text() == "Tobi Adeyemi"
     page.wait_for_timeout(500)
     page.locator('.settings-index a[href="#accounts"]').click()
     page.wait_for_timeout(900)

@@ -45,6 +45,13 @@ npm run start
 - `/dashboard/campaigns/[slug]` - campaign brief, timing, rules, and payment logic
 - `/dashboard/leaderboard` - verified-view rankings
 - `/dashboard/settings` - profile, socials, payout account, and notifications
+- `/brand` - funded-attention overview and live campaign signals
+- `/brand/campaigns` - brand campaign portfolio
+- `/brand/campaigns/new/*` - interactive campaign, brief, platform, rule, budget, review, and funding studio
+- `/brand/campaigns/[slug]` - live pot, verified views, submission flow, and creator earnings
+- `/brand/reviews` - uncertain-submission review queue
+- `/brand/reviews/[id]` - evidence-led human approval or correction decision
+- `/brand/settings` - organisation identity, funding contact, and campaign alerts
 
 ## Structure
 
@@ -52,6 +59,7 @@ npm run start
 - `components/auth/` - typed auth flow, shell, forms, and OTP behavior
 - `components/onboarding/` - responsive account setup flow
 - `components/dashboard/` - product shell and campaign workspace screens
+- `components/brand/` - brand control room, campaign builder, funding, and review workspace
 - `components/landing/` - landing-page composition
 - `components/ui/` - shared brand and SVG icon primitives
 - `lib/` - shared route metadata, product data, types, and validation rules
