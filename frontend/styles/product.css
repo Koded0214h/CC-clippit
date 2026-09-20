@@ -1223,18 +1223,18 @@
   padding: 34px 0 26px;
 }
 
-.money-total span,
-.money-total small,
-.money-total strong {
+.money-total > span,
+.money-total > small,
+.money-total > strong {
   display: block;
 }
 
-.money-total span {
+.money-total > span {
   font-size: 8px;
   font-weight: 700;
 }
 
-.money-total strong {
+.money-total > strong {
   margin: 6px 0 4px;
   font-size: clamp(39px, 3.8vw, 58px);
   font-variant-numeric: tabular-nums;
@@ -1242,9 +1242,30 @@
   letter-spacing: -0.065em;
 }
 
-.money-total small {
+.money-total > strong .animated-number,
+.money-total > strong .animated-number > span {
+  font: inherit;
+  letter-spacing: inherit;
+}
+
+.money-total > small {
+  display: flex;
+  align-items: center;
+  gap: 7px;
   font-size: 8px;
   font-weight: 620;
+}
+
+.money-total > small b {
+  font-weight: 760;
+}
+
+.money-total > small i {
+  width: 3px;
+  height: 3px;
+  background: currentColor;
+  border-radius: 50%;
+  opacity: 0.55;
 }
 
 .money-receipt dl {

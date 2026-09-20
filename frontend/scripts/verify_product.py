@@ -120,6 +120,9 @@ with sync_playwright() as playwright:
     page.wait_for_selector(".money-total .animated-number.is-settled")
     assert page.locator(".money-total").inner_text() != initial_total
     assert page.locator(".money-total .animated-number.is-settled").count() >= 1
+    total_lines = page.locator(".money-total").inner_text().splitlines()
+    assert total_lines.index("Total accrued") < next(index for index, line in enumerate(total_lines) if "42,850" in line)
+    assert float(page.locator(".money-total > strong").evaluate("node => parseFloat(getComputedStyle(node).fontSize)")) >= 39
     assert page.locator(".campaign-vital--rate").is_visible()
     assert page.locator(".campaign-vital--pot").is_visible()
     assert page.locator(".campaign-vital--time").is_visible()

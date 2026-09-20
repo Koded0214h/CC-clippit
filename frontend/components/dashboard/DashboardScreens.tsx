@@ -262,9 +262,9 @@ export function DashboardHome() {
             <small>15 Sep 2026</small>
           </div>
           <div className="money-total">
-            <span>Accrued across 3 clips</span>
+            <span>Total accrued</span>
             <strong><AnimatedMoney value={42850} /></strong>
-            <small><AnimatedMoney value={6200} /> added this week</small>
+            <small><b>Across 3 clips</b><i /><span><AnimatedMoney value={6200} /> added this week</span></small>
           </div>
           <dl>
             <div><dt>Payable now</dt><dd><AnimatedMoney value={18400} /></dd></div>

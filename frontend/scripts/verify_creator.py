@@ -72,6 +72,9 @@ with sync_playwright() as playwright:
     page.wait_for_selector(".earnings-total .animated-number.is-settled")
     assert payable.inner_text() != early_payable
     assert payable.evaluate("node => node.classList.contains('is-settled')")
+    wait_for_text(page, ".earnings-buckets article:nth-child(2) > strong", "184,450")
+    bucket_total = page.locator(".earnings-buckets article:nth-child(2) > strong")
+    assert float(bucket_total.evaluate("node => parseFloat(getComputedStyle(node).fontSize)")) >= 24
 
     # Submission validates, saves, then enters verification.
     page.goto(

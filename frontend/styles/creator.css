@@ -709,9 +709,11 @@
 .earnings-buckets { display: grid; }
 .earnings-buckets article { display: grid; align-content: center; gap: 7px; padding: 24px; border-bottom: 1px solid rgba(255, 255, 255, 0.14); }
 .earnings-buckets article:last-child { border-bottom: 0; }
-.earnings-buckets span { color: rgba(247, 248, 242, 0.5); font-size: 9px; text-transform: uppercase; }
-.earnings-buckets strong { font-size: clamp(24px, 2.6vw, 38px); letter-spacing: -0.06em; }
-.earnings-buckets small { color: var(--gold); font-size: 8px; }
+.earnings-buckets article > span { color: rgba(247, 248, 242, 0.5); font-size: 9px; text-transform: uppercase; }
+.earnings-buckets article > strong { font-size: clamp(24px, 2.6vw, 38px); letter-spacing: -0.06em; }
+.earnings-buckets article > strong .animated-number,
+.earnings-buckets article > strong .animated-number > span { font: inherit; letter-spacing: inherit; }
+.earnings-buckets article > small { color: var(--gold); font-size: 8px; }
 
 .hold-strip { display: grid; grid-template-columns: minmax(250px, 0.78fr) minmax(420px, 1.22fr); align-items: center; gap: 40px; padding: 22px 28px; background: var(--gold); border: 1px solid var(--ink); border-radius: 15px; }
 .hold-strip__intro { display: grid; grid-template-columns: 38px 1fr; align-items: center; gap: 12px; }
