@@ -9,12 +9,17 @@ import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
 const navItems: Array<{ href: string; label: string; icon: ProductIconName }> = [
   { href: "/dashboard", label: "Overview", icon: "home" },
   { href: "/dashboard/campaigns", label: "Campaigns", icon: "campaigns" },
+  { href: "/dashboard/clips", label: "My clips", icon: "play" },
+  { href: "/dashboard/earnings", label: "Earnings", icon: "wallet" },
   { href: "/dashboard/leaderboard", label: "Leaderboard", icon: "trophy" },
   { href: "/dashboard/settings", label: "Settings", icon: "settings" },
 ];
 
+const mobileNavItems = navItems.filter((item) => item.label !== "Leaderboard");
+
 function isCurrent(pathname: string, href: string) {
   if (href === "/dashboard") return pathname === href;
+  if (href === "/dashboard/settings" && pathname === "/dashboard/accounts") return true;
   return pathname.startsWith(href);
 }
 
@@ -71,7 +76,7 @@ export function ProductShell({ children }: { children: ReactNode }) {
             Views last checked 2 min ago
           </div>
           <div className="topbar-actions">
-            <Link className="wallet-pill" href="/dashboard/settings#payouts">
+            <Link className="wallet-pill" href="/dashboard/earnings">
               <ProductIcon name="wallet" />
               <span>Payable</span>
               <strong>₦18,400</strong>
@@ -89,7 +94,7 @@ export function ProductShell({ children }: { children: ReactNode }) {
       </div>
 
       <nav className="mobile-dock" aria-label="Mobile navigation">
-        {navItems.map((item) => (
+        {mobileNavItems.map((item) => (
           <Link
             key={item.href}
             href={item.href}

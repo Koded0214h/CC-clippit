@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
 import { campaigns, compactNumber, leaderboard, money, type Campaign } from "@/lib/product";
 
@@ -110,6 +110,7 @@ function CampaignVitals({ campaign, includeMinimum = false }: { campaign: Campai
         <div><small>Live rate</small><strong><AnimatedMoney value={campaign.rate} /></strong><p>per 1K verified views</p></div>
       </div>
       <div className="campaign-vital campaign-vital--pot">
+        <Image className="campaign-vital__generated-art" src="/assets/illustrations/clippit-icons/funding-pot.webp" alt="" width={112} height={112} aria-hidden="true" />
         <div className="pot-label"><small>Money still in the pot</small><strong><AnimatedMoney value={campaign.remaining} /></strong></div>
         <div className="pot-meter" aria-label={`${potLevel}% of campaign pot remains`}><span className="pot-meter__fill" /><i className="pot-meter__proof"><ProductIcon name="shield" /></i></div>
         <p><b>{potLevel}%</b> of {money(campaign.pot)} remains</p>
@@ -149,6 +150,100 @@ function SectionTitle({
   );
 }
 
+const creatorFieldNotes = [
+  {
+    type: "video" as const,
+    src: "/assets/video/creator-studio-pexels-7480862.mp4",
+    poster: "/assets/photos/creator-vlogger-pexels-6954220.jpg",
+    kicker: "Behind the clip",
+    title: "The tripod goes up. The room becomes a set.",
+    lane: "Lifestyle setup",
+  },
+  {
+    type: "image" as const,
+    src: "/assets/photos/creator-fashion-pexels-7585630.jpg",
+    kicker: "Frame study 01",
+    title: "Style the movement before the transition.",
+    lane: "Fashion",
+  },
+  {
+    type: "image" as const,
+    src: "/assets/photos/creator-studio-pexels-8359963.jpg",
+    kicker: "Frame study 02",
+    title: "A living room can still feel cinematic.",
+    lane: "Home studio",
+  },
+  {
+    type: "image" as const,
+    src: "/assets/photos/creator-vlogger-pexels-6954220.jpg",
+    kicker: "Frame study 03",
+    title: "Let the camera catch the real laugh.",
+    lane: "Personality",
+  },
+];
+
+function AutoPreviewVideo({ src, poster }: { src: string; poster: string }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [active, setActive] = useState(false);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      setActive(entry.isIntersecting);
+    }, { threshold: 0.3 });
+    observer.observe(video);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (active) void video.play().catch(() => undefined);
+    else video.pause();
+  }, [active]);
+
+  return (
+    <video ref={videoRef} muted loop playsInline preload="none" poster={poster} aria-label="Creator setting up a phone to record">
+      {active && <source src={src} type="video/mp4" />}
+    </video>
+  );
+}
+
+function CreatorFieldNotes() {
+  return (
+    <section className="creator-field-notes" aria-labelledby="creator-field-notes-title">
+      <div className="creator-field-notes__heading">
+        <div>
+          <p className="marker-label">Fresh from the creator desk</p>
+          <h2 id="creator-field-notes-title">Make the room part of the story.</h2>
+        </div>
+        <p>Four visual prompts for your next brief. Borrow the rhythm, then make it unmistakably yours.</p>
+      </div>
+      <div className="creator-reel">
+        {creatorFieldNotes.map((item, index) => (
+          <article key={item.src + item.kicker} className={`creator-reel__card${index === 0 ? " creator-reel__card--lead" : ""}`}>
+            <div className="creator-reel__media">
+              {item.type === "video" ? (
+                <AutoPreviewVideo src={item.src} poster={item.poster} />
+              ) : (
+                <Image src={item.src} alt="Creator filming content in a home studio" fill sizes="(max-width: 700px) 78vw, 24vw" />
+              )}
+              <span className="creator-reel__number">0{index + 1}</span>
+              {item.type === "video" && <span className="creator-reel__live"><i /> Playing now</span>}
+            </div>
+            <div className="creator-reel__copy">
+              <p>{item.kicker}</p>
+              <h3>{item.title}</h3>
+              <span><ProductIcon name={item.type === "video" ? "play" : "camera"} />{item.lane}</span>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function DashboardHome() {
   const feature = campaigns[0];
   return (
@@ -185,7 +280,7 @@ export function DashboardHome() {
 
         <aside className="money-receipt">
           <div className="money-receipt__head">
-            <div><ProductIcon name="wallet" /><span>Your money</span></div>
+            <div><Image className="money-receipt__generated-art" src="/assets/illustrations/clippit-icons/payout-wallet.webp" alt="" width={36} height={36} aria-hidden="true" /><span>Your money</span></div>
             <small>15 Sep 2026</small>
           </div>
           <div className="money-total">
@@ -198,7 +293,7 @@ export function DashboardHome() {
             <div><dt>In 5-day hold</dt><dd>₦24,450</dd></div>
             <div><dt>Paid all time</dt><dd>₦126,700</dd></div>
           </dl>
-          <Link href="/dashboard/settings#payouts" className="ink-button">
+          <Link href="/dashboard/withdraw" className="ink-button">
             Withdraw payable money<ProductIcon name="arrow" />
           </Link>
           <p><ProductIcon name="shield" /> Every naira traces back to platform-reported views.</p>
@@ -235,6 +330,8 @@ export function DashboardHome() {
           ))}
         </div>
       </section>
+
+      <CreatorFieldNotes />
 
       <section className="dashboard-bottom-grid">
         <div className="proof-stream">
@@ -361,9 +458,9 @@ export function CampaignDetail({ campaign }: { campaign: Campaign }) {
           <span>{campaign.line}</span>
         </div>
         <div className="campaign-detail-hero__action">
-          <button className={joined ? "joined-button" : "lime-button"} type="button" onClick={() => setJoined(true)}>
-            {joined ? <><ProductIcon name="check" /> Campaign joined</> : <>Join campaign<ProductIcon name="arrow" /></>}
-          </button>
+          {joined
+            ? <Link className="lime-button" href={`/dashboard/campaigns/${campaign.slug}/submit`}>Submit your clip<ProductIcon name="arrow" /></Link>
+            : <button className="lime-button" type="button" onClick={() => setJoined(true)}>Join campaign<ProductIcon name="arrow" /></button>}
         </div>
       </section>
 
@@ -420,7 +517,9 @@ export function CampaignDetail({ campaign }: { campaign: Campaign }) {
 
       <div className="mobile-campaign-action">
         <div><small>{money(campaign.rate)} / 1K views</small><strong>{campaign.daysLeft}d {campaign.hoursLeft}h left</strong></div>
-        <button type="button" onClick={() => setJoined(true)}>{joined ? "Joined" : "Join campaign"}<ProductIcon name={joined ? "check" : "arrow"} /></button>
+        {joined
+          ? <Link href={`/dashboard/campaigns/${campaign.slug}/submit`}>Submit clip<ProductIcon name="arrow" /></Link>
+          : <button type="button" onClick={() => setJoined(true)}>Join campaign<ProductIcon name="arrow" /></button>}
       </div>
     </div>
   );
@@ -461,15 +560,52 @@ export function LeaderboardScreen() {
 
 export function SettingsScreen() {
   const [saved, setSaved] = useState(false);
+  const [activeSection, setActiveSection] = useState("profile");
+
+  useEffect(() => {
+    const ids = ["profile", "accounts", "payouts", "notifications"];
+    const syncFromHash = () => {
+      const id = window.location.hash.slice(1);
+      if (ids.includes(id)) setActiveSection(id);
+    };
+    syncFromHash();
+    window.addEventListener("hashchange", syncFromHash);
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries
+        .filter((entry) => entry.isIntersecting)
+        .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+      if (visible?.target.id) setActiveSection(visible.target.id);
+    }, { rootMargin: "-18% 0px -62%", threshold: [0.05, 0.2, 0.5] });
+    ids.forEach((id) => {
+      const section = document.getElementById(id);
+      if (section) observer.observe(section);
+    });
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("hashchange", syncFromHash);
+    };
+  }, []);
+
+  useEffect(() => {
+    document.querySelector(`.settings-index a[href="#${activeSection}"]`)
+      ?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+  }, [activeSection]);
+
+  const sectionLink = (id: string) => ({
+    href: `#${id}`,
+    className: activeSection === id ? "is-active" : "",
+    onClick: () => setActiveSection(id),
+    "aria-current": activeSection === id ? "location" as const : undefined,
+  });
   return (
     <div className="dashboard-page settings-page">
       <PageHeading note="Your side of Clippit" title="Settings." copy="Keep the details behind your clips and payouts accurate." />
       <div className="settings-layout">
         <nav className="settings-index" aria-label="Settings sections">
-          <a href="#profile" className="is-active"><ProductIcon name="settings" /> Profile</a>
-          <a href="#accounts"><ProductIcon name="link" /> Social accounts</a>
-          <a href="#payouts"><ProductIcon name="bank" /> Payout account</a>
-          <a href="#notifications"><ProductIcon name="bell" /> Notifications</a>
+          <a {...sectionLink("profile")}><ProductIcon name="settings" /> Profile</a>
+          <a {...sectionLink("accounts")}><ProductIcon name="link" /> Social accounts</a>
+          <a {...sectionLink("payouts")}><ProductIcon name="bank" /> Payout account</a>
+          <a {...sectionLink("notifications")}><ProductIcon name="bell" /> Notifications</a>
         </nav>
         <div className="settings-sheets">
           <section id="profile" className="settings-sheet">
@@ -488,7 +624,7 @@ export function SettingsScreen() {
             <div className="settings-sheet__title"><div><h2>Connected socials</h2><p>We read views directly from these platforms.</p></div><ProductIcon name="shield" /></div>
             <div className="social-account is-connected"><span><ProductIcon name="tiktok" /></span><p><strong>TikTok</strong><small>@tobioncam · Last checked 2 min ago</small></p><b><i /> Connected</b><button type="button"><ProductIcon name="more" /></button></div>
             <div className="social-account is-connected"><span><ProductIcon name="instagram" /></span><p><strong>Instagram</strong><small>@tobioncam · Last checked 4 min ago</small></p><b><i /> Connected</b><button type="button"><ProductIcon name="more" /></button></div>
-            <div className="social-account"><span><ProductIcon name="youtube" /></span><p><strong>YouTube</strong><small>Add a channel to join YouTube briefs.</small></p><button className="connect-button" type="button">Connect<ProductIcon name="arrow" /></button></div>
+            <div className="social-account"><span><ProductIcon name="youtube" /></span><p><strong>YouTube</strong><small>Add a channel to join YouTube briefs.</small></p><Link className="connect-button" href="/dashboard/accounts">Connect<ProductIcon name="arrow" /></Link></div>
           </section>
 
           <section id="payouts" className="settings-sheet payout-sheet">

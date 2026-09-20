@@ -77,12 +77,13 @@ export function AuthButton({
   );
 }
 
-export function GoogleAuthButton({ intent }: { intent: "signin" | "signup" }) {
+export function GoogleAuthButton({ intent, onClick }: { intent: "signin" | "signup"; onClick?: () => void }) {
   return (
     <button
       className="google-auth-button"
       type="button"
       data-google-auth={intent}
+      onClick={onClick}
     >
       <svg viewBox="0 0 24 24" aria-hidden="true">
         <path

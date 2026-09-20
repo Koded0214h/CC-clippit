@@ -12,6 +12,7 @@ build/
 coverage/
 /tmp/
 /frontend/tmp/
+/output/
 
 # Environment files and local secrets
 .env
