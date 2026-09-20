@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
+import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 
 const navItems: Array<{ href: string; label: string; icon: ProductIconName }> = [
   { href: "/dashboard", label: "Overview", icon: "home" },
@@ -79,7 +80,7 @@ export function ProductShell({ children }: { children: ReactNode }) {
             <Link className="wallet-pill" href="/dashboard/earnings">
               <ProductIcon name="wallet" />
               <span>Payable</span>
-              <strong>₦18,400</strong>
+              <strong><AnimatedNumber value={18400} format="money" duration={1000} /></strong>
             </Link>
             <button className="icon-button" type="button" aria-label="Notifications">
               <ProductIcon name="bell" />

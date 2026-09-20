@@ -4,7 +4,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
-import { campaigns, compactNumber, leaderboard, money, type Campaign } from "@/lib/product";
+import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
+import { campaigns, leaderboard, type Campaign } from "@/lib/product";
 
 function PageHeading({
   title,
@@ -46,37 +47,14 @@ function Countdown({ campaign }: { campaign: Campaign }) {
   return (
     <span className="countdown">
       <ProductIcon name="clock" />
-      <strong>{campaign.daysLeft}d {campaign.hoursLeft}h</strong>
+      <strong><AnimatedNumber value={campaign.daysLeft} suffix="d " duration={800} /><AnimatedNumber value={campaign.hoursLeft} suffix="h" duration={900} delay={90} /></strong>
       <small>left</small>
     </span>
   );
 }
 
-function useCountUp(target: number, duration = 1250) {
-  const [value, setValue] = useState(0);
-
-  useEffect(() => {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      const reducedMotionFrame = window.requestAnimationFrame(() => setValue(target));
-      return () => window.cancelAnimationFrame(reducedMotionFrame);
-    }
-    let frame = 0;
-    const started = performance.now();
-    const update = (now: number) => {
-      const progress = Math.min(1, (now - started) / duration);
-      const eased = 1 - Math.pow(1 - progress, 4);
-      setValue(Math.round(target * eased));
-      if (progress < 1) frame = window.requestAnimationFrame(update);
-    };
-    frame = window.requestAnimationFrame(update);
-    return () => window.cancelAnimationFrame(frame);
-  }, [duration, target]);
-
-  return value;
-}
-
 function AnimatedMoney({ value }: { value: number }) {
-  return <>{money(useCountUp(value))}</>;
+  return <AnimatedNumber value={value} format="money" />;
 }
 
 function LiveDuration({ campaign, compact = false }: { campaign: Campaign; compact?: boolean }) {
@@ -113,7 +91,7 @@ function CampaignVitals({ campaign, includeMinimum = false }: { campaign: Campai
         <Image className="campaign-vital__generated-art" src="/assets/illustrations/clippit-icons/funding-pot.webp" alt="" width={112} height={112} aria-hidden="true" />
         <div className="pot-label"><small>Money still in the pot</small><strong><AnimatedMoney value={campaign.remaining} /></strong></div>
         <div className="pot-meter" aria-label={`${potLevel}% of campaign pot remains`}><span className="pot-meter__fill" /><i className="pot-meter__proof"><ProductIcon name="shield" /></i></div>
-        <p><b>{potLevel}%</b> of {money(campaign.pot)} remains</p>
+        <p><b><AnimatedNumber value={potLevel} suffix="%" duration={900} /></b> of <AnimatedMoney value={campaign.pot} /> remains</p>
       </div>
       <div className="campaign-vital campaign-vital--time">
         <span className="time-orbit"><ProductIcon name="clock" /></span>
@@ -122,7 +100,7 @@ function CampaignVitals({ campaign, includeMinimum = false }: { campaign: Campai
       {includeMinimum && (
         <div className="campaign-vital campaign-vital--minimum">
           <ProductIcon name="play" />
-          <div><small>Starts earning at</small><strong>{compactNumber(campaign.minimumViews)}</strong><p>verified views</p></div>
+          <div><small>Starts earning at</small><strong><AnimatedNumber value={campaign.minimumViews} format="compact" /></strong><p>verified views</p></div>
         </div>
       )}
     </div>
@@ -285,13 +263,13 @@ export function DashboardHome() {
           </div>
           <div className="money-total">
             <span>Accrued across 3 clips</span>
-            <strong>₦42,850</strong>
-            <small>₦6,200 added this week</small>
+            <strong><AnimatedMoney value={42850} /></strong>
+            <small><AnimatedMoney value={6200} /> added this week</small>
           </div>
           <dl>
-            <div><dt>Payable now</dt><dd>₦18,400</dd></div>
-            <div><dt>In 5-day hold</dt><dd>₦24,450</dd></div>
-            <div><dt>Paid all time</dt><dd>₦126,700</dd></div>
+            <div><dt>Payable now</dt><dd><AnimatedMoney value={18400} /></dd></div>
+            <div><dt>In 5-day hold</dt><dd><AnimatedMoney value={24450} /></dd></div>
+            <div><dt>Paid all time</dt><dd><AnimatedMoney value={126700} /></dd></div>
           </dl>
           <Link href="/dashboard/withdraw" className="ink-button">
             Withdraw payable money<ProductIcon name="arrow" />
@@ -340,17 +318,17 @@ export function DashboardHome() {
           <article>
             <span className="proof-node is-live"><ProductIcon name="play" /></span>
             <div><small>Posted</small><strong>Roommate ate my last pack</strong><p>Indomie · TikTok</p></div>
-            <b>43.2K <small>views</small></b>
+            <b><AnimatedNumber value={43200} format="compact" /> <small>views</small></b>
           </article>
           <article>
             <span className="proof-node"><ProductIcon name="shield" /></span>
             <div><small>Checking</small><strong>The transfer plot twist</strong><p>PalmPay · YouTube</p></div>
-            <b>2 min <small>ago</small></b>
+            <b><AnimatedNumber value={2} suffix=" min" duration={650} /> <small>ago</small></b>
           </article>
           <article>
             <span className="proof-node is-money"><ProductIcon name="wallet" /></span>
             <div><small>Payable</small><strong>Main character entrance</strong><p>Gbedu Records · Instagram</p></div>
-            <b>₦9,600</b>
+            <b><AnimatedMoney value={9600} /></b>
           </article>
         </div>
 
@@ -358,10 +336,10 @@ export function DashboardHome() {
           <SectionTitle title="Fastest moving" href="/dashboard/leaderboard" linkLabel="Full board" />
           {leaderboard.slice(0, 4).map((person) => (
             <div key={person.rank} className={person.name === "Tobi On Cam" ? "is-you" : ""}>
-              <span>{String(person.rank).padStart(2, "0")}</span>
+              <span><AnimatedNumber value={person.rank} padStart={2} duration={600} /></span>
               <i>{person.name.slice(0, 2).toUpperCase()}</i>
               <p><strong>{person.name}</strong><small>{person.handle}</small></p>
-              <b>{compactNumber(person.views)}</b>
+              <b><AnimatedNumber value={person.views} format="compact" /></b>
             </div>
           ))}
         </aside>
@@ -419,7 +397,7 @@ export function CampaignDirectory() {
               <span><small>{campaign.brand} · {campaign.category}</small><strong>{campaign.title}</strong><i>{campaign.status}</i></span>
             </div>
             <div className="ledger-rate"><strong><AnimatedMoney value={campaign.rate} /></strong><small>per 1K verified views</small></div>
-            <div className="ledger-pot"><strong><AnimatedMoney value={campaign.remaining} /></strong><span><i style={{ width: `${(campaign.remaining / campaign.pot) * 100}%` }} /></span><small>of {money(campaign.pot)}</small></div>
+            <div className="ledger-pot"><strong><AnimatedMoney value={campaign.remaining} /></strong><span><i style={{ width: `${(campaign.remaining / campaign.pot) * 100}%` }} /></span><small>of <AnimatedMoney value={campaign.pot} /></small></div>
             <Countdown campaign={campaign} />
             <span className="round-arrow"><ProductIcon name="arrow" /></span>
           </Link>
@@ -497,11 +475,11 @@ export function CampaignDetail({ campaign }: { campaign: Campaign }) {
           <section className="plain-rules">
             <h2>Money rules, plainly</h2>
             <dl>
-              <div><dt>Creator cap</dt><dd>{money(campaign.creatorCap)}</dd></div>
-              <div><dt>Holding period</dt><dd>5 days</dd></div>
+              <div><dt>Creator cap</dt><dd><AnimatedMoney value={campaign.creatorCap} /></dd></div>
+              <div><dt>Holding period</dt><dd><AnimatedNumber value={5} suffix=" days" duration={700} /></dd></div>
               <div><dt>View counting</dt><dd>Full thousands only</dd></div>
               <div><dt>Platforms</dt><dd>{campaign.platforms.join(" + ")}</dd></div>
-              <div><dt>Content review</dt><dd>Usually under 5 min</dd></div>
+              <div><dt>Content review</dt><dd>Usually under <AnimatedNumber value={5} suffix=" min" duration={700} /></dd></div>
             </dl>
             <p><ProductIcon name="shield" /> Views come from the platforms. Partial thousands wait until the next full 1,000.</p>
           </section>
@@ -509,14 +487,14 @@ export function CampaignDetail({ campaign }: { campaign: Campaign }) {
           <section className="campaign-leaders">
             <SectionTitle title="Leading this brief" href="/dashboard/leaderboard" linkLabel="View board" />
             {leaderboard.slice(0, 3).map((person) => (
-              <div key={person.rank}><span>{person.rank}</span><i>{person.name.slice(0, 2).toUpperCase()}</i><p><strong>{person.name}</strong><small>{compactNumber(person.views)} views</small></p><b>{money(person.earned)}</b></div>
+              <div key={person.rank}><span><AnimatedNumber value={person.rank} duration={600} /></span><i>{person.name.slice(0, 2).toUpperCase()}</i><p><strong>{person.name}</strong><small><AnimatedNumber value={person.views} format="compact" /> views</small></p><b><AnimatedMoney value={person.earned} /></b></div>
             ))}
           </section>
         </aside>
       </div>
 
       <div className="mobile-campaign-action">
-        <div><small>{money(campaign.rate)} / 1K views</small><strong>{campaign.daysLeft}d {campaign.hoursLeft}h left</strong></div>
+        <div><small><AnimatedMoney value={campaign.rate} /> / 1K views</small><strong><AnimatedNumber value={campaign.daysLeft} suffix="d " duration={800} /><AnimatedNumber value={campaign.hoursLeft} suffix="h left" duration={900} delay={90} /></strong></div>
         {joined
           ? <Link href={`/dashboard/campaigns/${campaign.slug}/submit`}>Submit clip<ProductIcon name="arrow" /></Link>
           : <button type="button" onClick={() => setJoined(true)}>Join campaign<ProductIcon name="arrow" /></button>}
@@ -533,11 +511,11 @@ export function LeaderboardScreen() {
         <div className="podium-copy"><p className="marker-label">This week</p><h2>Attention, proved.</h2><p>Ranks refresh whenever a new platform reading lands.</p></div>
         {[leaderboard[1], leaderboard[0], leaderboard[2]].map((person) => (
           <article key={person.rank} className={`podium-person podium-person--${person.rank}`}>
-            <span>{person.rank}</span>
+            <span><AnimatedNumber value={person.rank} duration={600} /></span>
             <i>{person.name.slice(0, 2).toUpperCase()}</i>
             <strong>{person.name}</strong>
-            <small>{compactNumber(person.views)} verified views</small>
-            <b>{money(person.earned)}</b>
+            <small><AnimatedNumber value={person.views} format="compact" /> verified views</small>
+            <b><AnimatedMoney value={person.earned} /></b>
           </article>
         ))}
       </section>
@@ -547,10 +525,10 @@ export function LeaderboardScreen() {
         <div className="ranking-row ranking-row--labels"><span>Rank</span><span>Creator</span><span>Verified views</span><span>Earned</span></div>
         {leaderboard.map((person) => (
           <div key={person.rank} className={`ranking-row${person.name === "Tobi On Cam" ? " is-you" : ""}`}>
-            <span className="rank-number">{String(person.rank).padStart(2, "0")}</span>
+            <span className="rank-number"><AnimatedNumber value={person.rank} padStart={2} duration={600} /></span>
             <span className="rank-creator"><i>{person.name.slice(0, 2).toUpperCase()}</i><span><strong>{person.name}</strong><small>{person.handle}</small></span>{person.name === "Tobi On Cam" && <b>You</b>}</span>
-            <strong>{compactNumber(person.views)}</strong>
-            <strong className="rank-money">{money(person.earned)}</strong>
+            <strong><AnimatedNumber value={person.views} format="compact" /></strong>
+            <strong className="rank-money"><AnimatedMoney value={person.earned} /></strong>
           </div>
         ))}
       </section>
@@ -566,29 +544,23 @@ export function SettingsScreen() {
     const ids = ["profile", "accounts", "payouts", "notifications"];
     const syncFromHash = () => {
       const id = window.location.hash.slice(1);
-      if (ids.includes(id)) setActiveSection(id);
+      setActiveSection(ids.includes(id) ? id : "profile");
     };
     syncFromHash();
     window.addEventListener("hashchange", syncFromHash);
-    const observer = new IntersectionObserver((entries) => {
-      const visible = entries
-        .filter((entry) => entry.isIntersecting)
-        .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-      if (visible?.target.id) setActiveSection(visible.target.id);
-    }, { rootMargin: "-18% 0px -62%", threshold: [0.05, 0.2, 0.5] });
-    ids.forEach((id) => {
-      const section = document.getElementById(id);
-      if (section) observer.observe(section);
-    });
     return () => {
-      observer.disconnect();
       window.removeEventListener("hashchange", syncFromHash);
     };
   }, []);
 
   useEffect(() => {
-    document.querySelector(`.settings-index a[href="#${activeSection}"]`)
-      ?.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+    const index = document.querySelector<HTMLElement>(".settings-index");
+    const link = index?.querySelector<HTMLElement>(`a[href="#${activeSection}"]`);
+    if (!index || !link) return;
+    index.scrollTo({
+      left: link.offsetLeft - (index.clientWidth - link.clientWidth) / 2,
+      behavior: "smooth",
+    });
   }, [activeSection]);
 
   const sectionLink = (id: string) => ({

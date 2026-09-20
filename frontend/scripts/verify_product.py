@@ -14,6 +14,13 @@ def assert_no_horizontal_overflow(page):
     assert not page.evaluate("document.documentElement.scrollWidth > innerWidth")
 
 
+def wait_for_text(page, selector, expected):
+    page.wait_for_function(
+        "([selector, expected]) => document.querySelector(selector)?.textContent?.includes(expected)",
+        arg=[selector, expected],
+    )
+
+
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(headless=True)
     page = browser.new_page(viewport={"width": 1440, "height": 1000})
@@ -108,7 +115,11 @@ with sync_playwright() as playwright:
 
     page.goto(f"{BASE}/dashboard", wait_until="domcontentloaded")
     assert page.locator(".studio-nav a.is-active").inner_text() == "Overview"
-    assert "₦42,850" in page.locator(".money-total").inner_text()
+    initial_total = page.locator(".money-total").inner_text()
+    wait_for_text(page, ".money-total", "42,850")
+    page.wait_for_selector(".money-total .animated-number.is-settled")
+    assert page.locator(".money-total").inner_text() != initial_total
+    assert page.locator(".money-total .animated-number.is-settled").count() >= 1
     assert page.locator(".campaign-vital--rate").is_visible()
     assert page.locator(".campaign-vital--pot").is_visible()
     assert page.locator(".campaign-vital--time").is_visible()
@@ -159,6 +170,7 @@ with sync_playwright() as playwright:
     assert page.locator(".social-account.is-connected").count() == 2
     page.wait_for_timeout(500)
     page.locator('.settings-index a[href="#accounts"]').click()
+    page.wait_for_timeout(900)
     assert "Social accounts" in page.locator(".settings-index a.is-active").inner_text()
     page.screenshot(path=str(OUT / "07-settings-desktop.png"), full_page=True)
 
@@ -208,6 +220,10 @@ with sync_playwright() as playwright:
         page.goto(f"{BASE}{route}", wait_until="domcontentloaded")
         assert page.locator(".mobile-dock").is_visible()
         assert_no_horizontal_overflow(page)
+        if name == "settings":
+            page.locator('.settings-index a[href="#accounts"]').click()
+            page.wait_for_timeout(900)
+            assert "Social accounts" in page.locator(".settings-index a.is-active").inner_text()
         if name in ["dashboard", "campaign-detail"]:
             page.screenshot(path=str(OUT / f"09-{name}-viewport.png"))
         page.screenshot(path=str(OUT / f"09-{name}-mobile.png"), full_page=True)

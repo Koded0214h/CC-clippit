@@ -29,6 +29,13 @@ def no_overflow(page):
     ), page.url
 
 
+def wait_for_text(page, selector, expected):
+    page.wait_for_function(
+        "([selector, expected]) => document.querySelector(selector)?.textContent?.includes(expected)",
+        arg=[selector, expected],
+    )
+
+
 with sync_playwright() as playwright:
     browser = playwright.chromium.launch(headless=True)
     page = browser.new_page(viewport={"width": 1440, "height": 960})
@@ -51,18 +58,20 @@ with sync_playwright() as playwright:
     assert "2/3" in page.locator(".connect-score").inner_text()
     connected_badge = page.locator(".account-card .creator-status").first.bounding_box()
     assert connected_badge and connected_badge["width"] < 130 and connected_badge["height"] < 45
-    assert page.locator(".connect-stage .motion-art").is_visible()
+    assert page.locator(".connect-stage .creator-art img").is_visible()
     page.locator(".account-card").last.locator("button").click()
-    assert "3/3" in page.locator(".connect-score").inner_text()
+    wait_for_text(page, ".connect-score", "3/3")
 
-    # Large feature visuals are live code-native art, not static image panels.
+    # Custom animated illustrations are gone; feature panels use static Clippit artwork.
     page.goto(f"{BASE}/dashboard/earnings", wait_until="domcontentloaded")
-    assert page.locator(".earnings-stage .motion-art").is_visible()
-    assert page.locator(".earnings-stage .motion-art img").count() == 0
-    before = page.locator(".motion-coin--one").evaluate("el => getComputedStyle(el).transform")
-    page.wait_for_timeout(450)
-    after = page.locator(".motion-coin--one").evaluate("el => getComputedStyle(el).transform")
-    assert before != after
+    assert page.locator(".motion-art").count() == 0
+    assert page.locator(".earnings-stage .creator-art img").is_visible()
+    payable = page.locator(".earnings-total .animated-number").first
+    early_payable = payable.inner_text()
+    wait_for_text(page, ".earnings-total .animated-number", "18,400")
+    page.wait_for_selector(".earnings-total .animated-number.is-settled")
+    assert payable.inner_text() != early_payable
+    assert payable.evaluate("node => node.classList.contains('is-settled')")
 
     # Submission validates, saves, then enters verification.
     page.goto(
@@ -92,8 +101,7 @@ with sync_playwright() as playwright:
     assert page.locator(".amount-field input").input_value() == "10000"
     page.locator(".withdraw-form button[type=submit]").click()
     page.wait_for_url("**/dashboard/payouts/receipt")
-    page.wait_for_timeout(80)
-    assert "10,000" in page.locator(".receipt-hero h1").inner_text()
+    wait_for_text(page, ".receipt-hero h1", "10,000")
     assert page.locator(".receipt-brand img").is_visible()
     assert "Download receipt" in page.locator(".receipt-actions button").inner_text()
 
@@ -116,6 +124,10 @@ with sync_playwright() as playwright:
             if width <= 820:
                 assert page.locator(".mobile-dock").is_visible(), route
                 assert page.locator(".mobile-dock a").count() == 5
+            if width <= 390:
+                for art_panel in page.locator(".creator-art").all():
+                    art_box = art_panel.bounding_box()
+                    assert art_box and art_box["width"] <= 130 and art_box["height"] <= 140, (route, art_box)
         if width in {1366, 390, 320}:
             page.goto(f"{BASE}/dashboard/earnings", wait_until="domcontentloaded")
             page.screenshot(
@@ -125,6 +137,11 @@ with sync_playwright() as playwright:
             page.screenshot(
                 path=str(OUT / f"responsive-clips-{width}.png"), full_page=True
             )
+        if width == 390:
+            page.goto(f"{BASE}/dashboard/accounts", wait_until="domcontentloaded")
+            page.screenshot(path=str(OUT / "responsive-accounts-390.png"), full_page=True)
+            page.goto(f"{BASE}/dashboard/submissions/processing", wait_until="domcontentloaded")
+            page.screenshot(path=str(OUT / "responsive-processing-390.png"), full_page=True)
 
     browser.close()
     assert not errors, errors
