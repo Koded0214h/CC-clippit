@@ -15,6 +15,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from core.config import get_settings
+from core.jobs import lifespan
 from core.rate_limit import limiter
 from modules.auth.internal_router import router as auth_internal_router
 from modules.auth.profile_router import router as auth_profile_router
@@ -23,11 +24,14 @@ from modules.auth.social_router import router as auth_social_router
 from modules.campaigns.router import router as campaigns_router
 from modules.creators.router import router as creators_router
 from modules.intelligence.internal_router import router as intelligence_internal_router
+from modules.notifications.router import router as notifications_router
+from modules.organisations.router import router as organisations_router
 from modules.submissions.router import router as submissions_router
+from modules.uploads.router import media_router, router as uploads_router
 
 settings = get_settings()
 
-app = FastAPI(title="Clippit API", version="0.1.0")
+app = FastAPI(title="Clippit API", version="0.1.0", lifespan=lifespan)
 
 app.state.limiter = limiter
 app.add_middleware(SlowAPIMiddleware)
@@ -62,7 +66,11 @@ app.include_router(intelligence_internal_router)
 app.include_router(campaigns_router)
 app.include_router(submissions_router)
 app.include_router(creators_router)
+app.include_router(organisations_router)
+app.include_router(uploads_router)
+app.include_router(notifications_router)
 # app.include_router(payouts_router)
+app.include_router(media_router)
 
 
 @app.get("/health")

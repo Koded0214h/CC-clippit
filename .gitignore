@@ -43,3 +43,6 @@ Thumbs.db
 
 # Locally extracted reference documents
 *docs/*
+
+# Local uploads (core.storage LocalStorage)
+backend/var/

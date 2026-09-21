@@ -2,8 +2,8 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, UniqueConstraint, func, text
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from core.database import Base
@@ -43,6 +43,18 @@ class User(Base):
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[Role] = mapped_column(Enum(Role, name="role"), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    email_verified: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Set by the creator/organisation onboarding endpoints; the frontend
+    # routes a user to onboarding until this is set.
+    onboarded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Any token issued before this instant is dead — bumped on password
+    # reset so a stolen session cannot outlive the change.
+    tokens_valid_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    @property
+    def onboarding_completed(self) -> bool:
+        return self.onboarded_at is not None
 
     social_accounts: Mapped[list["SocialAccount"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
@@ -60,6 +72,10 @@ class SocialAccount(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     platform: Mapped[Platform] = mapped_column(Enum(Platform, name="platform"), nullable=False)
     platform_user_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    # What the creator recognises: "@tobioncam". Best effort at connect
+    # time — a failed profile lookup never blocks the connection.
+    handle: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     access_token: Mapped[str] = mapped_column(String(2048), nullable=False)
     refresh_token: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -80,6 +96,9 @@ class UserPreferences(Base):
     email_notifications: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     marketing_emails: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     theme: Mapped[Theme] = mapped_column(Enum(Theme, name="theme"), nullable=False, server_default="system")
+    # Per-event toggles (see modules.auth.schemas.NotificationSettings).
+    # Stored sparse: a missing key means "the default for that key".
+    notifications: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
@@ -98,3 +117,25 @@ class RevokedToken(Base):
     jti: Mapped[str] = mapped_column(String(36), primary_key=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class AuthCodePurpose(str, enum.Enum):
+    email_verify = "email_verify"
+    password_reset = "password_reset"
+
+
+class AuthCode(Base):
+    """A six-digit one-time code, stored only as an HMAC — a database leak
+    must not hand out live codes. One live code per (user, purpose): a new
+    request replaces the old one."""
+
+    __tablename__ = "auth_codes"
+    __table_args__ = (UniqueConstraint("user_id", "purpose", name="uq_auth_code_user_purpose"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    purpose: Mapped[AuthCodePurpose] = mapped_column(Enum(AuthCodePurpose, name="auth_code_purpose"), nullable=False)
+    code_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -37,14 +37,14 @@ async def get_profile(user: models.User = Depends(get_current_user), db: AsyncSe
     return schemas.ProfileOut(
         user=schemas.UserOut.model_validate(user),
         social_accounts=[schemas.SocialAccountOut.from_model(a) for a in accounts],
-        preferences=schemas.PreferencesOut.model_validate(prefs),
+        preferences=schemas.PreferencesOut.from_model(prefs),
     )
 
 
 @router.get("/preferences", response_model=schemas.PreferencesOut)
 async def get_preferences(user: models.User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     prefs = await _get_or_create_preferences(user, db)
-    return schemas.PreferencesOut.model_validate(prefs)
+    return schemas.PreferencesOut.from_model(prefs)
 
 
 @router.patch("/preferences", response_model=schemas.PreferencesOut)
@@ -54,8 +54,15 @@ async def update_preferences(
     db: AsyncSession = Depends(get_db),
 ):
     prefs = await _get_or_create_preferences(user, db)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    notifications = changes.pop("notifications", None)
+    for field, value in changes.items():
         setattr(prefs, field, value)
+    if notifications is not None:
+        # Store only what was sent: an untouched toggle keeps its default
+        # instead of being frozen at today's default forever.
+        sent = payload.notifications.model_dump(exclude_unset=True) if payload.notifications else {}
+        prefs.notifications = {**(prefs.notifications or {}), **sent}
     await db.commit()
     await db.refresh(prefs)
-    return schemas.PreferencesOut.model_validate(prefs)
+    return schemas.PreferencesOut.from_model(prefs)

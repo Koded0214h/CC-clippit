@@ -17,8 +17,8 @@ abstraction), not this one's.
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.database import Base
@@ -38,6 +38,33 @@ class CreatorBankAccount(Base):
     account_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     verified: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class CreatorProfile(Base):
+    """What a creator shows and what onboarding learned about them.
+    `interests` are the content lanes used to match new campaigns to them
+    (plan §19.2). One row per creator; created by onboarding."""
+
+    __tablename__ = "creator_profiles"
+
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    display_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    bio: Mapped[str | None] = mapped_column(Text, nullable=True)
+    photo_upload_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("uploads.id", ondelete="SET NULL"), nullable=True
+    )
+    interests: Mapped[list[str]] = mapped_column(ARRAY(String(40)), nullable=False, server_default="{}")
+    # Onboarding answers — kept for product analytics and matching, not shown.
+    intended_platforms: Mapped[list[str]] = mapped_column(ARRAY(String(20)), nullable=False, server_default="{}")
+    discovery_source: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    experience: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    goals: Mapped[list[str]] = mapped_column(ARRAY(String(80)), nullable=False, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

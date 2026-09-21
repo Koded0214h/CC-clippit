@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.deps import get_db
 from modules.auth.deps import get_current_user
 from modules.auth.models import Role, User
+from modules.uploads.router import owned_upload
+from modules.uploads.service import url_for_upload
 
 from . import models, schemas
 
@@ -72,3 +75,87 @@ async def get_bank_details_for_admin(
     if not account:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No bank details on file for this creator")
     return schemas.BankAccountOut.from_model(account)
+
+
+# --- Profile & onboarding ---------------------------------------------------
+
+
+def _require_creator(user: User) -> None:
+    if user.role != Role.creator:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only a creator account has this")
+
+
+async def _profile_out(user: User, profile: models.CreatorProfile, db: AsyncSession) -> schemas.CreatorProfileOut:
+    return schemas.CreatorProfileOut(
+        user_id=profile.user_id,
+        display_name=profile.display_name,
+        bio=profile.bio,
+        photo_url=await url_for_upload(db, profile.photo_upload_id),
+        interests=list(profile.interests or []),
+        platforms=list(profile.intended_platforms or []),
+        discovery_source=profile.discovery_source,
+        experience=profile.experience,
+        goals=list(profile.goals or []),
+        onboarding_completed=user.onboarding_completed,
+        updated_at=profile.updated_at,
+    )
+
+
+async def get_or_create_profile(user: User, db: AsyncSession) -> models.CreatorProfile:
+    profile = await db.get(models.CreatorProfile, user.id)
+    if profile is None:
+        profile = models.CreatorProfile(user_id=user.id, display_name=user.full_name[:80])
+        db.add(profile)
+        await db.commit()
+        await db.refresh(profile)
+    return profile
+
+
+@router.get("/me/profile", response_model=schemas.CreatorProfileOut)
+async def get_my_profile(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    _require_creator(user)
+    return await _profile_out(user, await get_or_create_profile(user, db), db)
+
+
+@router.put("/me/profile", response_model=schemas.CreatorProfileOut)
+async def update_my_profile(
+    payload: schemas.CreatorProfileUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_creator(user)
+    profile = await get_or_create_profile(user, db)
+    changes = payload.model_dump(exclude_unset=True)
+    if changes.get("photo_upload_id") is not None:
+        await owned_upload(db, changes["photo_upload_id"], user.id, kinds=("image",))
+    for field, value in changes.items():
+        setattr(profile, field, value)
+    await db.commit()
+    await db.refresh(profile)
+    return await _profile_out(user, profile, db)
+
+
+@router.put("/me/onboarding", response_model=schemas.CreatorProfileOut)
+async def complete_onboarding(
+    payload: schemas.CreatorOnboarding,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Saves the onboarding answers and marks onboarding done. Idempotent —
+    calling it again overwrites the answers."""
+    _require_creator(user)
+    profile = await get_or_create_profile(user, db)
+    if payload.photo_upload_id is not None:
+        await owned_upload(db, payload.photo_upload_id, user.id, kinds=("image",))
+        profile.photo_upload_id = payload.photo_upload_id
+    profile.display_name = payload.display_name
+    profile.interests = payload.interests
+    profile.intended_platforms = [p.value for p in payload.platforms]
+    profile.discovery_source = payload.discovery_source
+    profile.experience = payload.experience
+    profile.goals = payload.goals
+    if user.onboarded_at is None:
+        user.onboarded_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(profile)
+    return await _profile_out(user, profile, db)

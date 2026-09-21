@@ -11,7 +11,7 @@ import httpx
 
 from core.config import get_settings
 
-from .base import NormalizedToken, OAuthError
+from .base import NormalizedToken, OAuthError, ProfileInfo
 
 PLATFORM = "facebook"
 USES_PKCE = False
@@ -70,3 +70,10 @@ async def exchange_code(code: str, code_verifier: str | None = None) -> Normaliz
         user_id = me_resp.json().get("id", "")
 
     return NormalizedToken(access_token=user_token, platform_user_id=user_id, expires_in=expires_in)
+
+
+async def fetch_profile(access_token: str, platform_user_id: str) -> ProfileInfo | None:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(f"{GRAPH_API}/me", params={"fields": "id,name", "access_token": access_token})
+    name = (resp.json() or {}).get("name")
+    return ProfileInfo(handle=name, display_name=name) if name else None

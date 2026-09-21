@@ -6,7 +6,7 @@ import httpx
 
 from core.config import get_settings
 
-from .base import NormalizedToken, OAuthError
+from .base import NormalizedToken, OAuthError, ProfileInfo
 
 PLATFORM = "instagram"
 USES_PKCE = False
@@ -65,3 +65,13 @@ async def exchange_code(code: str, code_verifier: str | None = None) -> Normaliz
             expires_in=int(ll_payload.get("expires_in", 5_184_000)),
         )
     return NormalizedToken(access_token=short_token, platform_user_id=user_id, expires_in=3600)
+
+
+PROFILE_URL = "https://graph.instagram.com/v22.0/me"
+
+
+async def fetch_profile(access_token: str, platform_user_id: str) -> ProfileInfo | None:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(PROFILE_URL, params={"fields": "user_id,username", "access_token": access_token})
+    username = (resp.json() or {}).get("username")
+    return ProfileInfo(handle=f"@{username}", display_name=username) if username else None

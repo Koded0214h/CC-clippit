@@ -1,3 +1,4 @@
+import logging
 import secrets
 import uuid
 
@@ -16,6 +17,7 @@ from .providers import get_provider
 from .providers.base import OAuthError
 
 router = APIRouter(prefix="/social", tags=["social"])
+logger = logging.getLogger("clippit.social")
 settings = get_settings()
 
 
@@ -97,6 +99,18 @@ async def callback(
     except OAuthError as exc:
         return RedirectResponse(f"{fail_url}&reason={exc}")
 
+    # Best effort: the connection is valid without a handle, so a failed
+    # profile lookup is logged and the account is saved anyway.
+    profile = None
+    fetch_profile = getattr(provider, "fetch_profile", None)
+    if fetch_profile is not None:
+        try:
+            profile = await fetch_profile(token.access_token, token.platform_user_id)
+        except Exception:  # noqa: BLE001
+            logger.warning("could not read %s profile after connect", platform, exc_info=True)
+    handle = profile.handle if profile else None
+    display_name = profile.display_name if profile else None
+
     user_id = uuid.UUID(state_payload["sub"])
     existing = await db.scalar(
         select(models.SocialAccount).where(
@@ -107,6 +121,8 @@ async def callback(
         existing.access_token = token.access_token
         existing.refresh_token = token.refresh_token
         existing.platform_user_id = token.platform_user_id
+        existing.handle = handle or existing.handle
+        existing.display_name = display_name or existing.display_name
         existing.expires_at = token.expires_at
     else:
         db.add(
@@ -114,6 +130,8 @@ async def callback(
                 user_id=user_id,
                 platform=platform,
                 platform_user_id=token.platform_user_id,
+                handle=handle,
+                display_name=display_name,
                 access_token=token.access_token,
                 refresh_token=token.refresh_token,
                 expires_at=token.expires_at,

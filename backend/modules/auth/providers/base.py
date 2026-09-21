@@ -21,3 +21,11 @@ class NormalizedToken:
 
 class OAuthError(RuntimeError):
     """Raised when a provider rejects authorization or a token exchange."""
+
+
+@dataclass
+class ProfileInfo:
+    """Who the connected account is, as its owner would recognise it."""
+
+    handle: str | None = None
+    display_name: str | None = None

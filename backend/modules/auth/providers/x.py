@@ -12,7 +12,7 @@ import httpx
 
 from core.config import get_settings
 
-from .base import NormalizedToken, OAuthError
+from .base import NormalizedToken, OAuthError, ProfileInfo
 
 PLATFORM = "x"
 USES_PKCE = True
@@ -78,3 +78,17 @@ async def exchange_code(code: str, code_verifier: str | None) -> NormalizedToken
         refresh_token=payload.get("refresh_token"),
         expires_in=payload.get("expires_in"),
     )
+
+
+async def fetch_profile(access_token: str, platform_user_id: str) -> ProfileInfo | None:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            ME_URL,
+            headers={"Authorization": f"Bearer {access_token}"},
+            params={"user.fields": "username,name"},
+        )
+    user = (resp.json() or {}).get("data") or {}
+    username = user.get("username")
+    if not username:
+        return None
+    return ProfileInfo(handle=f"@{username}", display_name=user.get("name") or username)

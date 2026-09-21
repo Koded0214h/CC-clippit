@@ -3,6 +3,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from core.platforms import Platform
+
 
 class BankAccountIn(BaseModel):
     bank_code: str = Field(min_length=1, max_length=10)
@@ -43,3 +45,76 @@ class BankAccountOut(BaseModel):
             verified_at=account.verified_at,
             updated_at=account.updated_at,
         )
+
+
+def _strip_list(values: list[str], limit: int, size: int) -> list[str]:
+    seen: dict[str, None] = {}
+    for value in values:
+        cleaned = value.strip()[:size]
+        if cleaned:
+            seen[cleaned] = None
+    return list(seen)[:limit]
+
+
+class CreatorProfileUpdate(BaseModel):
+    """Settings → Profile. Send only what changed."""
+
+    display_name: str | None = Field(default=None, min_length=2, max_length=80)
+    bio: str | None = Field(default=None, max_length=240)
+    photo_upload_id: uuid.UUID | None = None
+    interests: list[str] | None = Field(default=None, max_length=12)
+
+    @field_validator("display_name", "bio")
+    @classmethod
+    def strip(cls, value: str | None) -> str | None:
+        return value.strip() if value is not None else None
+
+    @field_validator("interests")
+    @classmethod
+    def clean_interests(cls, value: list[str] | None) -> list[str] | None:
+        return None if value is None else _strip_list(value, 12, 40)
+
+
+class CreatorOnboarding(BaseModel):
+    """`/onboarding/creator`: name, content lanes, platforms, and the
+    discovery / experience / goals questions."""
+
+    display_name: str = Field(min_length=2, max_length=80)
+    interests: list[str] = Field(min_length=1, max_length=12)
+    platforms: list[Platform] = Field(default_factory=list)
+    photo_upload_id: uuid.UUID | None = None
+    discovery_source: str | None = Field(default=None, max_length=60)
+    experience: str | None = Field(default=None, max_length=80)
+    goals: list[str] = Field(default_factory=list, max_length=8)
+
+    @field_validator("display_name")
+    @classmethod
+    def strip_name(cls, value: str) -> str:
+        return value.strip()
+
+    @field_validator("interests")
+    @classmethod
+    def clean_interests(cls, value: list[str]) -> list[str]:
+        cleaned = _strip_list(value, 12, 40)
+        if not cleaned:
+            raise ValueError("Pick at least one content lane.")
+        return cleaned
+
+    @field_validator("goals")
+    @classmethod
+    def clean_goals(cls, value: list[str]) -> list[str]:
+        return _strip_list(value, 8, 80)
+
+
+class CreatorProfileOut(BaseModel):
+    user_id: uuid.UUID
+    display_name: str
+    bio: str | None
+    photo_url: str | None
+    interests: list[str]
+    platforms: list[Platform]
+    discovery_source: str | None
+    experience: str | None
+    goals: list[str]
+    onboarding_completed: bool
+    updated_at: datetime

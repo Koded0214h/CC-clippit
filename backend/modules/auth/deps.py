@@ -4,6 +4,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.config import get_settings
 from core.deps import get_db
 from core.security import decode_access_token
 
@@ -30,6 +31,40 @@ async def get_current_user(
     user = await db.get(models.User, uuid.UUID(payload["sub"]))
     if not user:
         raise unauthorized
+    if user.tokens_valid_after is not None:
+        issued = payload.get("iat")
+        # A token with no `iat` predates this check; after a password reset
+        # it is treated as stale rather than trusted.
+        # `iat` has one-second resolution, so compare at that resolution — a
+        # sign-in in the same second as the reset must keep working.
+        if issued is None or int(issued) < int(user.tokens_valid_after.timestamp()):
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Session expired — sign in again")
+    return user
+
+
+async def get_optional_user(
+    token: str | None = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> models.User | None:
+    """The signed-in user if there is a valid session, else None. For the
+    handful of endpoints that work either way (verify-email)."""
+    if not token:
+        return None
+    try:
+        return await get_current_user(token, db)
+    except HTTPException:
+        return None
+
+
+async def get_verified_user(user: models.User = Depends(get_current_user)) -> models.User:
+    """A signed-in user whose email is confirmed. Guards everything that
+    spends, earns or publishes — the actions where an unconfirmed address
+    is a real problem."""
+    if get_settings().require_email_verification and not user.email_verified:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail={"code": "email_not_verified", "message": "Confirm your email address first."},
+        )
     return user
 
 

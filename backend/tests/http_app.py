@@ -22,7 +22,10 @@ import modules.auth.models  # noqa: F401
 import modules.campaigns.models  # noqa: F401
 import modules.creators.models  # noqa: F401
 import modules.intelligence.models  # noqa: F401
+import modules.notifications.models  # noqa: F401
+import modules.organisations.models  # noqa: F401
 import modules.submissions.models  # noqa: F401
+import modules.uploads.models  # noqa: F401
 
 TEST_URL = "postgresql+asyncpg://clippit:clippit@localhost:5433/clippit_http_test"
 
@@ -81,7 +84,23 @@ async def api() -> AsyncIterator[httpx.AsyncClient]:
     await engine.dispose()
 
 
-async def signup(client: httpx.AsyncClient, role: str = "creator") -> tuple[str, dict]:
+def latest_code(email: str) -> str:
+    """The six-digit code from the newest email sent to `email` (the
+    console sender keeps them in memory — see core.email)."""
+    import re
+
+    from core.email import get_email_sender
+
+    message = get_email_sender().last_to(email)
+    assert message is not None, f"no email was sent to {email}"
+    match = re.search(r"\b(\d{6})\b", message.text)
+    assert match, message.text
+    return match.group(1)
+
+
+async def signup(client: httpx.AsyncClient, role: str = "creator", *, verify: bool = True) -> tuple[str, dict]:
+    """Creates an account and, by default, confirms its email the way a user
+    would (read the code, submit it) so tests start from a normal account."""
     email = f"{role}-{uuid.uuid4().hex[:8]}@example.com"
     password = "DemoPassword123!"
     r = await client.post(
@@ -89,4 +108,13 @@ async def signup(client: httpx.AsyncClient, role: str = "creator") -> tuple[str,
         json={"email": email, "password": password, "full_name": f"Test {role}", "role": role},
     )
     r.raise_for_status()
-    return email, r.json()
+    body = r.json()
+    if verify:
+        v = await client.post(
+            "/auth/verify-email",
+            headers={"Authorization": f"Bearer {body['access_token']}"},
+            json={"code": latest_code(email)},
+        )
+        v.raise_for_status()
+        body["user"] = v.json()
+    return email, body

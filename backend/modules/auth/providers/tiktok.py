@@ -12,7 +12,7 @@ import httpx
 
 from core.config import get_settings
 
-from .base import NormalizedToken, OAuthError
+from .base import NormalizedToken, OAuthError, ProfileInfo
 
 PLATFORM = "tiktok"
 USES_PKCE = True
@@ -65,3 +65,23 @@ async def exchange_code(code: str, code_verifier: str | None) -> NormalizedToken
         refresh_token=payload.get("refresh_token"),
         expires_in=payload.get("expires_in"),
     )
+
+
+PROFILE_URL = "https://open.tiktokapis.com/v2/user/info/"
+
+
+async def fetch_profile(access_token: str, platform_user_id: str) -> ProfileInfo | None:
+    """`username` needs the user.info.profile scope we don't request, so the
+    display name (user.info.basic) is what we can show."""
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            PROFILE_URL,
+            headers={"Authorization": f"Bearer {access_token}"},
+            params={"fields": "open_id,display_name,username"},
+        )
+    user = ((resp.json() or {}).get("data") or {}).get("user") or {}
+    name = user.get("display_name")
+    username = user.get("username")
+    if not (name or username):
+        return None
+    return ProfileInfo(handle=f"@{username}" if username else name, display_name=name)
