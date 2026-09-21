@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import "./globals.css";
 import "../styles/product.css";
 import "../styles/creator.css";
+import "../styles/customer.css";
 
 const geist = Geist({
   subsets: ["latin"],

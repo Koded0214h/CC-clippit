@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 export type BriefRule = { id: string; text: string; kind: "must" | "avoid" };
 
@@ -8,10 +8,12 @@ export type BrandCampaignDraft = {
   title: string;
   description: string;
   sourceLink: string;
+  coverImage: string;
   platforms: string[];
   rules: BriefRule[];
   minimumViews: number;
   creatorCap: number;
+  endCondition: "duration" | "budget";
   days: number;
   pot: number;
   rate: number;
@@ -21,6 +23,7 @@ const initialDraft: BrandCampaignDraft = {
   title: "The late-night bowl",
   description: "Show how Indomie fits into late-night work, study or travel.",
   sourceLink: "https://indomie.ng/brand-kit",
+  coverImage: "",
   platforms: ["TikTok", "Instagram"],
   rules: [
     { id: "rule-1", text: "Show the prepared noodles clearly on screen.", kind: "must" },
@@ -30,6 +33,7 @@ const initialDraft: BrandCampaignDraft = {
   ],
   minimumViews: 1000,
   creatorCap: 75000,
+  endCondition: "duration",
   days: 14,
   pot: 500000,
   rate: 500,
@@ -48,21 +52,28 @@ const BrandCampaignContext = createContext<BrandCampaignContextValue | null>(nul
 
 export function BrandCampaignProvider({ children }: { children: ReactNode }) {
   const [draft, setDraft] = useState(initialDraft);
+  const hydrated = useRef(false);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
       const stored = window.localStorage.getItem("clippit:brand-campaign-draft");
-      if (!stored) return;
+      hydrated.current = true;
+      if (!stored) {
+        window.localStorage.setItem("clippit:brand-campaign-draft", JSON.stringify(initialDraft));
+        return;
+      }
       try {
         setDraft({ ...initialDraft, ...JSON.parse(stored) });
       } catch {
         window.localStorage.removeItem("clippit:brand-campaign-draft");
+        window.localStorage.setItem("clippit:brand-campaign-draft", JSON.stringify(initialDraft));
       }
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
+    if (!hydrated.current) return;
     window.localStorage.setItem("clippit:brand-campaign-draft", JSON.stringify(draft));
   }, [draft]);
 

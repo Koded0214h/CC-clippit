@@ -244,6 +244,25 @@ with sync_playwright() as playwright:
         page.goto(f"{BASE}{route}", wait_until="domcontentloaded")
         assert page.locator(".mobile-dock").is_visible()
         assert_no_horizontal_overflow(page)
+        assert page.locator(".wallet-pill > span").is_visible()
+        assert page.locator(".wallet-pill strong").is_visible()
+        assert page.locator(".wallet-pill").bounding_box()["width"] >= 90
+        if name == "dashboard":
+            page.locator(".money-receipt").scroll_into_view_if_needed()
+            page.wait_for_timeout(250)
+            assert "is-hidden" in (page.locator(".mobile-dock").get_attribute("class") or "")
+            assert page.locator(".money-receipt .ink-button").is_visible()
+            assert page.locator(".money-receipt .ink-button").evaluate(
+                "element => { const box = element.getBoundingClientRect(); const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2); return Boolean(hit && (hit === element || element.contains(hit))); }"
+            )
+            page.locator(".mini-leaderboard").scroll_into_view_if_needed()
+            assert page.locator(".mini-leaderboard > div:not(.section-title)").count() == 4
+        if name == "leaderboard":
+            podium = page.locator(".podium-board").bounding_box()
+            podium_copy = page.locator(".podium-copy").bounding_box()
+            assert podium and podium_copy
+            assert podium["y"] <= podium_copy["y"] < podium["y"] + podium["height"]
+            assert page.locator(".ranking-row:not(.ranking-row--labels) .rank-money:visible").count() == 6
         if name == "settings":
             page.locator('.settings-index a[href="#accounts"]').click()
             page.wait_for_timeout(900)

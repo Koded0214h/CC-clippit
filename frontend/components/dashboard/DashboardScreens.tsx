@@ -589,6 +589,7 @@ export function SettingsScreen() {
           <a {...sectionLink("accounts")}><ProductIcon name="link" /> Social accounts</a>
           <a {...sectionLink("payouts")}><ProductIcon name="bank" /> Payout account</a>
           <a {...sectionLink("notifications")}><ProductIcon name="bell" /> Notifications</a>
+          <Link href="/dashboard/security"><ProductIcon name="shield" /> Security</Link>
         </nav>
         <div className="settings-sheets">
           <section id="profile" className="settings-sheet">
@@ -603,7 +604,7 @@ export function SettingsScreen() {
               <label><span>Location</span><input defaultValue="Lagos, Nigeria" /></label>
               </div>
             </div>
-            <button className="lime-button" type="button" disabled={profile.name.trim().length < 2 || profile.bio.trim().length < 2} onClick={() => { saveStoredProfile("creator", { ...profile, name: profile.name.trim(), bio: profile.bio.trim() }); setSaved(true); window.setTimeout(() => setSaved(false), 2200); }}>{saved ? <><ProductIcon name="check" /> Changes saved</> : <>Save profile<ProductIcon name="arrow" /></>}</button>
+            <div className="settings-profile-actions"><button className="lime-button" type="button" disabled={profile.name.trim().length < 2 || profile.bio.trim().length < 2} onClick={() => { saveStoredProfile("creator", { ...profile, name: profile.name.trim(), bio: profile.bio.trim() }); setSaved(true); window.setTimeout(() => setSaved(false), 2200); }}>{saved ? <><ProductIcon name="check" /> Changes saved</> : <>Save profile<ProductIcon name="arrow" /></>}</button><Link className="ink-button" href="/dashboard/profile">View public profile<ProductIcon name="eye" /></Link></div>
           </section>
 
           <section id="accounts" className="settings-sheet">
@@ -615,7 +616,7 @@ export function SettingsScreen() {
 
           <section id="payouts" className="settings-sheet payout-sheet">
             <div className="settings-sheet__title"><div><h2>Payout account</h2><p>Payable money lands here.</p></div><ProductIcon name="bank" /></div>
-            <div className="bank-account"><span><ProductIcon name="bank" /></span><p><small>GTBank</small><strong>0123 456 789</strong><b>Tobi Adeyemi</b></p><i>Verified</i></div>
+            <div className="bank-account"><span><ProductIcon name="bank" /></span><p><small>GTBank</small><strong>0123 456 789</strong><b>Tobi Adeyemi</b></p><i>Verified</i><Link className="bank-edit-link" href="/dashboard/payout-account">Change<ProductIcon name="arrow" /></Link></div>
             <p className="security-note"><ProductIcon name="shield" /> Account changes trigger a security review before the next withdrawal.</p>
           </section>
 

@@ -53,13 +53,20 @@ with sync_playwright() as playwright:
         assert page.locator(".brand-page, .brand-builder-page").first.is_visible(), route
         no_overflow(page)
         images_loaded(page)
-        if name in {"overview", "brief", "budget", "live", "queue", "decision"}:
+        if name in {"overview", "basics", "brief", "rules", "budget", "review", "live", "queue", "decision"}:
             page.wait_for_timeout(1400)
             page.screenshot(path=str(OUT / f"{index:02d}-{name}-desktop.png"), full_page=True)
 
     # The builder behaves like one connected campaign studio.
     page.goto(f"{BASE}/brand/campaigns/new", wait_until="networkidle")
-    page.locator("input").first.fill("After-hours rescue")
+    page.locator(".campaign-cover-input").set_input_files({
+        "name": "campaign-cover.png",
+        "mimeType": "image/png",
+        "buffer": base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="),
+    })
+    page.wait_for_selector(".campaign-cover-frame img")
+    assert page.locator(".builder-cover-preview img").count() == 1
+    page.locator('input[placeholder="The late-night bowl"]').fill("After-hours rescue")
     page.locator("textarea").fill("Show the tiny meal ritual that gets people through the work nobody sees.")
     page.locator("form button[type=submit]").click()
     page.wait_for_url("**/brand/campaigns/new/brief")
@@ -74,6 +81,20 @@ with sync_playwright() as playwright:
     youtube.click()
     assert "is-selected" in (youtube.get_attribute("class") or "")
 
+    # Campaigns may close on a date or simply run until their funded pot is spent.
+    page.goto(f"{BASE}/brand/campaigns/new/rules", wait_until="networkidle")
+    page.locator(".campaign-end-control > div > button").last.click()
+    assert page.locator('.campaign-end-control input[type="number"]').count() == 0
+    assert "No scheduled end date" in page.locator(".campaign-end-control aside").inner_text()
+    page.locator(".campaign-end-control > div > button").first.click()
+    assert page.locator('.campaign-end-control input[type="number"]').count() == 1
+    page.locator(".campaign-end-control > div > button").last.click()
+
+    page.goto(f"{BASE}/brand/campaigns/new/review", wait_until="networkidle")
+    assert page.locator(".campaign-proof-cover img").count() == 1
+    assert "Pot empty" in page.locator(".campaign-proof-sheet").inner_text()
+    assert "No scheduled end date" in page.locator(".campaign-proof-sheet").inner_text()
+
     page.goto(f"{BASE}/brand/campaigns/new/budget", wait_until="networkidle")
     page.locator(".budget-inputs input").first.fill("600000")
     page.locator(".budget-inputs input").nth(1).fill("600")
@@ -83,10 +104,14 @@ with sync_playwright() as playwright:
 
     # Funding confirmation opens the campaign room.
     page.goto(f"{BASE}/brand/campaigns/new/fund", wait_until="networkidle")
+    assert "clippit-mark.png" in page.locator('.funding-receipt img[alt="Clippit"]').get_attribute("src")
     page.locator(".funding-agreement").click()
     page.locator(".funding-checkout button[type=submit]").click()
     page.wait_for_url("**/brand/campaigns/new/funded")
     assert "Campaign funded" in page.locator(".funded-hero h1").inner_text()
+    assert page.locator(".funded-cover img").count() == 1
+    assert "When the pot is empty" in page.locator(".funded-ticket").inner_text()
+    assert "clippit-mark.png" in page.locator('.funded-ticket img[alt="Clippit"]').get_attribute("src")
 
     # Human review records an explicit decision.
     page.goto(f"{BASE}/brand/reviews/submission-1042", wait_until="networkidle")
@@ -123,7 +148,7 @@ with sync_playwright() as playwright:
                     box = artwork.bounding_box()
                     assert box and box["width"] <= 160 and box["height"] <= 165, (route, box)
         if width in {1366, 390, 320}:
-            for name, route in [("overview", "/brand"), ("brief", "/brand/campaigns/new/brief"), ("live", "/brand/campaigns/no-long-thing")]:
+            for name, route in [("overview", "/brand"), ("basics", "/brand/campaigns/new"), ("rules", "/brand/campaigns/new/rules"), ("review", "/brand/campaigns/new/review"), ("live", "/brand/campaigns/no-long-thing")]:
                 page.goto(f"{BASE}{route}", wait_until="domcontentloaded")
                 page.wait_for_timeout(500)
                 page.screenshot(path=str(OUT / f"responsive-{name}-{width}.png"), full_page=True)

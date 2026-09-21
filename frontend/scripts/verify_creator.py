@@ -104,8 +104,12 @@ with sync_playwright() as playwright:
     assert page.locator(".amount-field input").input_value() == "10000"
     page.locator(".withdraw-form button[type=submit]").click()
     page.wait_for_url("**/dashboard/payouts/receipt")
+    wait_for_text(page, ".payout-receipt__summary strong", "10,000")
+    page.locator(".receipt-hero").scroll_into_view_if_needed()
     wait_for_text(page, ".receipt-hero h1", "10,000")
-    assert page.locator(".receipt-brand img").is_visible()
+    assert page.locator('.payout-receipt img[alt="Clippit"]').is_visible()
+    assert "₦10,000" in page.locator(".payout-receipt__summary strong").inner_text()
+    assert page.locator(".payout-receipt__summary .animated-number").count() == 0
     assert "Download receipt" in page.locator(".receipt-actions button").inner_text()
 
     # Existing campaign detail now enters the new journey after joining.
@@ -145,6 +149,11 @@ with sync_playwright() as playwright:
             page.screenshot(path=str(OUT / "responsive-accounts-390.png"), full_page=True)
             page.goto(f"{BASE}/dashboard/submissions/processing", wait_until="domcontentloaded")
             page.screenshot(path=str(OUT / "responsive-processing-390.png"), full_page=True)
+            page.goto(f"{BASE}/dashboard/withdraw", wait_until="domcontentloaded")
+            page.locator(".withdraw-form button[type=submit]").scroll_into_view_if_needed()
+            page.wait_for_timeout(250)
+            assert "is-hidden" in (page.locator(".mobile-dock").get_attribute("class") or "")
+            page.screenshot(path=str(OUT / "responsive-withdraw-390.png"), full_page=True)
 
     browser.close()
     assert not errors, errors

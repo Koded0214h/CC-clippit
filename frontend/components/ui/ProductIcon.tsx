@@ -25,6 +25,7 @@ export type ProductIconName =
   | "music"
   | "play"
   | "person"
+  | "phone"
   | "search"
   | "settings"
   | "shield"
@@ -154,6 +155,12 @@ export function ProductIcon({
       <>
         <circle cx="12" cy="8" r="4" />
         <path d="M4 21c.5-5 3.2-7.5 8-7.5s7.5 2.5 8 7.5" />
+      </>
+    ),
+    phone: (
+      <>
+        <rect x="6" y="2.5" width="12" height="19" rx="2.5" />
+        <path d="M10 5h4M11 18.5h2" />
       </>
     ),
     search: (
