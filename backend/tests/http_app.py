@@ -56,15 +56,32 @@ async def _ensure_database() -> bool:
         await admin.dispose()
 
 
+#: The schema is rebuilt once per pytest process (so a model change is
+#: always picked up) and every test starts from emptied tables. Rebuilding
+#: ~45 tables per test made the suite take minutes; truncating takes
+#: milliseconds and gives the same isolation.
+_schema_ready = False
+
+
+async def _reset_database(engine) -> None:
+    global _schema_ready
+    async with engine.begin() as conn:
+        if not _schema_ready:
+            await conn.run_sync(Base.metadata.drop_all)
+            await conn.run_sync(Base.metadata.create_all)
+            _schema_ready = True
+        else:
+            names = ", ".join(f'"{t.name}"' for t in reversed(Base.metadata.sorted_tables))
+            await conn.execute(text(f"TRUNCATE {names} RESTART IDENTITY CASCADE"))
+
+
 @pytest_asyncio.fixture
 async def api() -> AsyncIterator[httpx.AsyncClient]:
     if not await _ensure_database():
         pytest.skip("Docker Postgres on localhost:5433 is not available")
 
     engine = create_async_engine(TEST_URL)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-        await conn.run_sync(Base.metadata.create_all)
+    await _reset_database(engine)
 
     factory = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
@@ -83,8 +100,6 @@ async def api() -> AsyncIterator[httpx.AsyncClient]:
         yield client
 
     app.dependency_overrides.clear()
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
     await engine.dispose()
 
 
@@ -177,3 +192,107 @@ async def db_session():
         yield session
     finally:
         await gen.aclose()
+
+
+@pytest_asyncio.fixture
+async def intel(api):
+    """The app wired to a scriptable Intelligence (see tests/fakes.py)."""
+    from core.internal_client import get_internal_client
+    from main import app
+    from tests.fakes import FakeIntelligence
+
+    fake = FakeIntelligence()
+    app.dependency_overrides[get_internal_client] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_internal_client, None)
+
+
+async def connect_account(user_id: str, platform: str = "tiktok", handle: str = "@creator") -> None:
+    """Gives a creator a connected social account, as the OAuth flow would
+    have — the tokens are dummies; nothing in these tests calls a platform."""
+    from modules.auth.models import Platform, SocialAccount
+
+    async with db_session() as db:
+        db.add(
+            SocialAccount(
+                user_id=uuid.UUID(user_id), platform=Platform(platform), platform_user_id=f"pid-{uuid.uuid4().hex[:6]}",
+                handle=handle, display_name=handle.lstrip("@"), access_token="dummy-token",
+            )
+        )
+        await db.commit()
+
+
+async def make_creator(client: httpx.AsyncClient, platform: str = "tiktok", handle: str = "@creator") -> dict:
+    """A verified creator with a connected account."""
+    _, creator = await signup(client, "creator")
+    await connect_account(creator["user"]["id"], platform, handle)
+    return creator
+
+
+async def submit_clip(client: httpx.AsyncClient, creator: dict, campaign_id: str, **overrides):
+    body = {
+        "campaign_id": campaign_id,
+        "platform": "tiktok",
+        "url": f"https://www.tiktok.com/@creator/video/{uuid.uuid4().int % 10**12}",
+        "title": "A test clip",
+    }
+    body.update(overrides)
+    return await client.post("/submissions", headers=auth(creator), json=body)
+
+
+async def approve_clip(client: httpx.AsyncClient, org: dict, submission_id: str):
+    return await client.post(f"/brand/reviews/{submission_id}/approve", headers=auth(org), json={})
+
+
+async def earn(client, intel, submission_id: str, views: int) -> None:
+    """Sets a clip's views and settles it, as the scheduled job would."""
+    from modules.earnings import service
+
+    intel.set_views(submission_id, views)
+    async with db_session() as db:
+        await service.settle_submission(db, uuid.UUID(submission_id), intel)
+        await db.commit()
+
+
+async def clear_hold(creator_id: str) -> None:
+    """Time travel: pretend the five-day hold has passed for a creator's earnings."""
+    from datetime import datetime, timedelta, timezone
+
+    from sqlalchemy import update
+
+    from modules.earnings.models import EarningEntry
+
+    async with db_session() as db:
+        await db.execute(
+            update(EarningEntry)
+            .where(EarningEntry.creator_id == uuid.UUID(creator_id))
+            .values(payable_at=datetime.now(timezone.utc) - timedelta(minutes=1))
+        )
+        await db.commit()
+
+
+async def verified_bank(client, creator: dict, number: str = "0123456789", code: str = "058", name: str = "Guaranty Trust Bank") -> dict:
+    r = await client.put(
+        "/creators/me/bank-details", headers=auth(creator),
+        json={"bank_code": code, "bank_name": name, "account_number": number},
+    )
+    r.raise_for_status()
+    v = await client.post("/creators/me/bank-details/verify", headers=auth(creator))
+    v.raise_for_status()
+    return v.json()
+
+
+async def make_admin(client: httpx.AsyncClient) -> dict:
+    """Admins can't sign themselves up, so promote a verified account and
+    sign it in again (the role is baked into the token)."""
+    from sqlalchemy import update
+
+    from modules.auth.models import Role, User
+
+    email, body = await signup(client, "creator")
+    async with db_session() as db:
+        await db.execute(update(User).where(User.email == email).values(role=Role.admin))
+        await db.commit()
+    login = await client.post("/auth/login", json={"email": email, "password": "DemoPassword123!"})
+    login.raise_for_status()
+    return login.json()

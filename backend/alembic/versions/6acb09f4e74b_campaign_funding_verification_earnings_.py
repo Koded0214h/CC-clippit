@@ -143,6 +143,7 @@ def upgrade() -> None:
     sa.Column('reference', sa.String(length=80), nullable=False),
     sa.Column('accrued_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
     sa.Column('payable_at', sa.DateTime(timezone=True), nullable=False),
+    sa.Column('payable_notified_at', sa.DateTime(timezone=True), nullable=True),
     sa.CheckConstraint('amount > 0', name='ck_earning_amount_positive'),
     sa.CheckConstraint('thousands > 0', name='ck_earning_thousands_positive'),
     sa.ForeignKeyConstraint(['campaign_id'], ['campaigns.id'], ),

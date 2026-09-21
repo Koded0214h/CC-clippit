@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     jwt_secret: str = "dev-only-not-secret"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 1440
+    # Work factor for password hashing. 12 is right for production; the test
+    # suite lowers it (a signup per test made hashing most of its runtime).
+    bcrypt_rounds: int = 12
     port: int = 8000
 
     # Shared secret used between internal modules/services if any of this

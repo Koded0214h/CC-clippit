@@ -383,8 +383,16 @@ async def close_campaign(
                 status.HTTP_409_CONFLICT, "Payment is awaiting confirmation; it can't be closed until that resolves."
             )
 
-    reason = models.CloseReason.admin if user.role == Role.admin else models.CloseReason.manual
-    await service.close_campaign(db, campaign, reason, actor_id=user.id, client=client)
+    # Book the views earned up to this moment first, so closing early doesn't
+    # forfeit them. (Imported here: earnings depends on campaigns, not the reverse.)
+    from modules.earnings import service as earnings_service
+
+    if campaign.status == models.CampaignStatus.active:
+        await earnings_service.settle_campaign(db, campaign.id, client)
+        await db.refresh(campaign)
+    if campaign.status != models.CampaignStatus.closed:  # settlement may have closed it (empty pot)
+        reason = models.CloseReason.admin if user.role == Role.admin else models.CloseReason.manual
+        await service.close_campaign(db, campaign, reason, actor_id=user.id, client=client)
     return await _out(db, await _load(str(campaign.id), db), user)
 
 

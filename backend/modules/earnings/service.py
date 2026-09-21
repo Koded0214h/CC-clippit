@@ -1,0 +1,262 @@
+"""Turning verified views into money owed — settlement.
+
+The rules (plan §25 and the frontend's own copy), all enforced here:
+
+- Only an **approved** submission on a **live** campaign earns.
+- Nothing is owed below the campaign's minimum views.
+- Billing is per **whole thousand** of *cumulative* views. Working from the
+  cumulative total (not per-poll deltas) is what keeps partial thousands from
+  being lost: 900 views on each of two polls is 1,800 — one thousand — not
+  zero twice. A thousand once billed is never billed again, and a reading that
+  drops (platforms revise counts down) never claws money back.
+- A creator can earn at most the campaign's creator cap across all their clips.
+- **A campaign can never pay out more than it holds.** The pot is a hard
+  ceiling checked under a row lock on the campaign, so two simultaneous
+  settlements cannot both spend the last of it.
+- Content Intelligence flags as untrustworthy is not paid until that clears.
+- Every accrual is held for `earnings_hold_days` before it can be withdrawn.
+
+Settling is idempotent: entries carry a unique reference
+`<submission>:<thousands billed after this entry>`, so a retry, a duplicate
+job or a double click can never pay the same thousand twice.
+
+This divergence from decision D18 is deliberate: Intelligence offers
+`billable_views` relative to a caller-supplied snapshot. We bill from the
+cumulative `metrics.views` plus the snapshot id it came from (kept on every
+entry for audit). It gives the same answer, needs no extra state, and
+sidesteps the partial-thousand rounding a per-delta scheme has to work around.
+"""
+
+from __future__ import annotations
+
+import logging
+import uuid
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from decimal import ROUND_FLOOR, Decimal
+
+import httpx
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from core.config import get_settings
+from core.money import ZERO, to_decimal, whole_thousands
+from modules.audit import service as audit
+from modules.campaigns import models as campaign_models
+from modules.campaigns import service as campaign_service
+from modules.submissions.models import Submission, SubmissionStatus, VerificationStatus
+
+from . import models
+
+logger = logging.getLogger("clippit.earnings")
+
+
+class IntelligenceUnavailable(RuntimeError):
+    """Performance or trust couldn't be read. Nothing is settled this tick."""
+
+
+@dataclass
+class Settlement:
+    status: str  # accrued | skipped
+    reason: str | None = None
+    amount: Decimal = ZERO
+    thousands: int = 0
+
+
+def _skip(reason: str) -> Settlement:
+    return Settlement(status="skipped", reason=reason)
+
+
+async def _performance(client: httpx.AsyncClient, submission_id: uuid.UUID) -> tuple[int, uuid.UUID | None] | None:
+    try:
+        resp = await client.get(f"/internal/submissions/{submission_id}/performance")
+    except httpx.HTTPError as exc:
+        raise IntelligenceUnavailable(str(exc)) from exc
+    if resp.status_code == 404:
+        return None
+    if resp.status_code >= 400:
+        raise IntelligenceUnavailable(f"performance returned {resp.status_code}")
+    data = resp.json()
+    views = (data.get("metrics") or {}).get("views")
+    if views is None:
+        return None
+    snapshot = (data.get("provenance") or {}).get("snapshot_id")
+    return int(views), (uuid.UUID(snapshot) if snapshot else None)
+
+
+async def _trust_status(client: httpx.AsyncClient, submission_id: uuid.UUID) -> str:
+    try:
+        resp = await client.get(f"/internal/submissions/{submission_id}/trust")
+    except httpx.HTTPError as exc:
+        raise IntelligenceUnavailable(str(exc)) from exc
+    if resp.status_code == 404:
+        return "insufficient_data"
+    if resp.status_code >= 400:
+        raise IntelligenceUnavailable(f"trust returned {resp.status_code}")
+    return str(resp.json().get("status", "insufficient_data"))
+
+
+async def settle_submission(
+    db: AsyncSession, submission_id: uuid.UUID, client: httpx.AsyncClient, *, at: datetime | None = None
+) -> Settlement:
+    """Reads the current views and books whatever whole thousands are newly
+    owed. The caller commits."""
+    at = at or campaign_service.now()
+    submission = await db.get(Submission, submission_id)
+    if (
+        submission is None
+        or submission.status != SubmissionStatus.submitted
+        or submission.verification_status != VerificationStatus.approved
+    ):
+        return _skip("not_approved")
+
+    # The campaign row lock serialises every settlement in this campaign, so
+    # the pot check below cannot race another submission's.
+    campaign = await db.scalar(
+        select(campaign_models.Campaign)
+        .options(selectinload(campaign_models.Campaign.payout_rule))
+        .where(campaign_models.Campaign.id == submission.campaign_id)
+        .with_for_update()
+    )
+    if campaign is None or campaign.payout_rule is None:
+        return _skip("no_rule")
+    if campaign.status != campaign_models.CampaignStatus.active:
+        return _skip("campaign_not_live")
+
+    observed = await _performance(client, submission_id)
+    if observed is None:
+        return _skip("no_observations")
+    views, snapshot_id = observed
+
+    account = await db.scalar(select(models.EarningAccount).where(models.EarningAccount.submission_id == submission_id))
+    if account is None:
+        account = models.EarningAccount(
+            submission_id=submission_id, campaign_id=campaign.id, creator_id=submission.creator_id,
+            cumulative_views=0, billed_thousands=0, accrued_amount=ZERO,
+        )
+        db.add(account)
+        await db.flush()
+
+    trust = await _trust_status(client, submission_id)
+    if trust == "flagged":
+        if account.blocked_reason != "trust_flagged":
+            audit.record(db, "earnings.blocked", submission_id=submission_id, campaign_id=campaign.id, reason="trust_flagged")
+        account.blocked_reason = "trust_flagged"
+        account.cumulative_views = max(account.cumulative_views, views)  # keep the reading; pay nothing
+        account.last_settled_at = at
+        return _skip("trust_flagged")
+    if account.blocked_reason == "trust_flagged":
+        account.blocked_reason = None
+        audit.record(db, "earnings.unblocked", submission_id=submission_id, campaign_id=campaign.id)
+
+    previous_views = int(account.cumulative_views)
+    effective = max(views, previous_views)  # a downward revision never claws money back
+    account.cumulative_views = effective
+    account.last_settled_at = at
+
+    rule = campaign.payout_rule
+    if effective < rule.min_views_threshold:
+        return _skip("below_minimum")
+    new_thousands = whole_thousands(effective) - account.billed_thousands
+    if new_thousands <= 0:
+        return _skip("no_new_thousand")
+
+    rate = to_decimal(rule.rate_per_1000_views)
+    if rate <= 0:
+        return _skip("no_rate")
+
+    # Creator cap: whole thousands only, so a cap that isn't a multiple of the
+    # rate stops at the last thousand that fits.
+    if rule.cap_amount is not None:
+        earned_by_creator = to_decimal(
+            await db.scalar(
+                select(func.coalesce(func.sum(models.EarningEntry.amount), 0)).where(
+                    models.EarningEntry.campaign_id == campaign.id,
+                    models.EarningEntry.creator_id == submission.creator_id,
+                )
+            )
+        )
+        room = to_decimal(rule.cap_amount) - earned_by_creator
+        if room < rate:
+            account.blocked_reason = "creator_cap_reached"
+            return _skip("creator_cap_reached")
+        new_thousands = min(new_thousands, int((room / rate).to_integral_value(rounding=ROUND_FLOOR)))
+
+    # The pot is a hard ceiling.
+    spent = to_decimal(
+        await db.scalar(
+            select(func.coalesce(func.sum(models.EarningEntry.amount), 0)).where(
+                models.EarningEntry.campaign_id == campaign.id
+            )
+        )
+    )
+    affordable = int(((campaign.pot_amount - spent) / rate).to_integral_value(rounding=ROUND_FLOOR))
+    if affordable < 1:
+        account.blocked_reason = "pot_exhausted"
+        await campaign_service.close_campaign(db, campaign, campaign_models.CloseReason.pot_empty, actor_id=None, client=client)
+        return _skip("pot_exhausted")
+    if new_thousands > affordable:
+        new_thousands = affordable
+        account.blocked_reason = "pot_exhausted"
+
+    amount = rate * new_thousands
+    entry = models.EarningEntry(
+        submission_id=submission_id,
+        campaign_id=campaign.id,
+        creator_id=submission.creator_id,
+        amount=amount,
+        billable_views=max(effective - previous_views, 0),
+        views_total=effective,
+        thousands=new_thousands,
+        snapshot_id=snapshot_id,
+        reference=f"{submission_id}:{account.billed_thousands + new_thousands}",
+        accrued_at=at,
+        payable_at=at + timedelta(days=get_settings().earnings_hold_days),
+    )
+    try:
+        async with db.begin_nested():
+            db.add(entry)
+            await db.flush()
+    except IntegrityError:
+        # The same thousand was already booked by a concurrent settlement.
+        return _skip("already_booked")
+
+    account.billed_thousands += new_thousands
+    account.accrued_amount = to_decimal(account.accrued_amount) + amount
+    account.last_snapshot_id = snapshot_id
+    if account.blocked_reason == "creator_cap_reached":
+        account.blocked_reason = None
+    audit.record(
+        db, "earnings.accrued", submission_id=submission_id, campaign_id=campaign.id, subject_id=submission.creator_id,
+        amount=amount, thousands=new_thousands, views=effective, snapshot=str(snapshot_id) if snapshot_id else None,
+    )
+
+    if campaign.pot_amount - spent - amount < rate:
+        # Not even one more thousand is affordable: the campaign is done.
+        await campaign_service.close_campaign(db, campaign, campaign_models.CloseReason.pot_empty, actor_id=None, client=client)
+    return Settlement(status="accrued", amount=amount, thousands=new_thousands)
+
+
+async def settle_campaign(db: AsyncSession, campaign_id: uuid.UUID, client: httpx.AsyncClient) -> int:
+    """Settles every approved submission in a campaign — used to book the
+    final views just before a campaign closes. Returns how many accrued."""
+    ids = list(
+        await db.scalars(
+            select(Submission.id).where(
+                Submission.campaign_id == campaign_id,
+                Submission.status == SubmissionStatus.submitted,
+                Submission.verification_status == VerificationStatus.approved,
+            )
+        )
+    )
+    accrued = 0
+    for submission_id in ids:
+        try:
+            result = await settle_submission(db, submission_id, client)
+        except IntelligenceUnavailable:
+            continue
+        await db.commit()
+        accrued += result.status == "accrued"
+    return accrued

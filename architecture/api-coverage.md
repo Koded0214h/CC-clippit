@@ -1,6 +1,7 @@
 # API coverage — what the screens need vs what the backend serves
 
-Snapshot of 2026-09-21. Method: every route under `frontend/app/` and the
+Snapshot of 2026-09-21 — **built**: 84 API paths, ~390 tests, and every row
+below marked 🆕/🔒/⚠️ now has its endpoint. Method: every route under `frontend/app/` and the
 components behind it were read for the data they show and the actions they
 take; each need was matched to a backend route. The frontend currently runs
 on hard-coded fixtures (`lib/product.ts`, `lib/brand.ts`, component state and
@@ -26,7 +27,7 @@ real provider is chosen)
 
 | Screen | Needs | Status |
 |---|---|---|
-| Home | featured/closing campaign, earnings summary | ⚠️ campaign fields extended; 🆕 `GET /earnings/summary` |
+| Home | featured/closing campaign, new matches, earnings summary | 🆕 `GET /creators/me/overview` (also `GET /earnings/summary`) |
 | Campaign feed | search, category/status filters, "Joined", time left, pot remaining, brand name, cover | ⚠️ `GET /campaigns` gains `q`, `category`, `platform`, `feed` filters and card fields |
 | Campaign detail | brief, must-do / must-avoid, min views, creator cap, platforms | ⚠️ campaign gains brief rules; 🆕 `GET/PUT /campaigns/{id}/rules`; ids accept slug |
 | Connected accounts | list with handle, connect/disconnect, last checked | ⚠️ social accounts gain `handle`, `display_name`, `last_checked_at` |
@@ -62,9 +63,9 @@ real provider is chosen)
 
 | Need | Status |
 |---|---|
-| Earnings settlement (D18: bill from Intelligence, hold 5 days, min views, partial thousands never billed, creator cap, pot cap) | 🆕 `modules/earnings` + `POST /admin/earnings/settle` + background tick |
-| Ledger for funding, accrual and payout | 🆕 `ledger_entries` |
-| Payout reconciliation + retry / override | 🔒 `POST /admin/payouts/{id}/retry`, `/override`, provider webhook |
+| Earnings settlement (hold 5 days, min views, partial thousands never billed, creator cap, pot cap, trust flags). D18 implemented from cumulative views rather than `billable_views` — see the register | 🆕 `modules/earnings` + `POST /admin/earnings/settle` + background tick |
+| Audit of money and trust actions; balances derived from the domain tables (funding orders, earning entries, payouts + allocations), never a running total | 🆕 `audit_events`, `GET /admin/audit` |
+| Payout reconciliation, retry and force-fail | 🔒 `payouts.reconcile` job, `POST /admin/payouts/{id}/retry`, `/fail`, provider webhook |
 | Stop tracking on withdraw / close (D17, now exposed by Intelligence) | 🆕 wired |
 | Admin ops (queues, payouts, funding, appeals) | 🆕 `GET /admin/…` minimal set |
 
@@ -83,3 +84,19 @@ real provider is chosen)
    the full amount reaches escrow"). Previously `activate` skipped it.
 4. **Partial thousands** are handled on cumulative views (not per-poll
    deltas), so 900 views a poll never rounds to zero forever.
+
+## Still open after this pass (not endpoints)
+
+- **The frontend is still on fixtures.** Nothing in `frontend/` calls this API
+  yet; it needs a client layer and real auth/session handling.
+- **YouTube cannot be connected** — no sign-in provider exists, so
+  `GET /creators/me/accounts` reports `connectable: false` for it. A brand can
+  still list YouTube on a campaign, but no creator can qualify.
+- **No real money.** Funding and payouts run against the sandbox provider
+  until D23 is decided and an adapter is written.
+- **Every clip needs a human.** Brief verification (D11) has no owner; the
+  review-queue UX is the interim verifier.
+- **Uploaded video has no thumbnail**, so review cards show the video URL with
+  no poster.
+- D18 and D22 were implemented by Core and need Adam's acknowledgement
+  (recorded in `intelligence-contracts.md`).

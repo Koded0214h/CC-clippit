@@ -12,3 +12,5 @@ mistake that could point a test run at a real database.
 import os
 
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite://")
+# Password hashing at production cost would dominate the suite's runtime.
+os.environ.setdefault("BCRYPT_ROUNDS", "4")

@@ -71,3 +71,6 @@ class EarningEntry(Base):
     reference: Mapped[str] = mapped_column(String(80), nullable=False, unique=True)
     accrued_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
     payable_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    #: Set once the creator has been told this became withdrawable, so the
+    #: "Earnings become payable" notice is sent once per entry, never twice.
+    payable_notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

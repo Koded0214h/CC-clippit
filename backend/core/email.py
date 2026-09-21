@@ -39,7 +39,9 @@ class ConsoleEmailSender:
 
     async def send(self, message: EmailMessage) -> None:
         self.outbox.append(message)
-        logger.info("email to=%s subject=%r\n%s", message.to, message.subject, message.text)
+        # Printed, not just logged: the stock logging config drops INFO, and
+        # in development this line *is* the inbox (it carries the code).
+        print(f"\n[email] to={message.to} subject={message.subject!r}\n{message.text}\n", flush=True)
 
     def last_to(self, address: str) -> EmailMessage | None:
         for message in reversed(self.outbox):

@@ -1,7 +1,7 @@
-"""Creator submits a link against an active campaign. This module owns the
-submission's own lifecycle only — performance and trust are never copied
-onto it, they're read live from Intelligence's internal API every time,
-via `core.internal_client` (an in-process ASGI call that exercises the
+"""Creator submits a link against a live campaign. This module owns the
+submission's own lifecycle and its brief verdict — performance and trust are
+never copied onto it, they're read live from Intelligence's internal API every
+time, via `core.internal_client` (an in-process ASGI call that exercises the
 real `/internal/*` contract, X-Internal-Secret included, so nothing here
 changes the day that module becomes a separate deployable).
 """
@@ -10,18 +10,23 @@ import uuid
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.deps import get_db
 from core.internal_client import get_internal_client
-from modules.auth.deps import get_current_user
+from core.money import ZERO, to_decimal
+from modules.audit import service as audit
+from modules.auth.deps import get_current_user, get_verified_user
 from modules.auth.models import Platform as AuthPlatform
 from modules.auth.models import Role, SocialAccount, User
+from modules.campaigns import service as campaign_service
 from modules.campaigns.models import Campaign, CampaignStatus
+from modules.earnings.models import EarningAccount, EarningEntry
 from modules.intelligence.contracts import PerformanceResult, SubmissionRef
+from modules.uploads.router import owned_upload
 
-from . import models, schemas
+from . import models, schemas, service
 
 router = APIRouter(prefix="/submissions", tags=["submissions"])
 
@@ -48,22 +53,31 @@ async def _get_visible_submission(submission_id: uuid.UUID, user: User, db: Asyn
     raise not_found
 
 
+async def _one(db: AsyncSession, submission: models.Submission) -> schemas.SubmissionOut:
+    return (await service.shape(db, [submission]))[0]
+
+
 @router.post("", response_model=schemas.SubmissionOut, status_code=status.HTTP_201_CREATED)
 async def create_submission(
     payload: schemas.SubmissionCreate,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_verified_user),
     db: AsyncSession = Depends(get_db),
     client: httpx.AsyncClient = Depends(get_internal_client),
 ):
     if user.role != Role.creator:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only a creator account can submit content")
 
-    campaign = await db.get(Campaign, payload.campaign_id)
+    campaign = await campaign_service.resolve(db, str(payload.campaign_id))
     if not campaign or campaign.status != CampaignStatus.active:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Campaign not found or not accepting submissions")
+    if not campaign_service.is_open_for_entries(campaign):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={"code": "campaign_not_accepting", "message": "This campaign isn't taking new clips right now."},
+        )
     if payload.platform.value not in campaign.platforms:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            422,
             f"This campaign doesn't accept {payload.platform.value} submissions",
         )
 
@@ -81,12 +95,16 @@ async def create_submission(
             status.HTTP_409_CONFLICT,
             f"Connect your {payload.platform.value} account from your profile before submitting",
         )
+    if payload.video_upload_id:
+        await owned_upload(db, payload.video_upload_id, user.id, kinds=("video",))
 
     submission = models.Submission(
         campaign_id=campaign.id,
         creator_id=user.id,
         platform=payload.platform.value,
         url=payload.url,
+        title=payload.title,
+        video_upload_id=payload.video_upload_id,
     )
     db.add(submission)
     await db.flush()  # assigns submission.id (client-side default) before we reference it below
@@ -113,17 +131,26 @@ async def create_submission(
         submission.status = models.SubmissionStatus.rejected
         submission.rejection_code = code
         submission.rejection_message = message
+        submission.verification_status = models.VerificationStatus.rejected
+        submission.verification_summary = message
+        audit.record(
+            db, "submission.link_rejected", actor_id=user.id, submission_id=submission.id,
+            campaign_id=campaign.id, code=code,
+        )
         await db.commit()
         raise HTTPException(resp.status_code, detail)
 
+    audit.record(db, "submission.created", actor_id=user.id, submission_id=submission.id, campaign_id=campaign.id)
+    await service.run_verification(db, submission, campaign)
     await db.commit()
     await db.refresh(submission)
-    return submission
+    return await _one(db, submission)
 
 
 @router.get("", response_model=list[schemas.SubmissionOut])
 async def list_submissions(
     campaign_id: uuid.UUID | None = None,
+    verification: models.VerificationStatus | None = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -138,8 +165,10 @@ async def list_submissions(
         )
     if campaign_id:
         query = query.where(models.Submission.campaign_id == campaign_id)
+    if verification:
+        query = query.where(models.Submission.verification_status == verification)
     query = query.order_by(models.Submission.created_at.desc())
-    return list(await db.scalars(query))
+    return await service.shape(db, list(await db.scalars(query)))
 
 
 @router.get("/{submission_id}", response_model=schemas.SubmissionOut)
@@ -148,7 +177,7 @@ async def get_submission(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    return await _get_visible_submission(submission_id, user, db)
+    return await _one(db, await _get_visible_submission(submission_id, user, db))
 
 
 @router.post("/{submission_id}/withdraw", response_model=schemas.SubmissionOut)
@@ -158,7 +187,8 @@ async def withdraw_submission(
     db: AsyncSession = Depends(get_db),
     client: httpx.AsyncClient = Depends(get_internal_client),
 ):
-    """Withdraw locally and tell Intelligence to stop polling (D17)."""
+    """Withdraw locally and tell Intelligence to stop polling (D17). What the
+    clip already earned stays payable; nothing more accrues."""
     submission = await _get_visible_submission(submission_id, user, db)
     if user.role == Role.creator and submission.creator_id != user.id:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Not your submission")
@@ -168,6 +198,7 @@ async def withdraw_submission(
         raise HTTPException(status.HTTP_409_CONFLICT, f"Submission is already {submission.status.value}")
 
     submission.status = models.SubmissionStatus.withdrawn
+    audit.record(db, "submission.withdrawn", actor_id=user.id, submission_id=submission.id, campaign_id=submission.campaign_id)
     await db.commit()
     try:
         await client.post(f"/internal/submissions/{submission_id}/tracking/stop")
@@ -175,7 +206,63 @@ async def withdraw_submission(
         # The row is withdrawn either way; the 30-day cap is the backstop
         # if this call misses.
         pass
-    return submission
+    return await _one(db, submission)
+
+
+@router.post("/{submission_id}/appeal", response_model=schemas.SubmissionOut, status_code=status.HTTP_201_CREATED)
+async def appeal_verdict(
+    submission_id: uuid.UUID,
+    payload: schemas.AppealCreate,
+    user: User = Depends(get_verified_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """"Request review": the creator explains what the check missed and can
+    attach evidence. One appeal per verdict; the original verdict is kept."""
+    submission = await _get_visible_submission(submission_id, user, db)
+    if user.role != Role.creator:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the creator can appeal")
+    if payload.evidence_upload_id:
+        await owned_upload(db, payload.evidence_upload_id, user.id, kinds=("evidence", "image", "video"))
+    campaign = await campaign_service.resolve(db, str(submission.campaign_id))
+    try:
+        await service.submit_appeal(
+            db, submission, campaign, user, reason=payload.reason, evidence_upload_id=payload.evidence_upload_id
+        )
+    except service.TransitionError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, exc.message) from exc
+    await db.commit()
+    return await _one(db, submission)
+
+
+@router.get("/{submission_id}/earnings", response_model=schemas.SubmissionEarningsOut)
+async def submission_earnings(
+    submission_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Accrued so far, and when the next amount becomes payable."""
+    await _get_visible_submission(submission_id, user, db)
+    at = campaign_service.now()
+    account = await db.get(EarningAccount, submission_id)
+    payable_now = to_decimal(
+        await db.scalar(
+            select(func.coalesce(func.sum(EarningEntry.amount), 0)).where(
+                EarningEntry.submission_id == submission_id, EarningEntry.payable_at <= at
+            )
+        )
+    )
+    next_payable = await db.scalar(
+        select(func.min(EarningEntry.payable_at)).where(
+            EarningEntry.submission_id == submission_id, EarningEntry.payable_at > at
+        )
+    )
+    return schemas.SubmissionEarningsOut(
+        submission_id=submission_id,
+        verified_views=int(account.cumulative_views) if account else 0,
+        accrued=to_decimal(account.accrued_amount) if account else ZERO,
+        next_payable_at=next_payable,
+        payable_now=payable_now,
+    )
 
 
 @router.get("/{submission_id}/performance", response_model=PerformanceResult)

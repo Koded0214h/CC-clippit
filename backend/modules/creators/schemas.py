@@ -3,7 +3,10 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from core.money import Money
 from core.platforms import Platform
+from modules.campaigns.schemas import CampaignOut
+from modules.earnings.schemas import EarningsSummary
 
 
 class BankAccountIn(BaseModel):
@@ -118,3 +121,49 @@ class CreatorProfileOut(BaseModel):
     goals: list[str]
     onboarding_completed: bool
     updated_at: datetime
+
+
+class ClipRow(BaseModel):
+    id: uuid.UUID
+    title: str | None
+    platform: str
+    campaign_slug: str
+    campaign_title: str
+    brand: str | None
+    #: approved | checking | needs_attention | appealed | withdrawn
+    status: str
+    label: str
+    verified_views: int
+    earned: Money
+    #: The frontend page that shows this clip's verdict.
+    link: str
+    submitted_at: datetime
+
+
+class ClipsOut(BaseModel):
+    active_clips: int
+    verified_views: int
+    total_earned: Money
+    items: list[ClipRow]
+
+
+class ConnectedAccountOut(BaseModel):
+    platform: Platform
+    #: Clippit can start a connection for this platform. False for a
+    #: platform whose sign-in flow isn't built yet (YouTube).
+    connectable: bool
+    connected: bool
+    handle: str | None
+    display_name: str | None
+    connected_at: datetime | None
+    last_checked_at: datetime | None
+
+
+class CreatorOverview(BaseModel):
+    """The dashboard home in one call."""
+
+    closing_soon: CampaignOut | None
+    #: Live campaigns created in the last 7 days that match the creator's
+    #: content lanes and that they haven't joined.
+    new_matches: int
+    earnings: EarningsSummary
