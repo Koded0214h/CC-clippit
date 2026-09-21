@@ -8,12 +8,16 @@ from core.database import Base
 
 # Every module's models must be imported here so autogenerate can see them —
 # add the import when a new module (campaigns, payouts, ...) lands.
+import modules.audit.models  # noqa: E402,F401
 import modules.auth.models  # noqa: E402,F401
 import modules.campaigns.models  # noqa: E402,F401
 import modules.creators.models  # noqa: E402,F401
+import modules.earnings.models  # noqa: E402,F401
+import modules.funding.models  # noqa: E402,F401
 import modules.intelligence.models  # noqa: E402,F401
 import modules.notifications.models  # noqa: E402,F401
 import modules.organisations.models  # noqa: E402,F401
+import modules.payouts.models  # noqa: E402,F401
 import modules.submissions.models  # noqa: E402,F401
 import modules.uploads.models  # noqa: E402,F401
 

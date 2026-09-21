@@ -21,9 +21,14 @@ async def test_organisation_creates_and_activates_a_campaign(api):
     assert created.status_code == 201, created.text
     campaign_id = created.json()["id"]
 
-    activated = await api.post(f"/campaigns/{campaign_id}/activate", headers=_auth(org))
-    assert activated.status_code == 200
-    assert activated.json()["status"] == "active"
+    # An unfunded campaign cannot be opened, however it is asked.
+    assert (await api.post(f"/campaigns/{campaign_id}/activate", headers=_auth(org))).status_code == 409
+
+    from tests.http_app import fund_campaign
+
+    await fund_campaign(api, org, campaign_id)
+    live = await api.get(f"/campaigns/{campaign_id}", headers=_auth(org))
+    assert live.json()["status"] == "active"
 
     listed = await api.get("/campaigns", headers=_auth(org))
     assert listed.status_code == 200

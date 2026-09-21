@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from fastapi import FastAPI
 
 from .config import get_settings
+from .startup import assert_safe_to_start
 
 logger = logging.getLogger("clippit.jobs")
 
@@ -60,6 +61,7 @@ async def _loop(job: Job) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    assert_safe_to_start()
     tasks: list[asyncio.Task] = []
     if get_settings().background_jobs_enabled:
         for job in _JOBS:

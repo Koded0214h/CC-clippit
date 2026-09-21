@@ -9,6 +9,10 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    # `production` turns on the refusals in core.startup (no sandbox payment
+    # provider, no default secrets). Anything else is treated as development.
+    environment: str = "development"
+
     # Async (asyncpg) URL used by the running app: postgresql+asyncpg://...
     database_url: str = "postgresql+asyncpg://clippit:clippit@localhost:5432/clippit"
     jwt_secret: str = "dev-only-not-secret"

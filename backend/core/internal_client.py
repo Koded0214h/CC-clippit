@@ -11,6 +11,7 @@ this module would have to honor if Intelligence (or anything else behind
 """
 
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import Request
@@ -18,13 +19,20 @@ from fastapi import Request
 from .config import get_settings
 
 
-async def get_internal_client(request: Request) -> AsyncIterator[httpx.AsyncClient]:
+@asynccontextmanager
+async def internal_client_for(app) -> AsyncIterator[httpx.AsyncClient]:
+    """The same client, for code that runs outside a request (a scheduled
+    job has no `request.app` — it asks the running app directly)."""
     settings = get_settings()
-    transport = httpx.ASGITransport(app=request.app)
     async with httpx.AsyncClient(
-        transport=transport,
+        transport=httpx.ASGITransport(app=app),
         base_url="http://internal",
         headers={"X-Internal-Secret": settings.internal_service_secret},
         timeout=30.0,
     ) as client:
+        yield client
+
+
+async def get_internal_client(request: Request) -> AsyncIterator[httpx.AsyncClient]:
+    async with internal_client_for(request.app) as client:
         yield client

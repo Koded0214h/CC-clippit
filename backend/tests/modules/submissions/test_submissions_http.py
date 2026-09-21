@@ -19,7 +19,9 @@ async def _active_campaign(api) -> tuple[dict, str]:
         },
     )
     campaign_id = created.json()["id"]
-    await api.post(f"/campaigns/{campaign_id}/activate", headers=_auth(org))
+    from tests.http_app import fund_campaign
+
+    await fund_campaign(api, org, campaign_id)
     return org, campaign_id
 
 

@@ -1,0 +1,386 @@
+"""Campaign logic that more than one route (or a scheduled job) needs.
+
+Everything that turns rows into the shapes the screens show lives here, in
+batch form: a list of 30 campaigns costs a handful of queries, not 30 × N.
+"""
+
+from __future__ import annotations
+
+import re
+import secrets
+import uuid
+from collections import defaultdict
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
+
+import httpx
+from fastapi import HTTPException, status
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from core.money import ZERO, quantize, to_decimal
+from modules.audit import service as audit
+from modules.auth.models import Role, User
+from modules.earnings.models import EarningAccount, EarningEntry
+from modules.organisations.models import OrganisationProfile
+from modules.submissions.models import Submission, SubmissionStatus, VerificationStatus
+from modules.uploads.models import Upload
+from core.storage import get_storage
+
+from . import models, schemas
+
+CLOSING_SOON = timedelta(hours=72)
+
+PHASE = {
+    models.CampaignStatus.draft: "Draft",
+    models.CampaignStatus.pending_funding: "Funding",
+    models.CampaignStatus.active: "Live",
+    models.CampaignStatus.closed: "Completed",
+}
+
+
+def now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+# --- identifiers ------------------------------------------------------------
+
+
+def slugify(text: str) -> str:
+    text = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+    return text[:60].strip("-") or "campaign"
+
+
+async def unique_slug(db: AsyncSession, title: str) -> str:
+    base = slugify(title)
+    candidate = base
+    while await db.scalar(select(models.Campaign.id).where(models.Campaign.slug == candidate)):
+        candidate = f"{base}-{secrets.token_hex(2)}"
+    return candidate
+
+
+async def resolve(db: AsyncSession, ref: str) -> models.Campaign | None:
+    """A campaign by UUID or by slug — the frontend routes on slugs, every
+    other caller has ids."""
+    try:
+        key = models.Campaign.id == uuid.UUID(ref)
+    except ValueError:
+        key = models.Campaign.slug == ref
+    from sqlalchemy.orm import selectinload
+
+    return await db.scalar(
+        select(models.Campaign)
+        .options(selectinload(models.Campaign.payout_rule), selectinload(models.Campaign.rules))
+        .where(key)
+    )
+
+
+# --- the budget identity -----------------------------------------------------
+
+
+def derive_budget(*, pot: float | None, expected_views: int | None, rate: float) -> tuple[Decimal, int]:
+    """(pot, expected_views) from whichever the brand supplied.
+
+    A pot of ₦500,000 at ₦500 per 1,000 views is 1,000,000 views. Partial
+    thousands are never billed, so views are floored, never rounded up.
+    """
+    rate_d = to_decimal(rate)
+    if pot is not None:
+        pot_d = quantize(to_decimal(pot))
+        views = int((pot_d / rate_d * 1000).to_integral_value(rounding="ROUND_FLOOR"))
+        if views < 1:
+            raise ValueError("That pot is too small to buy even one view at this rate.")
+        return pot_d, views
+    assert expected_views is not None
+    return quantize(to_decimal(expected_views) / 1000 * rate_d), expected_views
+
+
+# --- batch aggregates ---------------------------------------------------------
+
+
+async def spent_by_campaign(db: AsyncSession, ids: list[uuid.UUID]) -> dict[uuid.UUID, Decimal]:
+    if not ids:
+        return {}
+    rows = await db.execute(
+        select(EarningEntry.campaign_id, func.coalesce(func.sum(EarningEntry.amount), 0))
+        .where(EarningEntry.campaign_id.in_(ids))
+        .group_by(EarningEntry.campaign_id)
+    )
+    return {cid: to_decimal(total) for cid, total in rows}
+
+
+@dataclass
+class Counts:
+    submissions: int = 0
+    approved: int = 0
+    review: int = 0
+    checking: int = 0
+    rejected: int = 0
+
+
+async def counts_by_campaign(db: AsyncSession, ids: list[uuid.UUID]) -> dict[uuid.UUID, Counts]:
+    out: dict[uuid.UUID, Counts] = defaultdict(Counts)
+    if not ids:
+        return out
+    rows = await db.execute(
+        select(Submission.campaign_id, Submission.status, Submission.verification_status, func.count())
+        .where(Submission.campaign_id.in_(ids), Submission.status != SubmissionStatus.withdrawn)
+        .group_by(Submission.campaign_id, Submission.status, Submission.verification_status)
+    )
+    for cid, link_status, verdict, n in rows:
+        c = out[cid]
+        c.submissions += n
+        if link_status == SubmissionStatus.rejected or verdict == VerificationStatus.rejected:
+            c.rejected += n
+        elif verdict == VerificationStatus.approved:
+            c.approved += n
+        elif verdict in (VerificationStatus.needs_review, VerificationStatus.appealed):
+            c.review += n
+        else:
+            c.checking += n
+    return out
+
+
+async def views_by_campaign(db: AsyncSession, ids: list[uuid.UUID]) -> dict[uuid.UUID, int]:
+    if not ids:
+        return {}
+    rows = await db.execute(
+        select(EarningAccount.campaign_id, func.coalesce(func.sum(EarningAccount.cumulative_views), 0))
+        .where(EarningAccount.campaign_id.in_(ids))
+        .group_by(EarningAccount.campaign_id)
+    )
+    return {cid: int(total) for cid, total in rows}
+
+
+async def brands(db: AsyncSession, org_ids: set[uuid.UUID]) -> dict[uuid.UUID, schemas.BrandOut]:
+    if not org_ids:
+        return {}
+    storage = get_storage()
+    profiles = {
+        p.user_id: p
+        for p in await db.scalars(select(OrganisationProfile).where(OrganisationProfile.user_id.in_(org_ids)))
+    }
+    upload_ids = {p.photo_upload_id for p in profiles.values() if p.photo_upload_id}
+    keys = (
+        {u.id: u.key for u in await db.scalars(select(Upload).where(Upload.id.in_(upload_ids)))}
+        if upload_ids
+        else {}
+    )
+    users = {u.id: u for u in await db.scalars(select(User).where(User.id.in_(org_ids)))}
+    out: dict[uuid.UUID, schemas.BrandOut] = {}
+    for org_id in org_ids:
+        profile = profiles.get(org_id)
+        user = users.get(org_id)
+        out[org_id] = schemas.BrandOut(
+            id=org_id,
+            name=(profile.name if profile else (user.full_name if user else "Organisation")),
+            photo_url=storage.url_for(keys[profile.photo_upload_id]) if profile and profile.photo_upload_id in keys else None,
+            verified=bool(profile and profile.business_verified),
+        )
+    return out
+
+
+async def cover_urls(db: AsyncSession, campaigns: list[models.Campaign]) -> dict[uuid.UUID, str]:
+    ids = {c.cover_image_upload_id for c in campaigns if c.cover_image_upload_id}
+    if not ids:
+        return {}
+    storage = get_storage()
+    return {u.id: storage.url_for(u.key) for u in await db.scalars(select(Upload).where(Upload.id.in_(ids)))}
+
+
+async def joined_campaigns(db: AsyncSession, creator_id: uuid.UUID, ids: list[uuid.UUID]) -> set[uuid.UUID]:
+    if not ids:
+        return set()
+    rows = await db.scalars(
+        select(Submission.campaign_id).where(
+            Submission.creator_id == creator_id,
+            Submission.campaign_id.in_(ids),
+            Submission.status != SubmissionStatus.withdrawn,
+        )
+    )
+    return set(rows)
+
+
+# --- shaping -----------------------------------------------------------------
+
+
+def time_left(ends_at: datetime | None, at: datetime | None = None) -> schemas.TimeLeft | None:
+    if ends_at is None:
+        return None
+    remaining = ends_at - (at or now())
+    if remaining.total_seconds() <= 0:
+        return schemas.TimeLeft(days=0, hours=0, ended=True)
+    return schemas.TimeLeft(days=remaining.days, hours=remaining.seconds // 3600, ended=False)
+
+
+def feed_status(campaign: models.Campaign, joined: bool, at: datetime | None = None) -> str:
+    if joined:
+        return "Joined"
+    left = (campaign.ends_at - (at or now())) if campaign.ends_at else None
+    if left is not None and left <= CLOSING_SOON:
+        return "Closing soon"
+    return "Open"
+
+
+async def build_outs(
+    db: AsyncSession,
+    campaigns: list[models.Campaign],
+    viewer: User,
+) -> list[schemas.CampaignOut]:
+    """Full campaign cards for a list. Metrics are attached only for the
+    campaign's own organisation (and admin); a creator gets `feed_status`
+    and `joined` instead."""
+    ids = [c.id for c in campaigns]
+    spent = await spent_by_campaign(db, ids)
+    brand_map = await brands(db, {c.event_manager_id for c in campaigns})
+    covers = await cover_urls(db, campaigns)
+    joined = await joined_campaigns(db, viewer.id, ids) if viewer.role == Role.creator else set()
+
+    owned = [c.id for c in campaigns if viewer.role == Role.admin or c.event_manager_id == viewer.id]
+    counts = await counts_by_campaign(db, owned)
+    views = await views_by_campaign(db, owned)
+
+    at = now()
+    outs: list[schemas.CampaignOut] = []
+    for c in campaigns:
+        spent_c = spent.get(c.id, ZERO)
+        out = schemas.CampaignOut(
+            id=c.id,
+            slug=c.slug,
+            event_manager_id=c.event_manager_id,
+            brand=brand_map.get(c.event_manager_id),
+            title=c.title,
+            tagline=c.tagline,
+            description=c.description,
+            category=c.category,
+            source_link=c.source_link,
+            cover_image_url=covers.get(c.cover_image_upload_id) if c.cover_image_upload_id else None,
+            expected_views=c.expected_views,
+            platforms=c.platforms,
+            status=c.status,
+            phase=PHASE[c.status],
+            accepting_entries=c.accepting_entries,
+            duration_days=c.duration_days,
+            ends_at=c.ends_at,
+            time_left=time_left(c.ends_at, at) if c.status == models.CampaignStatus.active else None,
+            pot=c.pot_amount,
+            spent=spent_c,
+            remaining=max(c.pot_amount - spent_c, ZERO),
+            payout_rule=c.payout_rule,
+            rules=list(c.rules),
+            created_at=c.created_at,
+            updated_at=c.updated_at,
+        )
+        if viewer.role == Role.creator:
+            out.joined = c.id in joined
+            out.feed_status = feed_status(c, c.id in joined, at)
+        if c.id in owned:
+            n = counts.get(c.id, Counts())
+            out.metrics = schemas.CampaignMetrics(
+                verified_views=views.get(c.id, 0),
+                submissions=n.submissions,
+                approved=n.approved,
+                review=n.review,
+                checking=n.checking,
+                rejected=n.rejected,
+                earned=spent_c,
+            )
+        outs.append(out)
+    return outs
+
+
+# --- lifecycle ---------------------------------------------------------------
+
+
+async def stop_tracking(client: httpx.AsyncClient, submission_ids: list[uuid.UUID]) -> None:
+    """Tell Intelligence to stop polling (decision D17). Best effort: its own
+    age cap eventually stops an unreachable one, and money is unaffected."""
+    for submission_id in submission_ids:
+        try:
+            await client.post(f"/internal/submissions/{submission_id}/tracking/stop")
+        except httpx.HTTPError:
+            pass
+
+
+async def close_campaign(
+    db: AsyncSession,
+    campaign: models.Campaign,
+    reason: models.CloseReason,
+    *,
+    actor_id: uuid.UUID | None,
+    client: httpx.AsyncClient | None = None,
+) -> None:
+    """Closes the campaign and stops tracking its submissions. New entries
+    stop immediately; accruals already earned stay payable."""
+    if campaign.status == models.CampaignStatus.closed:
+        return
+    campaign.status = models.CampaignStatus.closed
+    campaign.closed_at = now()
+    campaign.close_reason = reason
+    campaign.accepting_entries = False
+    audit.record(db, "campaign.closed", actor_id=actor_id, campaign_id=campaign.id, reason=reason.value)
+    submission_ids = list(await db.scalars(select(Submission.id).where(Submission.campaign_id == campaign.id)))
+    await db.commit()
+    if client is not None:
+        await stop_tracking(client, submission_ids)
+
+
+async def close_due_campaigns(db: AsyncSession, client: httpx.AsyncClient | None = None) -> int:
+    """Closes campaigns past their deadline or with an empty pot. Idempotent —
+    a campaign already closed is skipped — and safe to run at any cadence."""
+    from sqlalchemy.orm import selectinload
+
+    active = list(
+        await db.scalars(
+            select(models.Campaign)
+            .options(selectinload(models.Campaign.payout_rule))
+            .where(models.Campaign.status == models.CampaignStatus.active)
+        )
+    )
+    spent = await spent_by_campaign(db, [c.id for c in active])
+    closed = 0
+    for c in active:
+        if c.ends_at is not None and c.ends_at <= now():
+            reason = models.CloseReason.deadline
+        elif c.pot_amount > 0 and spent.get(c.id, ZERO) >= c.pot_amount:
+            reason = models.CloseReason.pot_empty
+        else:
+            continue
+        await close_campaign(db, c, reason, actor_id=None, client=client)
+        closed += 1
+    return closed
+
+
+def is_open_for_entries(campaign: models.Campaign, at: datetime | None = None) -> bool:
+    if campaign.status != models.CampaignStatus.active or not campaign.accepting_entries:
+        return False
+    return campaign.ends_at is None or campaign.ends_at > (at or now())
+
+
+# --- access rules ------------------------------------------------------------
+
+
+def ensure_can_manage(campaign: models.Campaign, user: User) -> None:
+    if user.role == Role.admin:
+        return
+    if campaign.event_manager_id != user.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the campaign's owner or an admin can do this")
+
+
+def ensure_visible(campaign: models.Campaign, user: User) -> None:
+    """Drafts (and campaigns waiting on funding) are the brand's working
+    copy: visible only to its owner and admin, and a 404 — not a 403 — for
+    everyone else so their existence isn't confirmed."""
+    unlisted = campaign.status in (models.CampaignStatus.draft, models.CampaignStatus.pending_funding)
+    if unlisted and user.role != Role.admin and campaign.event_manager_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Campaign not found")
+
+
+def ensure_editable(campaign: models.Campaign, user: User) -> None:
+    """Terms change only before funding; admin may correct a live campaign."""
+    if campaign.status != models.CampaignStatus.draft and user.role != Role.admin:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Terms are locked once a campaign is sent for funding. Cancel the funding order to edit.",
+        )

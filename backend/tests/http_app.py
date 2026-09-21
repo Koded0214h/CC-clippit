@@ -18,12 +18,16 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from core.database import Base
 from core.deps import get_db
 
+import modules.audit.models  # noqa: F401
 import modules.auth.models  # noqa: F401
 import modules.campaigns.models  # noqa: F401
 import modules.creators.models  # noqa: F401
+import modules.earnings.models  # noqa: F401
+import modules.funding.models  # noqa: F401
 import modules.intelligence.models  # noqa: F401
 import modules.notifications.models  # noqa: F401
 import modules.organisations.models  # noqa: F401
+import modules.payouts.models  # noqa: F401
 import modules.submissions.models  # noqa: F401
 import modules.uploads.models  # noqa: F401
 
@@ -118,3 +122,58 @@ async def signup(client: httpx.AsyncClient, role: str = "creator", *, verify: bo
         v.raise_for_status()
         body["user"] = v.json()
     return email, body
+
+
+def auth(body: dict) -> dict:
+    return {"Authorization": f"Bearer {body['access_token']}"}
+
+
+def campaign_body(**overrides) -> dict:
+    body = {
+        "title": "Sprint campaign",
+        "description": "HTTP test",
+        "expected_views": 1000,
+        "platforms": ["tiktok"],
+        "payout_rule": {"rate_per_1000_views": 1.5, "min_views_threshold": 0},
+    }
+    body.update(overrides)
+    return body
+
+
+async def fund_campaign(client: httpx.AsyncClient, org: dict, campaign_id: str, method: str = "bank") -> dict:
+    """Pays for a campaign the way the brand would (order, then "I have
+    funded the pot"). The sandbox provider reports the money as received."""
+    order = await client.post(f"/campaigns/{campaign_id}/funding", headers=auth(org), json={"method": method})
+    order.raise_for_status()
+    confirmed = await client.post(f"/campaigns/{campaign_id}/funding/confirm", headers=auth(org))
+    confirmed.raise_for_status()
+    return confirmed.json()
+
+
+async def open_campaign(client: httpx.AsyncClient, org: dict, **overrides) -> dict:
+    """A live, funded campaign — create, fund, confirm — returned as the API
+    shows it."""
+    created = await client.post("/campaigns", headers=auth(org), json=campaign_body(**overrides))
+    created.raise_for_status()
+    campaign_id = created.json()["id"]
+    await fund_campaign(client, org, campaign_id)
+    fetched = await client.get(f"/campaigns/{campaign_id}", headers=auth(org))
+    fetched.raise_for_status()
+    return fetched.json()
+
+
+from contextlib import asynccontextmanager  # noqa: E402
+
+
+@asynccontextmanager
+async def db_session():
+    """A session on the test database, for arranging or inspecting state the
+    API deliberately doesn't expose (backdating a deadline, say)."""
+    from main import app
+
+    gen = app.dependency_overrides[get_db]()
+    session = await gen.__anext__()
+    try:
+        yield session
+    finally:
+        await gen.aclose()
