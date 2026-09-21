@@ -22,7 +22,7 @@ backend/
                                  /internal/* routes over the real ASGI contract)
   integrations/
     social/                  <- platform adapters (Adam)
-    payments/                <- PaymentProvider interface + deterministic sandbox (D23)
+    payments/                <- PaymentProvider interface, Paystack adapter, deterministic sandbox (D23)
   modules/
     auth/                    <- accounts, email verify/recovery, social OAuth (Koded)
     creators/                <- profile, onboarding, bank details, clips, accounts, home

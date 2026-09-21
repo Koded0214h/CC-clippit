@@ -54,8 +54,12 @@ class SandboxProvider:
     def __init__(self, webhook_secret: str | None = None) -> None:
         self._secret = webhook_secret if webhook_secret is not None else get_settings().payment_webhook_secret
 
-    async def create_collection(self, *, reference: str, amount: Decimal, description: str) -> CollectionAccount:
+    async def create_collection(
+        self, *, reference: str, amount: Decimal, description: str, email: str, method: str
+    ) -> CollectionAccount:
         digest = hashlib.sha256(reference.encode()).hexdigest()
+        if method == "card":
+            return CollectionAccount(provider_reference=f"SBX-{digest[:10].upper()}")
         number = str(int(digest[:12], 16))[:10].zfill(10)
         return CollectionAccount(
             bank_name="Sandbox Bank",

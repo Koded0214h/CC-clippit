@@ -70,6 +70,7 @@ def order_out(order: models.FundingOrder, campaign: campaign_models.Campaign, pr
         provider=order.provider,
         sandbox=provider.sandbox,
         provider_reference=order.provider_reference,
+        checkout_url=order.checkout_url,
         collection=collection,
         campaign_status=campaign.status.value,
         created_at=order.created_at,
@@ -111,15 +112,14 @@ async def create_order(
     while await db.scalar(select(models.FundingOrder.id).where(models.FundingOrder.reference == reference)):
         reference = new_reference()
 
-    account = None
-    if method == models.FundingMethod.bank:
-        brand = (await brands(db, {org.id})).get(org.id)
-        try:
-            account = await provider.create_collection(
-                reference=reference, amount=total, description=(brand.name if brand else org.full_name)
-            )
-        except ProviderError as exc:
-            raise FundingError("We couldn't set up payment right now. Try again in a moment.", 502) from exc
+    brand = (await brands(db, {org.id})).get(org.id)
+    try:
+        account = await provider.create_collection(
+            reference=reference, amount=total, description=(brand.name if brand else org.full_name),
+            email=org.email, method=method.value,
+        )
+    except ProviderError as exc:
+        raise FundingError("We couldn't set up payment right now. Try again in a moment.", 502) from exc
 
     order = models.FundingOrder(
         campaign_id=campaign.id,
@@ -130,10 +130,11 @@ async def create_order(
         fee_amount=fee,
         total_amount=total,
         provider=provider.name,
-        provider_reference=account.provider_reference if account else None,
-        collection_bank_name=account.bank_name if account else None,
-        collection_account_number=account.account_number if account else None,
-        collection_account_name=account.account_name if account else None,
+        provider_reference=account.provider_reference,
+        collection_bank_name=account.bank_name,
+        collection_account_number=account.account_number,
+        collection_account_name=account.account_name,
+        checkout_url=account.checkout_url,
     )
     db.add(order)
     campaign.status = campaign_models.CampaignStatus.pending_funding

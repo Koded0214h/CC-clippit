@@ -10,10 +10,14 @@ from .sandbox import SandboxProvider
 def get_provider() -> PaymentProvider:
     """The configured provider. Adding one means writing an adapter that
     satisfies `PaymentProvider` and registering it here — no caller changes."""
-    name = get_settings().payment_provider
+    settings = get_settings()
+    name = settings.payment_provider
     if name == "sandbox":
         return SandboxProvider()
-    raise RuntimeError(
-        f"PAYMENT_PROVIDER={name!r} has no adapter yet. Implement one behind "
-        "integrations.payments.base.PaymentProvider (plan §26 leaves the choice open)."
-    )
+    if name == "paystack":
+        if not settings.paystack_secret_key:
+            raise RuntimeError("PAYMENT_PROVIDER=paystack needs PAYSTACK_SECRET_KEY")
+        from .paystack import PaystackProvider
+
+        return PaystackProvider(settings.paystack_secret_key, settings.paystack_base_url)
+    raise RuntimeError(f"Unknown PAYMENT_PROVIDER {name!r} (expected 'sandbox' or 'paystack').")

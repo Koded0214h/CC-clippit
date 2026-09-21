@@ -23,7 +23,12 @@ def check(settings: Settings | None = None) -> list[str]:
     problems: list[str] = []
     if settings.payment_provider == "sandbox":
         problems.append("PAYMENT_PROVIDER=sandbox in production (no real money would move)")
-    for name in ("jwt_secret", "internal_service_secret", "payment_webhook_secret"):
+    if settings.payment_provider == "paystack" and not settings.paystack_secret_key.startswith("sk_live_"):
+        problems.append("PAYSTACK_SECRET_KEY is not a live key (sk_live_...) in production")
+    secrets_to_check = ["jwt_secret", "internal_service_secret"]
+    if settings.payment_provider == "sandbox":
+        secrets_to_check.append("payment_webhook_secret")  # Paystack signs with its own key
+    for name in secrets_to_check:
         if getattr(settings, name) in _DEFAULT_SECRETS:
             problems.append(f"{name.upper()} is a default value")
     if settings.email_backend == "console":

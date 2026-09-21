@@ -82,7 +82,11 @@ class Settings(BaseSettings):
     # `sandbox` is deterministic and never touches a network. A real
     # provider (Squad / Paystack / Payaza — plan §26, undecided) is an
     # adapter behind integrations.payments.PaymentProvider.
-    payment_provider: str = "sandbox"
+    payment_provider: str = "sandbox"  # sandbox | paystack
+    # Paystack: the secret key is also the webhook signing key. Use an
+    # sk_test_ key while developing; production requires sk_live_.
+    paystack_secret_key: str = ""
+    paystack_base_url: str = "https://api.paystack.co"
     payment_webhook_secret: str = "dev-only-not-secret"
     funding_fee_rate: float = 0.015
     earnings_hold_days: int = 5

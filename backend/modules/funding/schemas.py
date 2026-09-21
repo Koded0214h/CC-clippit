@@ -35,6 +35,8 @@ class FundingOrderOut(BaseModel):
     #: True when no real money is involved. The UI should say so.
     sandbox: bool
     provider_reference: str | None
+    #: Send the brand here to pay (bank transfer or card). Null for the sandbox.
+    checkout_url: str | None = None
     collection: CollectionOut | None
     campaign_status: str
     created_at: datetime

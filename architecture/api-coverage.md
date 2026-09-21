@@ -75,11 +75,12 @@ real provider is chosen)
    through a `Verifier` interface. The default verifier sends every
    submission to the brand's human review queue — nothing earns until a
    human approves. A rules/AI verifier plugs in behind the same interface.
-2. **Payment provider is undecided** (plan §26: Squad vs Paystack; the
-   frontend copy says Payaza). Everything money-moving sits behind
-   `PaymentProvider`. The default is `sandbox`: deterministic, no network,
-   and it says so in every response. No real transfer can happen until a real
-   provider adapter is written and `PAYMENT_PROVIDER` is set.
+2. **Payment provider: Paystack** (D23). Everything money-moving sits behind
+   `PaymentProvider`; `PAYMENT_PROVIDER=paystack` + `PAYSTACK_SECRET_KEY` turns
+   it on (brands pay through a hosted checkout, `checkout_url` on the funding
+   order; payouts are Paystack transfers). The default stays `sandbox`. The
+   adapter is unit-tested against a scripted Paystack but has never touched
+   the real API — try it in test mode first. Transfers need Paystack balance.
 3. **Activation now requires confirmed funding** ("the campaign opens after
    the full amount reaches escrow"). Previously `activate` skipped it.
 4. **Partial thousands** are handled on cumulative views (not per-poll
@@ -89,14 +90,11 @@ real provider is chosen)
 
 - **The frontend is still on fixtures.** Nothing in `frontend/` calls this API
   yet; it needs a client layer and real auth/session handling.
-- **YouTube cannot be connected** — no sign-in provider exists, so
-  `GET /creators/me/accounts` reports `connectable: false` for it. A brand can
-  still list YouTube on a campaign, but no creator can qualify.
-- **No real money.** Funding and payouts run against the sandbox provider
-  until D23 is decided and an adapter is written.
+- **Paystack is untested against the real API.** Run funding and a payout in
+  test mode before going live.
 - **Every clip needs a human.** Brief verification (D11) has no owner; the
   review-queue UX is the interim verifier.
 - **Uploaded video has no thumbnail**, so review cards show the video URL with
   no poster.
-- D18 and D22 were implemented by Core and need Adam's acknowledgement
-  (recorded in `intelligence-contracts.md`).
+- D18 and D22 were decided by Koded without Adam's input (recorded in
+  `intelligence-contracts.md`).

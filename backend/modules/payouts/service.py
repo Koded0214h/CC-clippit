@@ -231,7 +231,15 @@ async def apply_transfer_event(db: AsyncSession, event: WebhookEvent) -> bool:
     if payout is None:
         return False
     if payout.status not in (models.PayoutStatus.pending, models.PayoutStatus.processing):
-        return True  # already settled; acknowledged, nothing to do
+        if payout.status == models.PayoutStatus.succeeded and event.kind == WebhookKind.transfer_failed:
+            # A settled transfer that the provider now says bounced or was
+            # reversed. The money already left, so this is not something to
+            # auto-undo — it is something an admin must see.
+            audit.record(
+                db, "payout.reversed_after_success", subject_id=payout.creator_id, amount=payout.amount,
+                reference=payout.reference, reason=event.failure_reason,
+            )
+        return True  # already settled; acknowledged
     if event.provider_reference:
         payout.provider_reference = event.provider_reference
     if event.kind == WebhookKind.transfer_success:

@@ -58,5 +58,8 @@ class FundingOrder(Base):
     collection_bank_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     collection_account_number: Mapped[str | None] = mapped_column(String(20), nullable=True)
     collection_account_name: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    #: Hosted checkout page (Paystack): pays by bank transfer or card without
+    #: card details ever touching this API.
+    checkout_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

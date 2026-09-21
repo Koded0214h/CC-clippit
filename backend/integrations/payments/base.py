@@ -45,12 +45,16 @@ class Bank:
 
 @dataclass(frozen=True)
 class CollectionAccount:
-    """Where a brand sends the money to fund a campaign."""
+    """How a brand pays to fund a campaign: a bank account to transfer to, a
+    hosted checkout page, or both. A provider fills what it has — the
+    sandbox gives an account, Paystack gives a hosted checkout (which takes a
+    bank transfer *or* a card, so card details never reach this API)."""
 
-    bank_name: str
-    account_number: str
-    account_name: str
     provider_reference: str
+    bank_name: str | None = None
+    account_number: str | None = None
+    account_name: str | None = None
+    checkout_url: str | None = None
 
 
 @dataclass(frozen=True)
@@ -101,7 +105,11 @@ class PaymentProvider(Protocol):
     #: responses so nobody mistakes a sandbox transfer for a real one.
     sandbox: bool
 
-    async def create_collection(self, *, reference: str, amount: Decimal, description: str) -> CollectionAccount: ...
+    async def create_collection(
+        self, *, reference: str, amount: Decimal, description: str, email: str, method: str
+    ) -> CollectionAccount:
+        """`method` is `bank` or `card`; `email` is the payer's."""
+        ...
 
     async def check_collection(
         self, *, reference: str, provider_reference: str | None, expected_amount: Decimal
