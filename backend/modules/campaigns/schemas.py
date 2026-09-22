@@ -227,3 +227,26 @@ class BrandOverviewOut(BaseModel):
     #: Zero by construction — every accrual carries the snapshot it came from.
     unmatched_spend: Money
     featured: CampaignOut | None
+
+
+class MembershipOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    campaign_id: uuid.UUID
+    joined_at: datetime
+    left_at: datetime | None = None
+
+
+class MyCampaignRow(BaseModel):
+    """One row of `GET /creators/me/campaigns` — the campaign plus this
+    creator's own relationship to it, distinct from the campaign's own
+    status."""
+
+    campaign: CampaignOut
+    #: joined | submitted | active | completed | left — see the router.
+    membership_status: str
+    joined_at: datetime | None = None
+    left_at: datetime | None = None
+    submission_id: uuid.UUID | None = None
+    submission_status: str | None = None

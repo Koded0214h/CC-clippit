@@ -159,6 +159,34 @@ class ConnectedAccountOut(BaseModel):
     last_checked_at: datetime | None
 
 
+class OnboardingDraftPatch(BaseModel):
+    """Autosave: any subset of `CreatorOnboarding`'s fields, plus which
+    screen the person is on. `revision` is the value the client last read
+    from `GET`; a stale one means another tab moved faster and the client
+    should re-fetch rather than overwrite it."""
+
+    revision: int
+    step: str | None = Field(default=None, max_length=40)
+    display_name: str | None = Field(default=None, min_length=2, max_length=80)
+    interests: list[str] | None = Field(default=None, max_length=12)
+    platforms: list[Platform] | None = None
+    photo_upload_id: uuid.UUID | None = None
+    discovery_source: str | None = Field(default=None, max_length=60)
+    experience: str | None = Field(default=None, max_length=80)
+    goals: list[str] | None = Field(default=None, max_length=8)
+
+
+class OnboardingDraftOut(BaseModel):
+    #: not_started | in_progress | completed
+    status: str
+    schema_version: int = 1
+    step: str | None
+    revision: int
+    answers: dict
+    completed_at: datetime | None
+    updated_at: datetime | None
+
+
 class CreatorOverview(BaseModel):
     """The dashboard home in one call."""
 

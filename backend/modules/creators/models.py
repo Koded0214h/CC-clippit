@@ -17,8 +17,8 @@ abstraction), not this one's.
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.database import Base
@@ -69,3 +69,13 @@ class CreatorProfile(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+    # --- resumable onboarding draft (production-api-inventory.md §C) -----
+    # Autosaved per screen, ahead of `complete`. `draft_answers` holds
+    # whatever subset of `CreatorOnboarding` fields have been saved so
+    # far — not yet the creator's real profile, which is only written by
+    # `complete`. `draft_revision` guards two tabs from clobbering each
+    # other: a PATCH must send back the revision it last read.
+    draft_answers: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    draft_step: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    draft_revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")

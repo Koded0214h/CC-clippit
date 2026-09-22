@@ -21,7 +21,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.money import ZERO, quantize, to_decimal
 from modules.audit import service as audit
-from modules.auth.models import Role, User
+from modules.auth.models import Platform as AuthPlatform
+from modules.auth.models import Role, SocialAccount, User
 from modules.earnings.models import EarningAccount, EarningEntry
 from modules.organisations.models import OrganisationProfile
 from modules.submissions.models import Submission, SubmissionStatus, VerificationStatus
@@ -190,16 +191,97 @@ async def cover_urls(db: AsyncSession, campaigns: list[models.Campaign]) -> dict
 
 
 async def joined_campaigns(db: AsyncSession, creator_id: uuid.UUID, ids: list[uuid.UUID]) -> set[uuid.UUID]:
+    """"Joined" is true from an explicit `CampaignMembership`, or — for
+    creators who submitted before that existed, or resubmit straight from
+    the feed — from having a live submission either way."""
     if not ids:
         return set()
-    rows = await db.scalars(
+    from_membership = await db.scalars(
+        select(models.CampaignMembership.campaign_id).where(
+            models.CampaignMembership.creator_id == creator_id,
+            models.CampaignMembership.campaign_id.in_(ids),
+            models.CampaignMembership.left_at.is_(None),
+        )
+    )
+    from_submission = await db.scalars(
         select(Submission.campaign_id).where(
             Submission.creator_id == creator_id,
             Submission.campaign_id.in_(ids),
             Submission.status != SubmissionStatus.withdrawn,
         )
     )
-    return set(rows)
+    return set(from_membership) | set(from_submission)
+
+
+# --- membership ---------------------------------------------------------------
+
+
+class MembershipError(Exception):
+    def __init__(self, message: str, status_code: int = 409) -> None:
+        super().__init__(message)
+        self.message = message
+        self.status_code = status_code
+
+
+async def active_membership(
+    db: AsyncSession, campaign_id: uuid.UUID, creator_id: uuid.UUID
+) -> models.CampaignMembership | None:
+    return await db.scalar(
+        select(models.CampaignMembership).where(
+            models.CampaignMembership.campaign_id == campaign_id,
+            models.CampaignMembership.creator_id == creator_id,
+            models.CampaignMembership.left_at.is_(None),
+        )
+    )
+
+
+async def join_campaign(
+    db: AsyncSession, campaign: models.Campaign, creator: User
+) -> models.CampaignMembership:
+    """Idempotent: joining twice returns the existing membership rather
+    than erroring, since the frontend can't always tell whether a click
+    landed the first time."""
+    if not is_open_for_entries(campaign):
+        raise MembershipError("This campaign isn't accepting new creators right now.")
+    existing = await active_membership(db, campaign.id, creator.id)
+    if existing:
+        return existing
+
+    has_account = await db.scalar(
+        select(SocialAccount.id).where(
+            SocialAccount.user_id == creator.id,
+            SocialAccount.platform.in_([AuthPlatform(p) for p in campaign.platforms]),
+        )
+    )
+    if not has_account:
+        raise MembershipError(
+            "Connect one of this campaign's platforms from your profile before joining.", status_code=409
+        )
+
+    membership = models.CampaignMembership(campaign_id=campaign.id, creator_id=creator.id)
+    db.add(membership)
+    await db.flush()
+    audit.record(db, "campaign.joined", actor_id=creator.id, campaign_id=campaign.id)
+    return membership
+
+
+async def leave_campaign(db: AsyncSession, campaign: models.Campaign, creator: User) -> models.CampaignMembership:
+    membership = await active_membership(db, campaign.id, creator.id)
+    if membership is None:
+        raise MembershipError("You haven't joined this campaign.", status_code=404)
+    has_accepted = await db.scalar(
+        select(Submission.id).where(
+            Submission.campaign_id == campaign.id,
+            Submission.creator_id == creator.id,
+            Submission.status == SubmissionStatus.submitted,
+            Submission.verification_status == VerificationStatus.approved,
+        )
+    )
+    if has_accepted:
+        raise MembershipError("You can't leave after a clip has been accepted — withdraw the clip instead.")
+    membership.left_at = now()
+    audit.record(db, "campaign.left", actor_id=creator.id, campaign_id=campaign.id)
+    return membership
 
 
 # --- shaping -----------------------------------------------------------------

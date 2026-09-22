@@ -27,8 +27,6 @@ from modules.notifications.service import notify
 
 from . import models, schemas
 
-DEFAULT_DURATION_DAYS = 14
-
 
 class FundingError(Exception):
     def __init__(self, message: str, status_code: int = 409) -> None:
@@ -158,12 +156,15 @@ async def cancel_order(db: AsyncSession, campaign: campaign_models.Campaign, act
 
 async def open_campaign(db: AsyncSession, campaign: campaign_models.Campaign, *, actor_id) -> None:
     """Funded → live. The clock (`ends_at`) starts here, not at creation, so
-    a campaign that sat in draft doesn't lose days."""
+    a campaign that sat in draft doesn't lose days. `duration_days = null`
+    means no calendar deadline at all — the campaign closes only when the
+    pot is exhausted or an authorised actor closes it; it must not silently
+    become a 14-day campaign."""
     started = now()
-    days = campaign.duration_days or DEFAULT_DURATION_DAYS
+    days = campaign.duration_days
     campaign.status = campaign_models.CampaignStatus.active
     campaign.activated_at = started
-    campaign.ends_at = started + timedelta(days=days)
+    campaign.ends_at = started + timedelta(days=days) if days else None
     campaign.accepting_entries = True
     audit.record(db, "campaign.opened", actor_id=actor_id, campaign_id=campaign.id, days=days)
 

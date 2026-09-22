@@ -3,9 +3,10 @@ from datetime import datetime, timezone
 
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from core.deps import get_db
 from modules.auth.deps import get_current_user
@@ -14,6 +15,7 @@ from core.platforms import Platform as CorePlatform
 from modules.auth.models import Role, SocialAccount, User
 from modules.auth.providers import REGISTRY as OAUTH_PROVIDERS
 from modules.campaigns import models as campaign_models
+from modules.campaigns import schemas as campaign_schemas
 from modules.campaigns import service as campaign_service
 from modules.earnings import queries as earnings_queries
 from modules.earnings.models import EarningAccount
@@ -172,6 +174,105 @@ async def complete_onboarding(
     return await _profile_out(user, profile, db)
 
 
+# --- onboarding draft lifecycle (GET/PATCH/complete/reset) ---------------------
+#
+# The PUT above remains a backwards-compatible one-shot completion call.
+# This is the resumable version: autosave after every screen so a phone
+# refresh or a dropped connection never loses progress.
+
+
+def _draft_out(user: User, profile: models.CreatorProfile) -> schemas.OnboardingDraftOut:
+    status_ = "completed" if user.onboarding_completed else ("in_progress" if profile.draft_answers else "not_started")
+    return schemas.OnboardingDraftOut(
+        status=status_,
+        step=profile.draft_step,
+        revision=profile.draft_revision,
+        answers=profile.draft_answers or {},
+        completed_at=user.onboarded_at,
+        updated_at=profile.updated_at,
+    )
+
+
+@router.get("/me/onboarding", response_model=schemas.OnboardingDraftOut)
+async def get_onboarding_draft(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    _require_creator(user)
+    return _draft_out(user, await get_or_create_profile(user, db))
+
+
+@router.patch("/me/onboarding", response_model=schemas.OnboardingDraftOut)
+async def autosave_onboarding_draft(
+    payload: schemas.OnboardingDraftPatch,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_creator(user)
+    profile = await get_or_create_profile(user, db)
+    if payload.revision != profile.draft_revision:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"This draft moved on since you last read it (at revision {profile.draft_revision}). Reload and reapply your change.",
+        )
+    if payload.photo_upload_id is not None:
+        await owned_upload(db, payload.photo_upload_id, user.id, kinds=("image",))
+
+    changes = payload.model_dump(mode="json", exclude_unset=True, exclude={"revision", "step"})
+    if "platforms" in changes and changes["platforms"] is not None:
+        changes["platforms"] = [p.value if hasattr(p, "value") else p for p in changes["platforms"]]
+    answers = dict(profile.draft_answers or {})
+    answers.update({k: v for k, v in changes.items() if v is not None})
+    profile.draft_answers = answers
+    if payload.step is not None:
+        profile.draft_step = payload.step
+    profile.draft_revision += 1
+    await db.commit()
+    await db.refresh(profile)
+    return _draft_out(user, profile)
+
+
+@router.post("/me/onboarding/complete", response_model=schemas.CreatorProfileOut)
+async def complete_onboarding_draft(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Validates the accumulated draft as a whole and, only if it's
+    complete, atomically copies it into the real profile. Calling this
+    again once onboarding is done just returns the current profile —
+    it never re-validates or re-copies a stale draft over it."""
+    _require_creator(user)
+    profile = await get_or_create_profile(user, db)
+    if user.onboarding_completed:
+        return await _profile_out(user, profile, db)
+    try:
+        payload = schemas.CreatorOnboarding.model_validate(profile.draft_answers or {})
+    except Exception as exc:  # pydantic ValidationError
+        raise HTTPException(422, str(exc)) from exc
+
+    profile.display_name = payload.display_name
+    profile.interests = payload.interests
+    profile.intended_platforms = [p.value for p in payload.platforms]
+    profile.photo_upload_id = payload.photo_upload_id
+    profile.discovery_source = payload.discovery_source
+    profile.experience = payload.experience
+    profile.goals = payload.goals
+    profile.draft_answers = None
+    profile.draft_step = None
+    user.onboarded_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(profile)
+    return await _profile_out(user, profile, db)
+
+
+@router.delete("/me/onboarding/draft", status_code=status.HTTP_204_NO_CONTENT)
+async def reset_onboarding_draft(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Resets an incomplete draft. Never touches the account, a completed
+    onboarding record, the profile, or any already-uploaded photo."""
+    _require_creator(user)
+    if user.onboarding_completed:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Onboarding is already complete; there's no draft to reset.")
+    profile = await get_or_create_profile(user, db)
+    profile.draft_answers = None
+    profile.draft_step = None
+    profile.draft_revision += 1
+    await db.commit()
+
+
 # --- clips, connected accounts, home ------------------------------------------------
 
 
@@ -232,6 +333,80 @@ async def my_clips(user: User = Depends(get_current_user), db: AsyncSession = De
             )
         )
     return schemas.ClipsOut(active_clips=active, verified_views=views, total_earned=earned, items=items)
+
+
+@router.get("/me/campaigns", response_model=list[campaign_schemas.MyCampaignRow])
+async def my_campaigns(
+    membership_status: str | None = Query(None, description="joined | submitted | active | completed | left"),
+    limit: int = Query(50, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Every campaign this creator has a relationship with — joined,
+    submitted to, or left — distinct from the public feed's Joined filter,
+    which only lists open ones."""
+    _require_creator(user)
+    memberships = {
+        m.campaign_id: m
+        for m in await db.scalars(select(campaign_models.CampaignMembership).where(campaign_models.CampaignMembership.creator_id == user.id))
+    }
+    submissions = {
+        s.campaign_id: s
+        for s in await db.scalars(
+            select(Submission)
+            .where(Submission.creator_id == user.id, Submission.status != SubmissionStatus.withdrawn)
+            .order_by(Submission.created_at.desc())
+        )
+    }
+    campaign_ids = set(memberships) | set(submissions)
+    if not campaign_ids:
+        return []
+
+    campaigns = {
+        c.id: c
+        for c in await db.scalars(
+            select(campaign_models.Campaign)
+            .where(campaign_models.Campaign.id.in_(campaign_ids))
+            .options(selectinload(campaign_models.Campaign.payout_rule), selectinload(campaign_models.Campaign.rules))
+            .order_by(campaign_models.Campaign.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+    }
+    if not campaigns:
+        return []
+    outs = {
+        c.id: out for c, out in zip(campaigns.values(), await campaign_service.build_outs(db, list(campaigns.values()), user))
+    }
+
+    rows = []
+    for campaign_id, campaign in campaigns.items():
+        membership = memberships.get(campaign_id)
+        submission = submissions.get(campaign_id)
+        if campaign.status == campaign_models.CampaignStatus.closed:
+            state = "completed"
+        elif submission and submission.verification_status == VerificationStatus.approved:
+            state = "active"
+        elif submission:
+            state = "submitted"
+        elif membership and membership.left_at is not None:
+            state = "left"
+        else:
+            state = "joined"
+        if membership_status and state != membership_status:
+            continue
+        rows.append(
+            campaign_schemas.MyCampaignRow(
+                campaign=outs[campaign_id],
+                membership_status=state,
+                joined_at=membership.joined_at if membership else submission.created_at if submission else None,
+                left_at=membership.left_at if membership else None,
+                submission_id=submission.id if submission else None,
+                submission_status=submission.verification_status.value if submission else None,
+            )
+        )
+    return rows
 
 
 @router.get("/me/accounts", response_model=list[schemas.ConnectedAccountOut])

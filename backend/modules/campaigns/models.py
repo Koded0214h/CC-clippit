@@ -18,7 +18,20 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, Enum, Float, ForeignKey, Integer, String, Text, func
+from sqlalchemy import (
+    Boolean,
+    CheckConstraint,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -135,3 +148,33 @@ class CampaignRule(Base):
     position: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
 
     campaign: Mapped["Campaign"] = relationship(back_populates="rules")
+
+
+class CampaignMembership(Base):
+    """A creator's "Joined" state on a campaign — explicit, and separate
+    from submitting. One row per (campaign, creator); leaving clears
+    `left_at` rather than deleting the row, so a creator's history with a
+    campaign (and their `Joined` badge before they ever submit) survives a
+    leave/rejoin."""
+
+    __tablename__ = "campaign_memberships"
+    __table_args__ = (
+        CheckConstraint(
+            "left_at IS NULL OR left_at >= joined_at", name="ck_campaign_memberships_left_after_joined"
+        ),
+        Index(
+            "ux_campaign_memberships_active",
+            "campaign_id",
+            "creator_id",
+            unique=True,
+            postgresql_where=text("left_at IS NULL"),
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    campaign_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("campaigns.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    creator_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    left_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

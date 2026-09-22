@@ -42,6 +42,37 @@ class OrganisationOnboarding(BaseModel):
         return _clean(value)
 
 
+class OnboardingDraftPatch(BaseModel):
+    """Autosave: any subset of `OrganisationOnboarding`'s fields, plus which
+    screen the person is on. See `CreatorProfile`'s draft fields for why
+    `revision` exists."""
+
+    revision: int
+    step: str | None = Field(default=None, max_length=40)
+    name: str | None = Field(default=None, min_length=2, max_length=80)
+    bio: str | None = Field(default=None, max_length=240)
+    photo_upload_id: uuid.UUID | None = None
+    production_workflow: str | None = Field(default=None, max_length=60)
+    team_size: str | None = Field(default=None, max_length=40)
+    campaign_goal: str | None = Field(default=None, max_length=80)
+    budget_range: str | None = Field(default=None, max_length=60)
+
+    @field_validator("name", "bio")
+    @classmethod
+    def strip(cls, value: str | None) -> str | None:
+        return _clean(value)
+
+
+class OnboardingDraftOut(BaseModel):
+    status: str
+    schema_version: int = 1
+    step: str | None
+    revision: int
+    answers: dict
+    completed_at: datetime | None
+    updated_at: datetime | None
+
+
 class OrganisationProfileOut(BaseModel):
     user_id: uuid.UUID
     name: str

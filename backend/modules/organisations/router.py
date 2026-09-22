@@ -94,3 +94,88 @@ async def complete_onboarding(
     await db.commit()
     await db.refresh(profile)
     return await _out(profile, db)
+
+
+# --- onboarding draft lifecycle (GET/PATCH/complete/reset) ---------------------
+# The PUT above remains a backwards-compatible one-shot completion call.
+
+
+def _draft_out(user: User, profile: models.OrganisationProfile) -> schemas.OnboardingDraftOut:
+    status_ = "completed" if user.onboarding_completed else ("in_progress" if profile.draft_answers else "not_started")
+    return schemas.OnboardingDraftOut(
+        status=status_,
+        step=profile.draft_step,
+        revision=profile.draft_revision,
+        answers=profile.draft_answers or {},
+        completed_at=user.onboarded_at,
+        updated_at=profile.updated_at,
+    )
+
+
+@router.get("/me/onboarding", response_model=schemas.OnboardingDraftOut)
+async def get_onboarding_draft(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    _require_organisation(user)
+    return _draft_out(user, await get_or_create_profile(user, db))
+
+
+@router.patch("/me/onboarding", response_model=schemas.OnboardingDraftOut)
+async def autosave_onboarding_draft(
+    payload: schemas.OnboardingDraftPatch,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_organisation(user)
+    profile = await get_or_create_profile(user, db)
+    if payload.revision != profile.draft_revision:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"This draft moved on since you last read it (at revision {profile.draft_revision}). Reload and reapply your change.",
+        )
+    if payload.photo_upload_id is not None:
+        await owned_upload(db, payload.photo_upload_id, user.id, kinds=("image",))
+
+    changes = payload.model_dump(mode="json", exclude_unset=True, exclude={"revision", "step"})
+    answers = dict(profile.draft_answers or {})
+    answers.update({k: v for k, v in changes.items() if v is not None})
+    profile.draft_answers = answers
+    if payload.step is not None:
+        profile.draft_step = payload.step
+    profile.draft_revision += 1
+    await db.commit()
+    await db.refresh(profile)
+    return _draft_out(user, profile)
+
+
+@router.post("/me/onboarding/complete", response_model=schemas.OrganisationProfileOut)
+async def complete_onboarding_draft(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Idempotent after completion: calling it again just returns the
+    current profile without re-validating or re-copying a stale draft."""
+    _require_organisation(user)
+    profile = await get_or_create_profile(user, db)
+    if user.onboarding_completed:
+        return await _out(profile, db)
+    try:
+        payload = schemas.OrganisationOnboarding.model_validate(profile.draft_answers or {})
+    except Exception as exc:  # pydantic ValidationError
+        raise HTTPException(422, str(exc)) from exc
+
+    for field, value in payload.model_dump().items():
+        setattr(profile, field, value)
+    profile.draft_answers = None
+    profile.draft_step = None
+    user.onboarded_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(profile)
+    return await _out(profile, db)
+
+
+@router.delete("/me/onboarding/draft", status_code=status.HTTP_204_NO_CONTENT)
+async def reset_onboarding_draft(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    _require_organisation(user)
+    if user.onboarding_completed:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Onboarding is already complete; there's no draft to reset.")
+    profile = await get_or_create_profile(user, db)
+    profile.draft_answers = None
+    profile.draft_step = None
+    profile.draft_revision += 1
+    await db.commit()
