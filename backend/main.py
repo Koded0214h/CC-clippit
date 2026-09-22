@@ -36,6 +36,8 @@ from modules.organisations.router import router as organisations_router
 from modules.payments.router import router as payments_router
 from modules.payouts.router import router as payouts_router
 from modules.product.router import router as product_router
+from modules.receipts.router import router as receipts_router
+from modules.refunds.router import router as refunds_router
 from modules.reviews.router import router as reviews_router
 from modules.submissions.router import router as submissions_router
 from modules.uploads.router import media_router, router as uploads_router
@@ -95,6 +97,8 @@ app.include_router(push_router)
 app.include_router(media_router)
 app.include_router(product_router)
 app.include_router(legal_router)
+app.include_router(refunds_router)
+app.include_router(receipts_router)
 
 
 @app.get("/health")

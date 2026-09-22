@@ -3,6 +3,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
+from core.money import Money
+
 
 def _clean(value: str | None) -> str | None:
     if value is None:
@@ -105,6 +107,26 @@ class OrganisationProfileOut(BaseModel):
     campaign_goal: str | None
     budget_range: str | None
     updated_at: datetime
+
+
+class TransactionOut(BaseModel):
+    id: uuid.UUID
+    kind: str  # funding | refund
+    campaign_id: uuid.UUID
+    campaign_title: str
+    amount: Money
+    fee: Money | None
+    status: str
+    provider: str
+    provider_reference: str | None
+    reference: str
+    created_at: datetime
+    settled_at: datetime | None
+
+
+class TransactionsOut(BaseModel):
+    items: list[TransactionOut]
+    total: int
 
 
 class PublicCampaignSummary(BaseModel):

@@ -83,10 +83,19 @@ class TransferResult:
     failure_reason: str | None = None
 
 
+@dataclass(frozen=True)
+class RefundResult:
+    status: TransferStatus  # pending | success | failed — same three states as a transfer
+    provider_reference: str | None = None
+    failure_reason: str | None = None
+
+
 class WebhookKind(str, enum.Enum):
     collection_received = "collection.received"
     transfer_success = "transfer.success"
     transfer_failed = "transfer.failed"
+    refund_processed = "refund.processed"
+    refund_failed = "refund.failed"
 
 
 @dataclass(frozen=True)
@@ -131,6 +140,17 @@ class PaymentProvider(Protocol):
     ) -> TransferResult: ...
 
     async def get_transfer(self, *, reference: str) -> TransferResult: ...
+
+    async def create_refund(
+        self, *, reference: str, collection_reference: str, amount: Decimal, reason: str
+    ) -> RefundResult:
+        """`collection_reference` is the *original* funding order's
+        reference — a provider refunds a specific charge, not a bare
+        amount. `reference` is ours, for idempotency the same way it is
+        everywhere else in this interface."""
+        ...
+
+    async def get_refund(self, *, reference: str) -> RefundResult: ...
 
     def verify_webhook(self, headers: Mapping[str, str], body: bytes) -> bool: ...
 

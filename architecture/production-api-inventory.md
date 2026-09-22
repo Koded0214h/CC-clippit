@@ -527,6 +527,13 @@ The frontend currently fabricates brand transactions and prints client-rendered 
 | Missing P1 | `POST /admin/refunds/{refund_id}/retry` | Re-drive a retryable provider refund idempotently and audit the operator. |
 | Missing P1 | `POST /admin/refunds/{refund_id}/fail` | Finalise an unrecoverable refund failure with an operator reason and escalation state. |
 
+**2026-09-22 — Built**: transactions ledger, funding quote, and refunds — the three rows that don't need a PDF library or a tax/billing decision. **Not built, and each needs a real decision, not an assumption**: every `*.pdf` row (no PDF library is wired in; needs a template/branding decision), invoices (needs the tax/accounting structure), and `POST /payouts/quote` + `DELETE /creators/me/bank-details` (straightforward, just not done this pass).
+
+- `GET /organisations/me/transactions(+/{id})`: not a new table — it presents `FundingOrder` and `Refund` rows (each already an immutable record) as one merged, sorted list (`modules/organisations/ledger.py`). Creator payouts are deliberately excluded from the *brand's* ledger: the brand's money movement ends at funding; where the pot goes afterwards is the creator's earnings/payout history, a separate ledger. Cursor pagination wasn't done — same `limit`/`offset` gap as the rest of the app. `/export` (P1) is still missing.
+- `POST /campaigns/{ref}/funding/quote`: pure calculation (pot × current fee rate), doesn't lock anything or create an order.
+- `POST`/`GET /campaigns/{ref}/refunds`: **refunds only the unspent pot, never the 1.5% funding fee — an assumption, not a confirmed policy** (see `modules.refunds.models`'s docstring). Idempotent per campaign (a second request returns the existing refund). Needs a closed campaign. Routes through a new `PaymentProvider.create_refund`/`get_refund` (added to the provider interface alongside `create_transfer`; sandbox always succeeds). **The Paystack refund implementation is unverified against a real account** — Paystack's `/refund` endpoint doesn't accept a caller-supplied idempotency reference the way transfers do, and its refund-status lookup/webhook shape wasn't confirmed against live docs, so reconciliation (`get_refund`) is a stub and the admin retry/fail rows are still open.
+- `GET /receipts/{reference}/verify`: public, rate-limited, checks funding orders, refunds, and payouts by reference and returns safe facts plus a tamper-check digest (`core/receipts.py`) — not a signature over a document, since no PDF exists yet.
+
 ## K. Support centre and customer tickets
 
 Support must serve both creator and brand accounts. A ticket belongs to the caller and may reference a campaign, submission, payout, funding order, or transaction.

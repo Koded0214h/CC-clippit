@@ -1,13 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.config import get_settings
 from core.deps import get_db
+from core.money import quantize, to_decimal
 from integrations.payments import get_provider
 from modules.auth.deps import get_verified_user
 from modules.auth.models import User
 from modules.campaigns import service as campaign_service
 
 from . import schemas, service
+from .models import FundingMethod
 
 router = APIRouter(prefix="/campaigns", tags=["funding"])
 
@@ -22,6 +25,25 @@ async def _owned(ref: str, user: User, db: AsyncSession):
 
 def _fail(exc: service.FundingError) -> HTTPException:
     return HTTPException(exc.status_code, exc.message)
+
+
+@router.post("/{campaign_ref}/funding/quote", response_model=schemas.FundingQuoteOut)
+async def quote_funding(campaign_ref: str, user: User = Depends(get_verified_user), db: AsyncSession = Depends(get_db)):
+    """A preview of `POST .../funding`'s numbers — read-only, doesn't lock
+    the campaign's terms or create an order."""
+    campaign = await _owned(campaign_ref, user, db)
+    try:
+        service._check_fundable(campaign)
+    except service.FundingError as exc:
+        raise _fail(exc) from exc
+
+    settings = get_settings()
+    pot = campaign.pot_amount
+    fee = quantize(pot * to_decimal(settings.funding_fee_rate))
+    return schemas.FundingQuoteOut(
+        campaign_id=campaign.id, pot=pot, fee=fee, fee_rate=settings.funding_fee_rate, total=pot + fee,
+        methods=list(FundingMethod), terms_version="1",
+    )
 
 
 @router.post("/{campaign_ref}/funding", response_model=schemas.FundingOrderOut, status_code=status.HTTP_201_CREATED)

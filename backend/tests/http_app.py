@@ -29,6 +29,7 @@ import modules.legal.models  # noqa: F401
 import modules.notifications.models  # noqa: F401
 import modules.organisations.models  # noqa: F401
 import modules.payouts.models  # noqa: F401
+import modules.refunds.models  # noqa: F401
 import modules.submissions.models  # noqa: F401
 import modules.uploads.models  # noqa: F401
 

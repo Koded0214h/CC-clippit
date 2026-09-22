@@ -1,6 +1,7 @@
+import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,7 +11,7 @@ from modules.auth.models import Role, User
 from modules.uploads.router import owned_upload
 from modules.uploads.service import url_for_upload
 
-from . import models, schemas
+from . import ledger, models, schemas
 
 router = APIRouter(prefix="/organisations", tags=["organisations"])
 
@@ -189,3 +190,42 @@ async def reset_onboarding_draft(user: User = Depends(get_current_user), db: Asy
     profile.draft_step = None
     profile.draft_revision += 1
     await db.commit()
+
+
+# --- the brand's own money ledger ---------------------------------------------
+
+
+def _tx_out(row: ledger.TransactionRow) -> schemas.TransactionOut:
+    return schemas.TransactionOut(
+        id=row.id, kind=row.kind, campaign_id=row.campaign_id, campaign_title=row.campaign_title,
+        amount=row.amount, fee=row.fee, status=row.status, provider=row.provider,
+        provider_reference=row.provider_reference, reference=row.reference, created_at=row.created_at,
+        settled_at=row.settled_at,
+    )
+
+
+@router.get("/me/transactions", response_model=schemas.TransactionsOut)
+async def my_transactions(
+    campaign_id: uuid.UUID | None = None,
+    kind: str | None = None,
+    limit: int = Query(30, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_organisation(user)
+    rows, total = await ledger.list_transactions(
+        db, user.id, campaign_id=campaign_id, kind=kind, limit=limit, offset=offset
+    )
+    return schemas.TransactionsOut(items=[_tx_out(r) for r in rows], total=total)
+
+
+@router.get("/me/transactions/{transaction_id}", response_model=schemas.TransactionOut)
+async def my_transaction_detail(
+    transaction_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
+    _require_organisation(user)
+    row = await ledger.get_transaction(db, user.id, transaction_id)
+    if row is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Transaction not found")
+    return _tx_out(row)
