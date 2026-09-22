@@ -2,8 +2,8 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, UniqueConstraint, func, text
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint, func, text
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from core.database import Base
@@ -61,6 +61,19 @@ class User(Base):
     # Set instead of a hard delete, so campaigns/submissions/ledger rows
     # that reference this user's id keep their foreign keys intact.
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # --- admin suspension (production-api-inventory.md §N) -----------------
+    # Distinct from `deleted_at`: a suspension is reversible and scoped.
+    # Empty `suspension_scopes` (the default) means nothing is suspended;
+    # "access" blocks sign-in entirely (checked in deps.get_current_user),
+    # "funding" blocks new campaign funding orders, "earning" blocks new
+    # payout requests — each enforced at its own chokepoint, not centrally.
+    suspended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    suspension_scopes: Mapped[list[str]] = mapped_column(ARRAY(String(20)), nullable=False, server_default="{}")
+    suspension_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    #: Informational only — nothing sweeps this yet to auto-restore the
+    #: account, so a "temporary" suspension still needs a manual restore.
+    suspension_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     @property
     def onboarding_completed(self) -> bool:

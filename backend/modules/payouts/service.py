@@ -43,7 +43,7 @@ from modules.auth.models import User
 from modules.campaigns.models import Campaign
 from modules.creators.models import CreatorBankAccount
 from modules.earnings import queries as earnings_queries
-from modules.earnings.models import EarningEntry
+from modules.earnings.models import EarningAccount, EarningEntry
 from modules.notifications.service import notify
 from modules.submissions.models import Submission
 
@@ -90,6 +90,9 @@ async def reserve(
             raise PayoutError("That request key was already used for a different amount.", 409, "idempotency_conflict")
         return existing, False
 
+    if creator.suspended_at is not None and "earning" in creator.suspension_scopes:
+        raise PayoutError("Withdrawals are suspended on this account.", 403, "account_suspended")
+
     amount = quantize(amount)
     if amount < settings.min_withdrawal:
         raise PayoutError(f"The minimum withdrawal is ₦{settings.min_withdrawal:,}.", 422, "below_minimum")
@@ -110,7 +113,11 @@ async def reserve(
     entries = list(
         await db.scalars(
             select(EarningEntry)
-            .where(EarningEntry.creator_id == creator.id, EarningEntry.payable_at <= at)
+            .join(EarningAccount, EarningAccount.submission_id == EarningEntry.submission_id)
+            .where(
+                EarningEntry.creator_id == creator.id, EarningEntry.payable_at <= at,
+                EarningAccount.release_hold_at.is_(None),  # see EarningAccount.release_hold_at's docstring
+            )
             .order_by(EarningEntry.payable_at.asc(), EarningEntry.accrued_at.asc())
         )
     )

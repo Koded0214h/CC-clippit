@@ -140,6 +140,10 @@ async def settle_submission(
         await db.flush()
 
     trust = await _trust_status(client, submission_id)
+    if account.admin_trust_override is True:
+        trust = "clean"  # POST /admin/submissions/{id}/trust/clear
+    elif account.admin_trust_override is False:
+        trust = "flagged"  # POST /admin/submissions/{id}/trust/confirm
     if trust == "flagged":
         if account.blocked_reason != "trust_flagged":
             audit.record(db, "earnings.blocked", submission_id=submission_id, campaign_id=campaign.id, reason="trust_flagged")

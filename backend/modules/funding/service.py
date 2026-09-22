@@ -90,6 +90,8 @@ async def create_order(
 ) -> models.FundingOrder:
     """The open order for this campaign — reused if there is one, so a
     double-click (or a page reload) never mints two collection accounts."""
+    if org.suspended_at is not None and "funding" in org.suspension_scopes:
+        raise FundingError("Funding is suspended on this account.", 403)
     _check_fundable(campaign)
     provider = get_provider()
 

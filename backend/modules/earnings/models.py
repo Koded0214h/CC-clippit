@@ -16,7 +16,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -45,6 +45,21 @@ class EarningAccount(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+    # --- admin trust override and release hold (production-api-inventory.md §N) --
+    # `admin_trust_override`: null defers to Intelligence's own read on
+    # every tick; True forces accrual to proceed even if Intelligence
+    # still reports flagged (POST .../trust/clear); False forces it
+    # blocked even if Intelligence reports clean (POST .../trust/confirm).
+    # See earnings.service.settle_submission for where this is applied.
+    admin_trust_override: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    #: Set by POST /admin/earnings/{submission_id}/hold: blocks this
+    #: submission's entries from payout reservation (earnings.queries and
+    #: payouts.service.reserve both check it) without touching accrual —
+    #: separate from a trust block, which stops new money from accruing
+    #: at all. Money already payable just... isn't, until released.
+    release_hold_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    hold_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 class EarningEntry(Base):

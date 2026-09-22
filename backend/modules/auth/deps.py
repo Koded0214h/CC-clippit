@@ -37,6 +37,11 @@ async def get_current_user(
     user = await db.get(models.User, uuid.UUID(payload["sub"]))
     if not user or user.deleted_at is not None:
         raise unauthorized
+    if user.suspended_at is not None and "access" in user.suspension_scopes:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail={"code": "account_suspended", "message": "This account has been suspended.", "reason": user.suspension_reason},
+        )
     if user.tokens_valid_after is not None:
         issued = payload.get("iat")
         # A token with no `iat` predates this check; after a password reset

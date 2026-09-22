@@ -65,6 +65,17 @@ async def balances(db: AsyncSession, creator_id: uuid.UUID, at: datetime | None 
     allocated_live = to_decimal(await db.scalar(allocated(*live)))
     paid = to_decimal(await db.scalar(allocated(PayoutStatus.succeeded)))
 
+    # An admin release hold (POST /admin/earnings/{submission_id}/hold)
+    # keeps otherwise-payable money out of `payable` without touching
+    # accrual — see EarningAccount.release_hold_at's docstring.
+    held = to_decimal(
+        await db.scalar(
+            select(_sum(E.amount))
+            .join(models.EarningAccount, models.EarningAccount.submission_id == E.submission_id)
+            .where(E.creator_id == creator_id, E.payable_at <= at, models.EarningAccount.release_hold_at.is_not(None))
+        )
+    )
+
     views = await db.scalar(
         select(_sum(models.EarningAccount.cumulative_views)).where(models.EarningAccount.creator_id == creator_id)
     )
@@ -72,7 +83,7 @@ async def balances(db: AsyncSession, creator_id: uuid.UUID, at: datetime | None 
         select(func.count()).select_from(Payout).where(Payout.creator_id == creator_id, Payout.status == PayoutStatus.succeeded)
     )
     return Balances(
-        payable=payable_gross - allocated_live,
+        payable=payable_gross - allocated_live - held,
         in_hold=in_hold,
         processing=allocated_live - paid,
         paid=paid,
