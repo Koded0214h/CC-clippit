@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { ProfileAvatar, useStoredProfile, type StoredProfile } from "@/components/ui/ProfilePhotoPicker";
@@ -20,7 +20,18 @@ const navItems: Array<{ href: string; label: string; icon: ProductIconName }> = 
   { href: "/dashboard/settings", label: "Settings", icon: "settings" },
 ];
 
-const mobileNavItems = navItems.filter((item) => item.label !== "Leaderboard");
+const mobileNavItems = navItems.filter((item) => !["Leaderboard", "Settings"].includes(item.label));
+
+const creatorMoreItems: Array<{ href: string; label: string; copy: string; icon: ProductIconName }> = [
+  { href: "/dashboard/settings", label: "Settings", copy: "Profile, accounts and alerts", icon: "settings" },
+  { href: "/dashboard/leaderboard", label: "Leaderboard", copy: "Creator rankings", icon: "trophy" },
+  { href: "/dashboard/verification", label: "Verification", copy: "Identity and documents", icon: "shield" },
+  { href: "/account/data", label: "Account & data", copy: "Download or delete account data", icon: "person" },
+  { href: "/help", label: "Help centre", copy: "Guides for using Clippit", icon: "brief" },
+  { href: "/support/tickets", label: "Support", copy: "Messages and support tickets", icon: "users" },
+  { href: "/disputes", label: "Disputes", copy: "Formal reviews and evidence", icon: "eye" },
+  { href: "/legal", label: "Legal & privacy", copy: "Terms, policies and consent", icon: "shield" },
+];
 
 function isCurrent(pathname: string, href: string) {
   if (href === "/dashboard") return pathname === href;
@@ -32,7 +43,9 @@ export function ProductShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const profile = useStoredProfile("creator", CREATOR_PROFILE_FALLBACK);
   const dockHidden = useAutoHideDock();
+  const [moreOpen, setMoreOpen] = useState(false);
   const initials = profile.name.trim().split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase() || "TO";
+  const moreIsCurrent = creatorMoreItems.some((item) => pathname.startsWith(item.href));
 
   return (
     <div className="product-shell">
@@ -53,6 +66,10 @@ export function ProductShell({ children }: { children: ReactNode }) {
               <span>{item.label}</span>
             </Link>
           ))}
+        </nav>
+        <nav className="studio-resource-nav" aria-label="Account and support">
+          <Link href="/help"><ProductIcon name="brief" /><span>Help & support</span></Link>
+          <Link href="/legal"><ProductIcon name="shield" /><span>Legal & privacy</span></Link>
         </nav>
         <div className="studio-rail__bottom">
           <div className="trust-pulse">
@@ -101,7 +118,12 @@ export function ProductShell({ children }: { children: ReactNode }) {
         <main className="product-content">{children}</main>
       </div>
 
-      <nav className={`mobile-dock${dockHidden ? " is-hidden" : ""}`} aria-label="Mobile navigation">
+      {moreOpen && <button className="creator-mobile-more-backdrop" type="button" aria-label="Close more menu" onClick={() => setMoreOpen(false)} />}
+      <section id="creator-more-menu" className={`creator-mobile-more${moreOpen ? " is-open" : ""}`} aria-label="More creator pages" aria-hidden={!moreOpen}>
+        <header><div><small>Your Clippit</small><strong>More</strong></div><button type="button" onClick={() => setMoreOpen(false)} aria-label="Close more menu"><ProductIcon name="more" /></button></header>
+        <nav>{creatorMoreItems.map((item) => <Link key={item.href} href={item.href} onClick={() => setMoreOpen(false)} className={pathname.startsWith(item.href) ? "is-active" : ""}><span><ProductIcon name={item.icon} /></span><p><strong>{item.label}</strong><small>{item.copy}</small></p><ProductIcon name="arrow" /></Link>)}</nav>
+      </section>
+      <nav className={`mobile-dock${dockHidden && !moreOpen ? " is-hidden" : ""}`} aria-label="Mobile navigation">
         {mobileNavItems.map((item) => (
           <Link
             key={item.href}
@@ -113,6 +135,10 @@ export function ProductShell({ children }: { children: ReactNode }) {
             <span>{item.label === "Leaderboard" ? "Ranks" : item.label}</span>
           </Link>
         ))}
+        <button type="button" className={moreIsCurrent || moreOpen ? "is-active" : ""} aria-expanded={moreOpen} aria-controls="creator-more-menu" onClick={() => setMoreOpen((value) => !value)}>
+          <ProductIcon name="more" />
+          <span>More</span>
+        </button>
       </nav>
     </div>
   );
