@@ -209,6 +209,52 @@ class HoldRequest(BaseModel):
 # --- ledger --------------------------------------------------------------------
 
 
+# --- operators -------------------------------------------------------------------
+
+
+class OperatorRow(BaseModel):
+    id: uuid.UUID
+    email: str
+    full_name: str
+    permissions: list[str]
+    suspended: bool
+    invited_by: uuid.UUID | None
+    last_active_at: datetime | None
+    created_at: datetime
+
+
+class OperatorPatch(BaseModel):
+    permissions: list[str] | None = None
+
+
+# --- trust rules / random audits --------------------------------------------------
+
+
+class RandomAuditRow(BaseModel):
+    submission_id: uuid.UUID
+    campaign_id: uuid.UUID
+    creator_id: uuid.UUID
+    platform: str
+    created_at: datetime
+
+
+class TrustReviewRequest(BaseModel):
+    outcome: str  # legitimate | fraudulent | inconclusive
+    source: str = "random_audit"
+    notes: str | None = Field(default=None, max_length=1000)
+
+
+# --- provider health ---------------------------------------------------------------
+
+
+class ProviderHealth(BaseModel):
+    name: str
+    kind: str
+    configured: bool
+    sandbox: bool | None = None
+    detail: str | None = None
+
+
 class AdminLedgerRow(BaseModel):
     id: uuid.UUID
     kind: str  # funding | refund | payout

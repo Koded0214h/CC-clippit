@@ -686,6 +686,8 @@ Admin accounts cannot be self-created, which is correct, but there is currently 
 | Missing P1 | `POST /admin/operators/{operator_id}/restore` | Restore access without bypassing MFA or invitation policy. |
 | Missing P0 | `GET /auth/permissions` | Return the current user's effective permissions so admin UI and API enforcement share one truth. |
 
+**2026-09-22 — Built**, all eight rows except `POST /admin/operators/{id}/restore` (cheap addition, just not done). `User` gained `permissions` (empty means unrestricted — every existing admin today) and `invited_by`; a stateless `operator_invitations` row plus a signed token (its own `jti` doubling as the row's id, same pattern as every other short-lived token here) drives the invite/accept flow. **MFA enrollment is not enforced at accept** — 2FA doesn't exist yet (still open in §B) — so "mandatory MFA setup" from this row's contract is not actually mandatory; accepting an invitation creates a password-only operator. `PATCH .../{id}` blocks an operator from changing their own permissions (self-escalation); `.../suspend` revokes every session immediately by reusing the same suspension primitive built in §N. **Nothing yet enforces a granular permission on any individual admin route** — `permissions`/`GET /auth/permissions` are the data model and the one shared read, not per-route gating throughout the ~130 other admin endpoints.
+
 ### Trust rules and random audits
 
 | Priority | Method and path | Required contract |
@@ -696,6 +698,8 @@ Admin accounts cannot be self-created, which is correct, but there is currently 
 | Missing P0 | `GET /admin/submissions/random-audits` | Queue statistically sampled unflagged submissions so precision and recall can both be measured. |
 | Missing P0 | `POST /admin/submissions/{submission_id}/trust/review` | Record a labelled random-audit or investigation outcome using the internal trust review service, with required source and evidence. |
 
+**2026-09-22 — Built**: `GET /admin/submissions/random-audits` (an unbiased sample of *unflagged* submissions — see `modules.intelligence.contracts.ReviewSource`'s own docstring on why that matters) and `POST /admin/submissions/{id}/trust/review` (the generic label-capture route, distinct from `/trust/clear` and `/trust/confirm` in §N — those two also apply the accrual override; this one is just the label). **`GET /admin/trust/rules` is a read-only proxy** onto Intelligence's existing `/internal/trust/rules` — it does not return draft-vs-active state or an author/validation trail beyond whatever that internal contract already exposes. **`POST /admin/trust/rules` and `.../activate` (versioned draft/edit) are deliberately not built**: the thresholds are Intelligence's own domain (decision register, `architecture/intelligence-contracts.md`), and writing versioned rule mutations here would mean this module editing Intelligence's own tables rather than calling its contract — that's Adam's module to build, not a gap in this one.
+
 ### Provider/webhook operations
 
 | Priority | Method and path | Required contract |
@@ -705,6 +709,8 @@ Admin accounts cannot be self-created, which is correct, but there is currently 
 | Missing P1 | `GET /admin/webhooks/{event_id}` | Return one redacted verified event, signature result, handler attempts, linked resource, and outcome. |
 | Missing P1 | `POST /admin/webhooks/{event_id}/replay` | Replay one allowlisted failed handler idempotently without re-verifying a modified payload; audit the operator. |
 | Missing P1 | `POST /webhooks/email` | Verify email-provider events and record delivered, bounced, deferred, complained, or unsubscribed state for transactional/optional mail policy. |
+
+**2026-09-22 — Built**: `GET /admin/providers` only, and narrower than the row asks — configured/sandbox state for the payment provider, email backend, storage backend, Google, and each social adapter, with **no latency, quota, or last-success/failure tracking** (that needs an observability/metrics layer this pass doesn't add — see the monitoring gap in Part III). **Webhook envelope storage and replay are not built** — `POST /webhooks/payments` still verifies and handles events without persisting a stored envelope first, the exact gap already flagged in Part III's "existing contract corrections"; `GET/POST /admin/webhooks*` have nothing to read until that's fixed. `POST /webhooks/email` needs a transactional-email provider decision this pass doesn't make (console/SMTP only today).
 
 ## P. Production media lifecycle
 

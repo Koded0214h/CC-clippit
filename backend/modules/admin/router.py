@@ -12,13 +12,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.config import get_settings
 from core.deps import get_db
+from core.email import EmailSender, get_email_sender
 from core.internal_client import get_internal_client
 from core.money import ZERO, to_decimal
 from modules.audit import service as audit
 from modules.audit.models import AuditEvent
 from modules.auth.deps import get_current_user
-from modules.auth.models import Role, Session, SocialAccount, User
+from modules.auth.models import OperatorInvitation, Role, Session, SocialAccount, User
 from modules.campaigns import models as campaign_models
 from modules.campaigns import service as campaign_service
 from modules.campaigns.models import Campaign
@@ -33,6 +35,7 @@ from modules.organisations.models import OrganisationProfile
 from modules.payouts import models as payout_models
 from modules.payouts import service as payout_service
 from modules.refunds import models as refund_models
+from modules.auth import schemas as auth_schemas
 from modules.submissions.models import Submission, SubmissionStatus, VerificationStatus
 
 from . import schemas
@@ -499,6 +502,30 @@ async def all_submissions(
     return [await _submission_row(db, s, accounts.get(s.id)) for s in submissions]
 
 
+@router.get("/submissions/random-audits", response_model=list[schemas.RandomAuditRow])
+async def random_audits(
+    limit: int = Query(20, ge=1, le=100), admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
+):
+    """A statistically unbiased sample of *unflagged* submissions — see
+    `modules.intelligence.contracts.ReviewSource`'s docstring for why
+    this exists: a model trained only on the flagged queue's own labels
+    never learns what it's missing. Registered ahead of
+    `GET /submissions/{submission_id}` below — a literal path segment
+    must be matched before a dynamic one that would otherwise swallow it."""
+    rows = await db.execute(
+        select(Submission, Campaign)
+        .join(Campaign, Campaign.id == Submission.campaign_id)
+        .outerjoin(EarningAccount, EarningAccount.submission_id == Submission.id)
+        .where(EarningAccount.blocked_reason.is_distinct_from("trust_flagged"))
+        .order_by(func.random())
+        .limit(limit)
+    )
+    return [
+        schemas.RandomAuditRow(submission_id=s.id, campaign_id=c.id, creator_id=s.creator_id, platform=s.platform, created_at=s.created_at)
+        for s, c in rows
+    ]
+
+
 @router.get("/submissions/{submission_id}", response_model=schemas.AdminSubmissionDetail)
 async def submission_detail(
     submission_id: uuid.UUID, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db),
@@ -829,3 +856,173 @@ async def ledger_entry_detail(entry_id: uuid.UUID, admin: User = Depends(require
             settled_at=payout.completed_at,
         )
     raise HTTPException(status.HTTP_404_NOT_FOUND, "Ledger entry not found")
+
+
+# --- operators (production-api-inventory.md §O) ---------------------------------
+
+
+@router.post("/operators/invitations", response_model=auth_schemas.AdminInvitationCreated, status_code=status.HTTP_201_CREATED)
+async def invite_operator(
+    payload: auth_schemas.AdminInvitationCreate, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db),
+    sender: EmailSender = Depends(get_email_sender),
+):
+    from core.security import create_admin_invite_token
+    from modules.auth import emails as auth_emails
+
+    existing = await db.scalar(select(User.id).where(User.email == payload.email))
+    if existing:
+        raise HTTPException(status.HTTP_409_CONFLICT, "An account with this email already exists.")
+
+    invitation = OperatorInvitation(
+        email=payload.email, permissions=payload.permissions, invited_by=admin.id,
+        expires_at=datetime.now(timezone.utc) + timedelta(days=3),
+    )
+    db.add(invitation)
+    await db.flush()
+    token = create_admin_invite_token(invitation.id, minutes=3 * 24 * 60)
+    link = f"{get_settings().frontend_origin.split(',')[0].strip()}/admin/operators/accept?token={token}"
+    audit.record(db, "admin.operator_invited", actor_id=admin.id, subject_id=invitation.id, email=payload.email)
+    await db.commit()
+    try:
+        await sender.send(auth_emails.admin_invitation_email(payload.email, link, admin.full_name))
+    except Exception:  # noqa: BLE001
+        pass
+    return auth_schemas.AdminInvitationCreated(
+        id=invitation.id, email=invitation.email, permissions=invitation.permissions,
+        expires_at=invitation.expires_at, invite_token=token,
+    )
+
+
+def _operator_row(u: User, last_active_at: datetime | None) -> schemas.OperatorRow:
+    return schemas.OperatorRow(
+        id=u.id, email=u.email, full_name=u.full_name, permissions=list(u.permissions),
+        suspended=u.suspended_at is not None, invited_by=u.invited_by, last_active_at=last_active_at, created_at=u.created_at,
+    )
+
+
+@router.get("/operators", response_model=list[schemas.OperatorRow])
+async def list_operators(admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    rows = list(await db.scalars(select(User).where(User.role == Role.admin, User.deleted_at.is_(None)).order_by(User.created_at)))
+    last_seen = {
+        uid: seen
+        for uid, seen in await db.execute(
+            select(Session.user_id, func.max(Session.last_seen_at)).where(Session.user_id.in_([u.id for u in rows])).group_by(Session.user_id)
+        )
+    }
+    return [_operator_row(u, last_seen.get(u.id)) for u in rows]
+
+
+@router.patch("/operators/{operator_id}", response_model=schemas.OperatorRow)
+async def update_operator(
+    operator_id: uuid.UUID, payload: schemas.OperatorPatch, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
+):
+    if operator_id == admin.id and payload.permissions is not None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "You can't change your own permissions.")
+    operator = await db.get(User, operator_id)
+    if operator is None or operator.role != Role.admin:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Operator not found")
+    if payload.permissions is not None:
+        operator.permissions = payload.permissions
+        audit.record(db, "admin.operator_permissions_changed", actor_id=admin.id, subject_id=operator_id, permissions=payload.permissions)
+    await db.commit()
+    last_seen = await db.scalar(select(func.max(Session.last_seen_at)).where(Session.user_id == operator_id))
+    return _operator_row(operator, last_seen)
+
+
+@router.post("/operators/{operator_id}/suspend", response_model=schemas.OperatorRow)
+async def suspend_operator(operator_id: uuid.UUID, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    if operator_id == admin.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "You can't suspend your own account.")
+    operator = await db.get(User, operator_id)
+    if operator is None or operator.role != Role.admin:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Operator not found")
+    operator.suspended_at = datetime.now(timezone.utc)
+    operator.suspension_scopes = ["access"]
+    operator.suspension_reason = "Operator access suspended"
+    from modules.auth import sessions as auth_sessions
+
+    await auth_sessions.revoke_other_sessions(db, operator_id, keep_session_id=None)
+    audit.record(db, "admin.operator_suspended", actor_id=admin.id, subject_id=operator_id)
+    await db.commit()
+    last_seen = await db.scalar(select(func.max(Session.last_seen_at)).where(Session.user_id == operator_id))
+    return _operator_row(operator, last_seen)
+
+
+@router.post("/operators/{operator_id}/restore", response_model=schemas.OperatorRow)
+async def restore_operator(operator_id: uuid.UUID, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    operator = await db.get(User, operator_id)
+    if operator is None or operator.role != Role.admin:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Operator not found")
+    operator.suspended_at = None
+    operator.suspension_scopes = []
+    operator.suspension_reason = None
+    audit.record(db, "admin.operator_restored", actor_id=admin.id, subject_id=operator_id)
+    await db.commit()
+    last_seen = await db.scalar(select(func.max(Session.last_seen_at)).where(Session.user_id == operator_id))
+    return _operator_row(operator, last_seen)
+
+
+# --- trust rules (read-only proxy) and random audits ------------------------------
+
+
+@router.get("/trust/rules")
+async def trust_rules(admin: User = Depends(require_admin), client: httpx.AsyncClient = Depends(get_internal_client)):
+    """A read-only proxy onto Intelligence's own `/internal/trust/rules` —
+    the thresholds themselves are Intelligence's domain (see decision
+    register); versioned draft/activate editing (the row's `POST`/
+    `.../activate`) isn't built here, since that would mean this module
+    writing into Intelligence's own tables rather than calling its
+    contract."""
+    resp = await client.get("/internal/trust/rules")
+    if resp.status_code >= 400:
+        raise HTTPException(resp.status_code, "Could not reach the trust engine.")
+    return resp.json()
+
+
+@router.post("/submissions/{submission_id}/trust/review", status_code=status.HTTP_201_CREATED)
+async def submit_trust_review(
+    submission_id: uuid.UUID, payload: schemas.TrustReviewRequest, admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db), client: httpx.AsyncClient = Depends(get_internal_client),
+):
+    """The generic label-capture route — for a random audit or an
+    investigation that isn't clearing/confirming a flag (those go through
+    `/trust/clear` and `/trust/confirm`, which also apply the accrual
+    override this route deliberately doesn't)."""
+    resp = await client.post(
+        f"/internal/submissions/{submission_id}/trust/review",
+        json={"outcome": payload.outcome, "source": payload.source, "reviewer_id": str(admin.id), "notes": payload.notes},
+    )
+    if resp.status_code >= 400:
+        raise HTTPException(resp.status_code, resp.json().get("detail") if resp.content else "Review failed")
+    audit.record(db, "admin.trust_review_recorded", actor_id=admin.id, submission_id=submission_id, outcome=payload.outcome, source=payload.source)
+    await db.commit()
+    return resp.json()
+
+
+# --- provider health -------------------------------------------------------------
+
+
+@router.get("/providers", response_model=list[schemas.ProviderHealth])
+async def provider_health(admin: User = Depends(require_admin)):
+    """Configured/sandbox state only — no latency, quota, or circuit-state
+    tracking exists yet (that needs a metrics/observability layer this
+    pass doesn't add; see production-api-inventory.md's monitoring gap)."""
+    settings = get_settings()
+    from integrations.payments import get_provider as get_payment_provider
+    from modules.auth.providers import REGISTRY as OAUTH_PROVIDERS
+
+    provider = get_payment_provider()
+    rows = [
+        schemas.ProviderHealth(name=provider.name, kind="payment", configured=True, sandbox=provider.sandbox),
+        schemas.ProviderHealth(name=settings.email_backend, kind="email", configured=True, sandbox=settings.email_backend != "smtp"),
+        schemas.ProviderHealth(name=settings.storage_backend, kind="storage", configured=True, sandbox=settings.storage_backend != "r2"),
+        schemas.ProviderHealth(name="google", kind="identity", configured=bool(settings.google_client_id)),
+    ]
+    for platform in OAUTH_PROVIDERS:
+        creds = (
+            getattr(settings, f"{platform}_client_key", None)
+            or getattr(settings, f"{platform}_app_id", None)
+            or getattr(settings, f"{platform}_client_id", None)
+        )
+        rows.append(schemas.ProviderHealth(name=platform, kind="social", configured=bool(creds)))
+    return rows

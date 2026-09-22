@@ -91,6 +91,25 @@ def decode_google_state_token(token: str) -> dict | None:
     return payload
 
 
+def create_admin_invite_token(invitation_id: uuid.UUID, minutes: int) -> str:
+    """Stateless on purpose: everything needed to look the invitation up
+    (`jti` == the invitation's own id) travels in the signed token, so
+    `GET /auth/admin-invitations/{token}` is one primary-key read."""
+    expire = datetime.now(timezone.utc) + timedelta(minutes=minutes)
+    payload = {"jti": str(invitation_id), "purpose": "admin_invite", "exp": expire}
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+
+def decode_admin_invite_token(token: str) -> uuid.UUID | None:
+    payload = decode_access_token(token)
+    if not payload or payload.get("purpose") != "admin_invite":
+        return None
+    try:
+        return uuid.UUID(payload["jti"])
+    except (KeyError, ValueError):
+        return None
+
+
 def generate_otp(length: int = 6) -> str:
     """A uniformly random numeric code (leading zeros allowed)."""
     return "".join(str(secrets.randbelow(10)) for _ in range(length))

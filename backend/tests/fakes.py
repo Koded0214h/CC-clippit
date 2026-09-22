@@ -27,6 +27,7 @@ class FakeIntelligence:
         self.trust: dict[str, str] = {}
         self.registered: list[dict] = []
         self.stopped: list[str] = []
+        self.trust_reviews: list[dict] = []
         #: Set to (status, detail) to make the next registrations fail.
         self.fail_register: tuple[int, dict] | None = None
         #: Set to make every read raise like an unreachable service.
@@ -57,12 +58,17 @@ class FakeIntelligence:
         if parts[3] == "tracking" and parts[4] == "stop":
             self.stopped.append(submission_id)
             return _response(200, {})
+        if parts[3] == "trust" and parts[4] == "review":
+            self.trust_reviews.append({"submission_id": submission_id, **(json or {})})
+            return _response(201, {"review_id": str(uuid.uuid4()), "evaluation_id": None, **(json or {})})
         return _response(404, {"detail": "unhandled in fake"})
 
     async def get(self, url: str, params: dict | None = None, **_) -> httpx.Response:
         if self.unreachable:
             raise httpx.ConnectError("intelligence is down")
         parts = url.strip("/").split("/")
+        if parts[1:3] == ["trust", "rules"]:
+            return _response(200, {"version": "fake-1", "rules": [], "active_since": datetime.now(timezone.utc).isoformat()})
         submission_id, what = parts[2], parts[3]
         if submission_id not in self.views:
             return _response(404, {"detail": {"code": "no_observations", "message": "none"}})

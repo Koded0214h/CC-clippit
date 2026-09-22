@@ -13,6 +13,7 @@ from core.rate_limit import limiter
 from core.security import (
     create_purpose_token,
     decode_access_token,
+    decode_admin_invite_token,
     decode_purpose_token,
     hash_password,
     verify_password,
@@ -514,3 +515,64 @@ async def delete_account(
 
     audit.record(db, "account.deleted", actor_id=user.id)
     await db.commit()
+
+
+# --- operator invitations and permissions (production-api-inventory.md §O) ----
+
+
+@router.get("/permissions", response_model=schemas.PermissionsOut)
+async def my_permissions(user: models.User = Depends(get_current_user)):
+    """One truth for admin UI and API enforcement to share — though today
+    only this read exists; individual admin routes don't check it yet
+    (see the inventory note on `POST /admin/operators/invitations`)."""
+    if user.role != models.Role.admin:
+        return schemas.PermissionsOut(permissions=[])
+    return schemas.PermissionsOut(permissions=list(user.permissions) or ["*"])
+
+
+@router.get("/admin-invitations/{token}", response_model=schemas.AdminInvitationStatus)
+async def invitation_status(token: str, db: AsyncSession = Depends(get_db)):
+    invitation_id = decode_admin_invite_token(token)
+    if invitation_id is None:
+        return schemas.AdminInvitationStatus(status="invalid")
+    invitation = await db.get(models.OperatorInvitation, invitation_id)
+    if invitation is None:
+        return schemas.AdminInvitationStatus(status="invalid")
+    if invitation.accepted_at is not None:
+        return schemas.AdminInvitationStatus(status="used")
+    if invitation.expires_at < datetime.now(timezone.utc):
+        return schemas.AdminInvitationStatus(status="expired")
+    return schemas.AdminInvitationStatus(status="valid", email=invitation.email, permissions=list(invitation.permissions))
+
+
+@router.post("/admin-invitations/{token}/accept", response_model=schemas.TokenResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")
+async def accept_invitation(
+    request: Request, token: str, payload: schemas.AdminInvitationAccept, db: AsyncSession = Depends(get_db)
+):
+    invalid = HTTPException(status.HTTP_400_BAD_REQUEST, "This invitation isn't valid anymore.")
+    invitation_id = decode_admin_invite_token(token)
+    if invitation_id is None:
+        raise invalid
+    invitation = await db.get(models.OperatorInvitation, invitation_id)
+    if invitation is None or invitation.accepted_at is not None or invitation.expires_at < datetime.now(timezone.utc):
+        raise invalid
+    if await _user_by_email(db, invitation.email):
+        raise HTTPException(status.HTTP_409_CONFLICT, "An account with this email already exists.")
+
+    user = models.User(
+        email=invitation.email, password_hash=hash_password(payload.password), full_name=payload.full_name,
+        role=models.Role.admin, email_verified=True, permissions=invitation.permissions, invited_by=invitation.invited_by,
+    )
+    db.add(user)
+    await db.flush()
+    db.add(models.UserPreferences(user_id=user.id))
+    invitation.accepted_at = datetime.now(timezone.utc)
+    invitation.accepted_user_id = user.id
+    from modules.audit import service as audit
+
+    audit.record(db, "admin.operator_invitation_accepted", actor_id=user.id, subject_id=invitation.invited_by)
+    issued = await sessions.start_session(db, user, request)
+    await db.commit()
+    await db.refresh(user)
+    return schemas.TokenResponse(access_token=issued.access_token, refresh_token=issued.refresh_token, user=schemas.UserOut.model_validate(user))

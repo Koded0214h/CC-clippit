@@ -18,6 +18,18 @@ def verification_email(to: str, code: str) -> EmailMessage:
     )
 
 
+def admin_invitation_email(to: str, link: str, invited_by: str) -> EmailMessage:
+    return EmailMessage(
+        to=to,
+        subject="You've been invited to Clippit's admin",
+        text=(
+            f"{invited_by} invited you to a Clippit operator account.\n\n"
+            f"Accept the invitation: {link}\n\n"
+            "If you weren't expecting this, ignore it — nothing is created until the link is used."
+        ),
+    )
+
+
 def recovery_email(to: str, code: str) -> EmailMessage:
     minutes = get_settings().otp_ttl_minutes
     return EmailMessage(

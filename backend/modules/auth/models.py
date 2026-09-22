@@ -75,6 +75,15 @@ class User(Base):
     #: account, so a "temporary" suspension still needs a manual restore.
     suspension_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
+    # --- operator permissions (production-api-inventory.md §O) --------------
+    # Empty on every existing admin (all of them, today) means "full
+    # access" — the legacy default. Nothing yet *enforces* a granular
+    # permission on any individual admin route; this is the data model
+    # and the invitation flow, not per-route gating (see the inventory's
+    # note on this row).
+    permissions: Mapped[list[str]] = mapped_column(ARRAY(String(60)), nullable=False, server_default="{}")
+    invited_by: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+
     @property
     def onboarding_completed(self) -> bool:
         return self.onboarded_at is not None
@@ -185,6 +194,27 @@ class RefreshToken(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     replaced_by_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+
+
+class OperatorInvitation(Base):
+    """One admin-account invitation. `id` doubles as the signed token's
+    `jti` (see core.security's admin-invite token helpers), so looking
+    the token up after decoding it is a primary-key read, not a search.
+    MFA enrollment isn't enforced at accept time — 2FA doesn't exist yet
+    (production-api-inventory.md §B) — which is a real gap, not an
+    oversight: this invitation flow is the primitive, not the full
+    security control the inventory row describes."""
+
+    __tablename__ = "operator_invitations"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    permissions: Mapped[list[str]] = mapped_column(ARRAY(String(60)), nullable=False, server_default="{}")
+    invited_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    accepted_user_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class AuthCodePurpose(str, enum.Enum):

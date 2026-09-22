@@ -250,6 +250,45 @@ class StepUpOnly(BaseModel):
     step_up_token: str
 
 
+class AdminInvitationCreate(BaseModel):
+    email: EmailStr
+    permissions: list[str] = Field(default_factory=list, max_length=20)
+
+
+class AdminInvitationCreated(BaseModel):
+    id: uuid.UUID
+    email: EmailStr
+    permissions: list[str]
+    expires_at: datetime
+    #: Only ever returned here, at creation — the invite link isn't
+    #: recoverable later (mirrors why a password reset token isn't either).
+    invite_token: str
+
+
+class AdminInvitationStatus(BaseModel):
+    #: valid | expired | used | invalid
+    status: str
+    email: EmailStr | None = None
+    permissions: list[str] | None = None
+
+
+class AdminInvitationAccept(BaseModel):
+    full_name: str = Field(min_length=2, max_length=200)
+    password: str
+
+    @field_validator("password")
+    @classmethod
+    def password_is_strong(cls, value: str) -> str:
+        if len(value) < 8 or not any(c.isdigit() for c in value):
+            raise ValueError("Password must be at least 8 characters and include a number.")
+        return value
+
+
+class PermissionsOut(BaseModel):
+    #: ["*"] means unrestricted (every existing admin today).
+    permissions: list[str]
+
+
 class ProfileOut(BaseModel):
     """What the profile page loads in one call: who the user is, what
     they've connected, and their preferences — this is also where the
