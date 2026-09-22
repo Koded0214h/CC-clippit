@@ -51,6 +51,16 @@ class User(Base):
     # Any token issued before this instant is dead — bumped on password
     # reset so a stolen session cannot outlive the change.
     tokens_valid_after: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # False for an account created by Google Sign-In that has never set a
+    # local password — `password_hash` still holds a value (the column
+    # stays NOT NULL), but it's an unguessable placeholder no login
+    # attempt can ever match. Login-with-password checks this first.
+    has_password: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    google_id: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
+    google_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Set instead of a hard delete, so campaigns/submissions/ledger rows
+    # that reference this user's id keep their foreign keys intact.
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     @property
     def onboarding_completed(self) -> bool:
@@ -117,6 +127,51 @@ class RevokedToken(Base):
     jti: Mapped[str] = mapped_column(String(36), primary_key=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Session(Base):
+    """One signed-in device/browser. `GET /auth/sessions` lists these, not
+    tokens — a session outlives any single access token and is what
+    "sign out this device" actually revokes. `revoked_at` is checked on
+    every request that carries a `sid` claim (see deps.get_current_user),
+    so revoking a session invalidates its access tokens immediately
+    rather than waiting for them to expire on their own."""
+
+    __tablename__ = "sessions"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    #: Best-effort, parsed from User-Agent at creation — never load-bearing.
+    device_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class RefreshToken(Base):
+    """The bearer secret is never stored — only its hash — so a database
+    leak can't be replayed. `id` is the public half returned to the
+    client (`"<id>.<secret>"`); looking a token up by `id` first, then
+    comparing the secret's hash, means a lookup never needs a table scan.
+
+    Rotation: each refresh consumes one row (`used_at` set) and creates
+    the next (`replaced_by_id` links them). A refresh call presenting an
+    already-used token is treated as token theft — reuse — and revokes
+    the whole session, not just that token, on the reasoning that a
+    legitimate client never replays a token it already exchanged."""
+
+    __tablename__ = "refresh_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    secret_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    replaced_by_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
 
 
 class AuthCodePurpose(str, enum.Enum):

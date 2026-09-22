@@ -20,6 +20,7 @@ from core.rate_limit import limiter
 from modules.admin.router import router as admin_router
 from modules.auth.internal_router import router as auth_internal_router
 from modules.auth.profile_router import router as auth_profile_router
+from modules.auth.google_router import router as auth_google_router
 from modules.auth.router import router as auth_router
 from modules.auth.social_router import router as auth_social_router
 from modules.campaigns.brand_router import router as brand_router
@@ -61,6 +62,7 @@ def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse
 
 # --- Auth & Accounts (Koded) ---
 app.include_router(auth_router)
+app.include_router(auth_google_router)
 app.include_router(auth_social_router)
 app.include_router(auth_profile_router)
 app.include_router(auth_internal_router)

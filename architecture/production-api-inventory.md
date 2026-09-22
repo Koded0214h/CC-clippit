@@ -72,6 +72,18 @@ These rules apply to every route, including routes already built.
 | `POST /auth/forgot-password` | Public, enumeration safe | Starts password recovery and always returns a neutral accepted response. | Built, dependency pending: production email delivery |
 | `POST /auth/recovery-code/verify` | Public, attempt limited | Validates a recovery code and returns a single-use reset token. | Built |
 | `POST /auth/reset-password` | Reset-token flow | Replaces the password and invalidates existing sessions/tokens. | Built |
+| `POST /auth/refresh` | Refresh-token flow | Rotates a refresh token; reuse of an already-spent one revokes the whole session. | Built 2026-09-22 |
+| `GET /auth/sessions` | Signed in | Lists this account's active sessions/devices, marking the current one. | Built 2026-09-22 |
+| `DELETE /auth/sessions/{session_id}` | Signed in, owner | Revokes one session immediately (its access tokens stop working, not just its refresh token). | Built 2026-09-22 |
+| `DELETE /auth/sessions/others` | Signed in | Revokes every session but the caller's own. | Built 2026-09-22 |
+| `POST /auth/change-password` | Signed in | Requires the current password; revokes other sessions by default. | Built 2026-09-22 |
+| `POST /auth/password` | Signed in, step-up | Sets a first password for a Google-only account. | Built 2026-09-22 |
+| `GET /auth/providers` | Signed in | Which sign-in methods are linked and which are safe to remove. | Built 2026-09-22 |
+| `DELETE /auth/providers/google` | Signed in, step-up | Unlinks Google — refused if no password exists to fall back to. | Built 2026-09-22 |
+| `POST /auth/step-up/request`, `POST /auth/step-up/verify` | Signed in | Generic action-bound re-authentication proof (password only — the only factor that exists). Built as a primitive; not yet required by the endpoints that should ask for it (payout destination, refunds, email change). | Built 2026-09-22 |
+| `DELETE /auth/account` | Signed in, step-up | Anonymises the account (email/name scrubbed, socials disconnected, every session revoked); refuses while money traces back to it unsettled. | Built 2026-09-22 |
+| `GET /auth/google/login`, `GET /auth/google/callback` | Public / OAuth callback | Google OIDC sign-in — creates, signs in to, or (email-verified match only) auto-links an account. Verifies via Google's `tokeninfo` endpoint, not local JWKS. | Built 2026-09-22, dependency pending: real `GOOGLE_CLIENT_ID`/`SECRET`, never exercised against real Google |
+| `GET /auth/google/link` | Signed in | Attaches Google to the current account (a redirect flow, not the `POST .../link` the inventory names — see the note in Part II §B). | Built 2026-09-22 |
 
 ## Connected social accounts
 
@@ -292,6 +304,14 @@ These endpoints are required by the existing Google buttons and security/device 
 | Missing P1 | `POST /auth/account-export` | Queue a privacy export containing profile, campaigns/submissions, ledger, and audit-visible customer data; return a job ID. |
 | Missing P0 | `DELETE /auth/account` | Re-authenticate, apply legal/ledger retention rules, revoke sessions/tokens, disconnect socials, and schedule deletion/anonymisation. Refuse unsafe deletion while money is unsettled. |
 | Missing P1 | `GET /auth/account-export/{job_id}` | Return export status and a short-lived download URL when ready. |
+
+**2026-09-22 — Built**, all P0 rows above except the 2FA/email-change P1 rows (still missing, along with account-export):
+- `POST /auth/refresh`, `GET/DELETE /auth/sessions*`: a new `sessions`/`refresh_tokens` pair backs real, revocable devices. Access tokens now carry a `sid` claim checked on every request; revoking a session invalidates its access tokens immediately, not just its refresh token. Refresh-token reuse (a token presented twice) revokes the whole session — signup/login now return a `refresh_token` alongside `access_token`.
+- `POST /auth/change-password`, `POST /auth/password` (first password for a Google-only account), `GET /auth/providers`, `DELETE /auth/providers/google`: `users` gained `has_password`/`google_id`/`google_email`; `/auth/providers` reports which method is safe to remove (never the last one).
+- `POST /auth/step-up/{request,verify}`: a generic, action-bound proof primitive (password only today — the only factor that exists; 2FA would add a factor choice at `request` without changing the shape). **Not yet wired to the endpoints that should require it** — payout-destination change, refunds, email change — those still accept the request without a step-up token. `DELETE /auth/account` and `POST /auth/password`/`DELETE /auth/providers/google` do require and consume one.
+- `GET /auth/google/login`, `GET /auth/google/callback`: real OIDC (state+nonce, verified via Google's `tokeninfo` endpoint rather than local JWKS/RS256 — this environment has no `cryptography` wheel; see `modules/auth/google.py`'s docstring). Auto-links onto an existing account only when Google reports the email verified; an unverified match or one already linked to a different Google account is refused, not silently taken over or duplicated. **Needs a real `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`** (both empty by default; `/auth/google/login` 503s without them) — never exercised against real Google.
+- `POST /auth/providers/google/link` is built as `GET /auth/google/link` instead (a redirect-flow login, matching how `/social/{platform}/login` already works) rather than a POST — the doc's path assumed a JSON call, but starting an OAuth round trip needs a browser navigation either way.
+- PKCE was scoped out of the Google flow: Google's server-side (confidential-client) OAuth flow doesn't require it the way TikTok's public-client PKCE flow does; the state token still carries a nonce, which is what OIDC actually needs checked back against the id_token.
 
 ## C. Onboarding lifecycle: creator and brand
 

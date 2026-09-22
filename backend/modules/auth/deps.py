@@ -28,8 +28,14 @@ async def get_current_user(
     if jti and await db.get(models.RevokedToken, jti):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "This token has been logged out")
 
+    sid = payload.get("sid")
+    if sid:
+        session = await db.get(models.Session, uuid.UUID(sid))
+        if session is None or session.revoked_at is not None:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "This session has been signed out")
+
     user = await db.get(models.User, uuid.UUID(payload["sub"]))
-    if not user:
+    if not user or user.deleted_at is not None:
         raise unauthorized
     if user.tokens_valid_after is not None:
         issued = payload.get("iat")
