@@ -32,7 +32,7 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from core.database import Base
@@ -178,3 +178,35 @@ class CampaignMembership(Base):
     creator_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     left_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class CampaignDraft(Base):
+    """The campaign studio's autosave surface — everything `POST
+    /campaigns` needs, accumulated screen by screen, before it's valid
+    enough to become a real `Campaign`. `draft_answers` holds whatever
+    subset of `CampaignCreate`'s fields have been saved so far, plus
+    source-asset references (accepted here, not through a separate
+    endpoint, until finalize — see production-api-inventory.md §H).
+    `finalized_campaign_id` marks a spent draft: kept, not deleted, so a
+    duplicate `finalize` call stays idempotent."""
+
+    __tablename__ = "campaign_drafts"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    current_step: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    draft_answers: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    finalized_campaign_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("campaigns.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    #: Stale, never-finalized drafts are cheap to expire; nothing sweeps
+    #: this yet (no job wired), so it's a policy field, not enforced today.
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -24,6 +24,7 @@ from modules.auth.google_router import router as auth_google_router
 from modules.auth.router import router as auth_router
 from modules.auth.social_router import router as auth_social_router
 from modules.campaigns.brand_router import router as brand_router
+from modules.campaigns.drafts_router import router as campaign_drafts_router
 from modules.campaigns.router import router as campaigns_router
 from modules.creators.router import router as creators_router
 from modules.earnings.router import router as earnings_router
@@ -77,6 +78,7 @@ app.include_router(intelligence_internal_router)
 
 # --- Campaign Management, Content Submission, Payouts, Admin (Koded) ---
 app.include_router(campaigns_router)
+app.include_router(campaign_drafts_router)
 app.include_router(funding_router)
 app.include_router(brand_router)
 app.include_router(payments_router)

@@ -61,6 +61,38 @@ async def unique_slug(db: AsyncSession, title: str) -> str:
     return candidate
 
 
+async def create_campaign(db: AsyncSession, owner: User, payload: schemas.CampaignCreate) -> models.Campaign:
+    """The one place a `Campaign` row gets created — used by `POST
+    /campaigns` directly and by `POST /campaign-drafts/{id}/finalize`
+    (which re-validates its accumulated draft as this same
+    `CampaignCreate` shape first). Does not commit; the caller decides
+    the transaction boundary."""
+    pot, expected_views = derive_budget(
+        pot=payload.pot, expected_views=payload.expected_views, rate=payload.payout_rule.rate_per_1000_views
+    )
+    campaign = models.Campaign(
+        event_manager_id=owner.id,
+        slug=await unique_slug(db, payload.title),
+        title=payload.title,
+        tagline=payload.tagline,
+        description=payload.description,
+        category=payload.category,
+        source_link=payload.source_link,
+        cover_image_upload_id=payload.cover_image_upload_id,
+        expected_views=expected_views,
+        pot_amount=pot,
+        duration_days=payload.duration_days,
+        platforms=[p.value for p in payload.platforms],
+    )
+    db.add(campaign)
+    await db.flush()
+    db.add(models.CampaignPayoutRule(campaign_id=campaign.id, **payload.payout_rule.model_dump()))
+    for position, rule in enumerate(payload.rules):
+        db.add(models.CampaignRule(campaign_id=campaign.id, kind=rule.kind, text=rule.text, position=position))
+    audit.record(db, "campaign.created", actor_id=owner.id, campaign_id=campaign.id, amount=pot)
+    return campaign
+
+
 async def resolve(db: AsyncSession, ref: str) -> models.Campaign | None:
     """A campaign by UUID or by slug — the frontend routes on slugs, every
     other caller has ids."""
@@ -438,6 +470,45 @@ def is_open_for_entries(campaign: models.Campaign, at: datetime | None = None) -
     if campaign.status != models.CampaignStatus.active or not campaign.accepting_entries:
         return False
     return campaign.ends_at is None or campaign.ends_at > (at or now())
+
+
+# --- campaign studio drafts ----------------------------------------------------
+
+
+def draft_blockers(answers: dict) -> dict[str, str]:
+    """What `finalize` would still refuse on — computed without raising, so
+    `GET`/`PATCH` can show the builder exactly which screen is incomplete."""
+    blockers: dict[str, str] = {}
+    if not (answers.get("title") or "").strip():
+        blockers["title"] = "Add a campaign title."
+    if not (answers.get("description") or "").strip():
+        blockers["description"] = "Add a brief description."
+    if not answers.get("platforms"):
+        blockers["platforms"] = "Choose at least one platform."
+    payout_rule = answers.get("payout_rule") or {}
+    if not payout_rule.get("rate_per_1000_views"):
+        blockers["payout_rule"] = "Set a rate per 1,000 views."
+    if not answers.get("pot") and not answers.get("expected_views"):
+        blockers["budget"] = "Set a pot or an expected-views target."
+    return blockers
+
+
+async def finalize_draft(db: AsyncSession, draft: models.CampaignDraft, owner: User) -> models.Campaign:
+    if draft.finalized_campaign_id is not None:
+        campaign = await db.get(models.Campaign, draft.finalized_campaign_id)
+        if campaign is not None:
+            return campaign  # idempotent: already finalized
+    blockers = draft_blockers(draft.draft_answers)
+    if blockers:
+        raise ValueError("; ".join(blockers.values()))
+    try:
+        payload = schemas.CampaignCreate.model_validate(draft.draft_answers)
+    except Exception as exc:  # pydantic ValidationError
+        raise ValueError(str(exc)) from exc
+    campaign = await create_campaign(db, owner, payload)
+    await db.flush()
+    draft.finalized_campaign_id = campaign.id
+    return campaign
 
 
 # --- access rules ------------------------------------------------------------

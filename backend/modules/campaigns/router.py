@@ -70,32 +70,9 @@ async def create_campaign(
     if payload.cover_image_upload_id:
         await owned_upload(db, payload.cover_image_upload_id, user.id, kinds=("image",))
     try:
-        pot, expected_views = service.derive_budget(
-            pot=payload.pot, expected_views=payload.expected_views, rate=payload.payout_rule.rate_per_1000_views
-        )
+        campaign = await service.create_campaign(db, user, payload)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
-
-    campaign = models.Campaign(
-        event_manager_id=user.id,
-        slug=await service.unique_slug(db, payload.title),
-        title=payload.title,
-        tagline=payload.tagline,
-        description=payload.description,
-        category=payload.category,
-        source_link=payload.source_link,
-        cover_image_upload_id=payload.cover_image_upload_id,
-        expected_views=expected_views,
-        pot_amount=pot,
-        duration_days=payload.duration_days,
-        platforms=[p.value for p in payload.platforms],
-    )
-    db.add(campaign)
-    await db.flush()
-    db.add(models.CampaignPayoutRule(campaign_id=campaign.id, **payload.payout_rule.model_dump()))
-    for position, rule in enumerate(payload.rules):
-        db.add(models.CampaignRule(campaign_id=campaign.id, kind=rule.kind, text=rule.text, position=position))
-    audit.record(db, "campaign.created", actor_id=user.id, campaign_id=campaign.id, amount=pot)
     await db.commit()
     return await _out(db, await _load(str(campaign.id), db), user)
 

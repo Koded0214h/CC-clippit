@@ -464,6 +464,8 @@ The six-screen campaign studio currently persists only to browser `localStorage`
 
 The existing `POST /campaigns` remains useful for API clients that already have a complete campaign payload. The frontend campaign studio should use the draft lifecycle.
 
+**2026-09-22 — Built**, all six rows: a `campaign_drafts` table (JSONB `draft_answers`, revisioned autosave, same pattern as the onboarding drafts in §C). `GET`/`PATCH` return a `blockers` map (field → what's missing) computed without raising, so the builder can flag the exact incomplete screen live. `finalize` re-validates the accumulated draft as the same `CampaignCreate` shape `POST /campaigns` uses — that route's creation logic was factored into `service.create_campaign` so there's exactly one place a `Campaign` row gets made — and is idempotent (`finalized_campaign_id` on the draft; a second call returns the same campaign rather than erroring or duplicating). `GET /campaign-drafts` lists only unfinalized drafts. **Not built**: source-asset attachment (`POST /uploads/campaign-assets`, `/campaigns/{ref}/assets`, and the equivalent PATCH-the-draft path this section allows for) — `CampaignDraftPatch` covers details/platforms/rules/budget/cover image only, not source material. `expires_at` is a column with no sweep job behind it yet (nothing expires stale drafts). Analytics and closeout (below) are also still open.
+
 ### Campaign source materials
 
 | Priority | Method and path | Required contract |

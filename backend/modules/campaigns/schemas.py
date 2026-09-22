@@ -250,3 +250,49 @@ class MyCampaignRow(BaseModel):
     left_at: datetime | None = None
     submission_id: uuid.UUID | None = None
     submission_status: str | None = None
+
+
+# --- campaign studio drafts ---------------------------------------------------
+
+
+class CampaignDraftPatch(BaseModel):
+    """Autosave: any subset of `CampaignCreate`'s fields, screen by screen,
+    plus which step the builder is on. `revision` must be the value last
+    read from `GET` — see the same pattern on onboarding drafts."""
+
+    revision: int
+    step: str | None = Field(default=None, max_length=40)
+    title: str | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=2000)
+    tagline: str | None = Field(default=None, max_length=200)
+    category: str | None = Field(default=None, max_length=40)
+    source_link: str | None = Field(default=None, max_length=500)
+    platforms: list[Platform] | None = None
+    pot: float | None = Field(default=None, gt=0)
+    expected_views: int | None = Field(default=None, gt=0)
+    payout_rule: PayoutRuleIn | None = None
+    duration_days: int | None = Field(default=None, ge=1, le=90)
+    cover_image_upload_id: uuid.UUID | None = None
+    rules: list[RuleIn] | None = Field(default=None, max_length=20)
+
+
+class CampaignDraftOut(BaseModel):
+    id: uuid.UUID
+    schema_version: int
+    #: not_started | in_progress | finalized
+    status: str
+    step: str | None
+    revision: int
+    answers: dict
+    #: What's still missing before `finalize` would succeed — field name to
+    #: a short reason, so the builder can flag exactly the blocked screen.
+    blockers: dict[str, str]
+    finalized_campaign_id: uuid.UUID | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class CampaignDraftFinalizeOut(BaseModel):
+    campaign_id: uuid.UUID
+    campaign_slug: str
+    next_route: str
