@@ -31,6 +31,7 @@ import modules.organisations.models  # noqa: F401
 import modules.payouts.models  # noqa: F401
 import modules.refunds.models  # noqa: F401
 import modules.submissions.models  # noqa: F401
+import modules.support.models  # noqa: F401
 import modules.uploads.models  # noqa: F401
 
 TEST_URL = "postgresql+asyncpg://clippit:clippit@localhost:5433/clippit_http_test"

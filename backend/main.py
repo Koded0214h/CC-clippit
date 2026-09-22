@@ -40,6 +40,8 @@ from modules.receipts.router import router as receipts_router
 from modules.refunds.router import router as refunds_router
 from modules.reviews.router import router as reviews_router
 from modules.submissions.router import router as submissions_router
+from modules.support.admin_router import router as support_admin_router
+from modules.support.router import router as support_router
 from modules.uploads.router import media_router, router as uploads_router
 
 import modules.scheduled  # noqa: F401  (registers the periodic jobs)
@@ -99,6 +101,8 @@ app.include_router(product_router)
 app.include_router(legal_router)
 app.include_router(refunds_router)
 app.include_router(receipts_router)
+app.include_router(support_router)
+app.include_router(support_admin_router)
 
 
 @app.get("/health")

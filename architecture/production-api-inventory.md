@@ -555,6 +555,8 @@ Support must serve both creator and brand accounts. A ticket belongs to the call
 | Missing P0 | `PATCH /admin/support/tickets/{ticket_id}` | Assign, change priority/status/category, and record internal disposition. |
 | Missing P1 | `POST /admin/support/tickets/{ticket_id}/notes` | Add an internal-only note that is never returned to the customer endpoint. |
 
+**2026-09-22 — Built**: every row in the ticket table above (customer and admin sides). `category` is a free-text field, not a controlled taxonomy — there's no `GET /support/categories` behind it, since that (and the help articles below it) needs real content that doesn't exist yet. Unread is measured against a `customer_last_read_at` timestamp the customer's own `GET .../{id}` bumps; the admin queue doesn't get a symmetric "unread from customer" signal (not asked for in this row's contract). A customer message on a closed ticket reopens it automatically; the explicit `/reopen` route is for reopening *without* a new message, and refuses past a 14-day window (arbitrary — no policy was specified; change it if the real support process wants something else). `resource_type`/`resource_id` are a loose, unenforced reference (same pattern as `audit_events`), not a foreign key into whichever module owns that resource. Attachments reuse the existing `image`/`evidence` upload kinds rather than a dedicated `support-attachments` kind (still open, P1). "Notify the customer" on an operator reply isn't wired to email — only the in-app unread count reflects it.
+
 If Clippit owns help content instead of using an external CMS, the following content-management routes are also required:
 
 | Priority | Method and path | Required contract |
