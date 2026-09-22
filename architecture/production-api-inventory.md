@@ -710,6 +710,8 @@ The existing streaming upload routes are acceptable for development and small pi
 
 Push can be deferred during a controlled pilot if in-app and transactional email delivery are operational.
 
+**2026-09-22 — Built**, all four rows: `GET /notifications/unread-count` (excludes archived, matching the inbox's own count); `POST /notifications/{id}/archive` (hides from the default inbox list; the row and its audit trail stay); `POST`/`DELETE /push-subscriptions*` (re-registering the same browser endpoint updates the row rather than duplicating it). Nothing actually sends a push yet — these endpoints only manage subscriptions; the send side is still whatever web-push integration is chosen.
+
 ## R. Legal documents and consent records
 
 The frontend currently links to `/terms` and `/privacy`, but those pages do not exist. The pages may be statically rendered; the acceptance record still belongs in the backend.
