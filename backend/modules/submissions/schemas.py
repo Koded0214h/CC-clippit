@@ -23,6 +23,18 @@ class SubmissionCreate(BaseModel):
         return value.strip() if isinstance(value, str) else value
 
 
+class ResubmitIn(BaseModel):
+    platform: Platform
+    url: str = Field(min_length=1, max_length=2048)
+    title: str | None = Field(default=None, max_length=200)
+    video_upload_id: uuid.UUID | None = None
+
+    @field_validator("url", "title")
+    @classmethod
+    def strip(cls, value: str | None) -> str | None:
+        return value.strip() if isinstance(value, str) else value
+
+
 class AppealCreate(BaseModel):
     reason: str = Field(min_length=20, max_length=600)
     evidence_upload_id: uuid.UUID | None = None
@@ -109,6 +121,7 @@ class SubmissionOut(BaseModel):
     updated_at: datetime
     campaign: SubmissionCampaignOut | None = None
     verification: VerificationOut | None = None
+    resubmitted_from_id: uuid.UUID | None = None
 
 
 class SubmissionEarningsOut(BaseModel):

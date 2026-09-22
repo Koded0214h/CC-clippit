@@ -352,6 +352,7 @@ async def shape(db: AsyncSession, submissions: list[models.Submission]) -> list[
                     ) if c else None
                 ),
                 verification=verification,
+                resubmitted_from_id=s.resubmitted_from_id,
             )
         )
     return out

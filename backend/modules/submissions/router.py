@@ -57,64 +57,61 @@ async def _one(db: AsyncSession, submission: models.Submission) -> schemas.Submi
     return (await service.shape(db, [submission]))[0]
 
 
-@router.post("", response_model=schemas.SubmissionOut, status_code=status.HTTP_201_CREATED)
-async def create_submission(
-    payload: schemas.SubmissionCreate,
-    user: User = Depends(get_verified_user),
-    db: AsyncSession = Depends(get_db),
-    client: httpx.AsyncClient = Depends(get_internal_client),
-):
-    if user.role != Role.creator:
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only a creator account can submit content")
-
-    campaign = await campaign_service.resolve(db, str(payload.campaign_id))
-    if not campaign or campaign.status != CampaignStatus.active:
+async def _register(
+    db: AsyncSession,
+    client: httpx.AsyncClient,
+    user: User,
+    campaign: Campaign,
+    *,
+    platform,
+    url: str,
+    title: str | None,
+    video_upload_id: uuid.UUID | None,
+    resubmitted_from_id: uuid.UUID | None = None,
+) -> models.Submission:
+    """Everything `POST /submissions` and `POST /submissions/{id}/resubmit`
+    share: campaign/account checks, registering with Intelligence, and
+    running the brief verifier. The caller has already validated whatever
+    is specific to it (predecessor eligibility, for a resubmission)."""
+    if campaign.status != CampaignStatus.active:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Campaign not found or not accepting submissions")
     if not campaign_service.is_open_for_entries(campaign):
         raise HTTPException(
             status.HTTP_409_CONFLICT,
             detail={"code": "campaign_not_accepting", "message": "This campaign isn't taking new clips right now."},
         )
-    if payload.platform.value not in campaign.platforms:
-        raise HTTPException(
-            422,
-            f"This campaign doesn't accept {payload.platform.value} submissions",
-        )
+    if platform.value not in campaign.platforms:
+        raise HTTPException(422, f"This campaign doesn't accept {platform.value} submissions")
 
     has_account = (
         await db.scalar(
             select(SocialAccount.id).where(
-                SocialAccount.user_id == user.id,
-                SocialAccount.platform == AuthPlatform(payload.platform.value),
+                SocialAccount.user_id == user.id, SocialAccount.platform == AuthPlatform(platform.value)
             )
         )
         is not None
     )
     if not has_account:
         raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            f"Connect your {payload.platform.value} account from your profile before submitting",
+            status.HTTP_409_CONFLICT, f"Connect your {platform.value} account from your profile before submitting"
         )
-    if payload.video_upload_id:
-        await owned_upload(db, payload.video_upload_id, user.id, kinds=("video",))
+    if video_upload_id:
+        await owned_upload(db, video_upload_id, user.id, kinds=("video",))
 
     submission = models.Submission(
         campaign_id=campaign.id,
         creator_id=user.id,
-        platform=payload.platform.value,
-        url=payload.url,
-        title=payload.title,
-        video_upload_id=payload.video_upload_id,
+        platform=platform.value,
+        url=url,
+        title=title,
+        video_upload_id=video_upload_id,
+        resubmitted_from_id=resubmitted_from_id,
     )
     db.add(submission)
     await db.flush()  # assigns submission.id (client-side default) before we reference it below
 
     ref = SubmissionRef(
-        submission_id=submission.id,
-        campaign_id=campaign.id,
-        creator_id=user.id,
-        platform=payload.platform,
-        url=payload.url,
+        submission_id=submission.id, campaign_id=campaign.id, creator_id=user.id, platform=platform, url=url
     )
     try:
         resp = await client.post(f"/internal/submissions/{submission.id}/metrics", json=ref.model_dump(mode="json"))
@@ -140,10 +137,77 @@ async def create_submission(
         await db.commit()
         raise HTTPException(resp.status_code, detail)
 
-    audit.record(db, "submission.created", actor_id=user.id, submission_id=submission.id, campaign_id=campaign.id)
+    kind = "submission.resubmitted" if resubmitted_from_id else "submission.created"
+    audit.record(db, kind, actor_id=user.id, submission_id=submission.id, campaign_id=campaign.id)
     await service.run_verification(db, submission, campaign)
     await db.commit()
     await db.refresh(submission)
+    return submission
+
+
+@router.post("", response_model=schemas.SubmissionOut, status_code=status.HTTP_201_CREATED)
+async def create_submission(
+    payload: schemas.SubmissionCreate,
+    user: User = Depends(get_verified_user),
+    db: AsyncSession = Depends(get_db),
+    client: httpx.AsyncClient = Depends(get_internal_client),
+):
+    if user.role != Role.creator:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only a creator account can submit content")
+
+    campaign = await campaign_service.resolve(db, str(payload.campaign_id))
+    if not campaign:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Campaign not found or not accepting submissions")
+    submission = await _register(
+        db, client, user, campaign,
+        platform=payload.platform, url=payload.url, title=payload.title, video_upload_id=payload.video_upload_id,
+    )
+    return await _one(db, submission)
+
+
+MAX_RESUBMISSIONS = 3  # the original attempt plus up to two corrections
+
+
+@router.post("/{submission_id}/resubmit", response_model=schemas.SubmissionOut, status_code=status.HTTP_201_CREATED)
+async def resubmit(
+    submission_id: uuid.UUID,
+    payload: schemas.ResubmitIn,
+    user: User = Depends(get_verified_user),
+    db: AsyncSession = Depends(get_db),
+    client: httpx.AsyncClient = Depends(get_internal_client),
+):
+    """A corrected clip against the same campaign, linked to the verdict it
+    corrects. The original submission — its verdict, requirement results,
+    and appeal — is untouched; it's superseded, not rewritten."""
+    predecessor = await _get_visible_submission(submission_id, user, db)
+    if user.role != Role.creator or predecessor.creator_id != user.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the creator who submitted this can resubmit it")
+    corrigible = predecessor.status == models.SubmissionStatus.rejected or (
+        predecessor.status == models.SubmissionStatus.submitted
+        and predecessor.verification_status == models.VerificationStatus.rejected
+    )
+    if not corrigible:
+        raise HTTPException(status.HTTP_409_CONFLICT, "This submission isn't in a state that can be corrected.")
+
+    chain_length, node = 1, predecessor
+    while node.resubmitted_from_id is not None:
+        node = await db.get(models.Submission, node.resubmitted_from_id)
+        if node is None:
+            break
+        chain_length += 1
+    if chain_length >= MAX_RESUBMISSIONS:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "This clip has already been corrected the maximum number of times."
+        )
+
+    campaign = await campaign_service.resolve(db, str(predecessor.campaign_id))
+    if not campaign:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Campaign not found or not accepting submissions")
+    submission = await _register(
+        db, client, user, campaign,
+        platform=payload.platform, url=payload.url, title=payload.title, video_upload_id=payload.video_upload_id,
+        resubmitted_from_id=predecessor.id,
+    )
     return await _one(db, submission)
 
 

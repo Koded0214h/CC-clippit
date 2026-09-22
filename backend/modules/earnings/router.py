@@ -8,7 +8,7 @@ from core.deps import get_db
 from modules.auth.deps import get_current_user
 from modules.auth.models import Role, User
 
-from . import queries, schemas
+from . import models, queries, schemas
 
 router = APIRouter(tags=["earnings"])
 
@@ -35,6 +35,21 @@ async def earnings_history(
 ):
     _creator_only(user)
     return await queries.history(db, user.id, limit, offset)
+
+
+@router.get("/earnings/entries/{entry_id}", response_model=schemas.EarningEntryDetail)
+async def earning_entry_detail(
+    entry_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)
+):
+    """"Every naira traces to a platform snapshot" — the full provenance
+    behind one accrual on the earnings history list."""
+    detail = await queries.entry_detail(db, entry_id)
+    if detail is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Entry not found")
+    owner_row = await db.get(models.EarningEntry, entry_id)
+    if user.role != Role.admin and (owner_row is None or owner_row.creator_id != user.id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Entry not found")
+    return detail
 
 
 @router.get("/leaderboard", response_model=schemas.Leaderboard)

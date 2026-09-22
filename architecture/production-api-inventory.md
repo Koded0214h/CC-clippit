@@ -501,6 +501,8 @@ The existing CSV `GET /campaigns/{campaign_ref}/report` remains the machine-read
 
 Processing progress, approved/rejected verdicts, appeals, clip detail, performance, and clip earnings already resolve through the existing submission endpoints; they need dynamic IDs in the frontend, not duplicate APIs.
 
+**2026-09-22 — Built**: `POST /submissions/{submission_id}/resubmit` and `GET /earnings/entries/{entry_id}`. Resubmit works on a submission whose link was rejected at registration *or* whose verdict is `rejected` (which covers both an ordinary rejection and a brand's "request correction" — both land on the same status); it links the new submission via `resubmitted_from_id` without touching the original's verdict, requirement results, or appeal, and caps a chain at 3 attempts (the original plus two corrections). `POST /submissions` and the resubmit route now share one registration path (`_register` in the submissions router) so campaign/account/platform validation can't drift between them. The entry-provenance route returns the rate and cap the entry was billed under (from the campaign's payout rule, not a per-entry snapshot — caps aren't tracked per-entry in the model), its pipeline state (Accrued/Payable/Processing/Paid, same rule as `earnings/history`), and its allocated payout id if any. `GET /earnings/export` and `GET /earnings/statement.pdf` (both P1) are still missing.
+
 ## J. Brand ledger, refunds, statements, official receipts, and public verification
 
 The frontend currently fabricates brand transactions and prints client-rendered receipts. Official financial records must come from the server-side ledger.
