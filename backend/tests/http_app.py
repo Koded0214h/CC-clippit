@@ -22,6 +22,7 @@ import modules.audit.models  # noqa: F401
 import modules.auth.models  # noqa: F401
 import modules.campaigns.models  # noqa: F401
 import modules.creators.models  # noqa: F401
+import modules.disputes.models  # noqa: F401
 import modules.earnings.models  # noqa: F401
 import modules.funding.models  # noqa: F401
 import modules.intelligence.models  # noqa: F401
@@ -30,6 +31,7 @@ import modules.notifications.models  # noqa: F401
 import modules.organisations.models  # noqa: F401
 import modules.payouts.models  # noqa: F401
 import modules.refunds.models  # noqa: F401
+import modules.reports.models  # noqa: F401
 import modules.submissions.models  # noqa: F401
 import modules.support.models  # noqa: F401
 import modules.uploads.models  # noqa: F401

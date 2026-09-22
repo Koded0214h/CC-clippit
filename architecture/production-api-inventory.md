@@ -589,6 +589,8 @@ Support tickets answer questions. Disputes and safety reports change risk, money
 | Missing P0 | `POST /admin/disputes/{dispute_id}/resolve` | Apply a structured upheld/denied/partial resolution and invoke only approved domain actions such as verdict override, payout retry, or refund. Never edit history directly. |
 | Missing P1 | `POST /admin/disputes/{dispute_id}/reopen` | Reopen under policy with an operator reason and a new resolution deadline. |
 
+**2026-09-22 — Built**, all ten rows. Five `DisputeType`s (`submission_verdict`, `earning_entry`, `payout`, `funding_order`, `refund` — "transaction" from the inventory's wording is covered by `funding_order`/`refund`, since a brand ledger transaction *is* one of those rows, not a separate record). Each type resolves to an owner, a reference timestamp, and — where the resource has one — an amount (`modules/disputes/service.py`'s `RESOURCE_TYPES`), which is what both the ownership check and "money at risk" in the admin queue come from. Filing windows are **assumed, not confirmed policy**: 7 days for a verdict, 14 for a payout, 30 for earnings/funding/refunds. The resolution SLA (`deadline_at`, 14 days) is likewise a guess with no stated policy behind it. `resolve()` **only records the decision** — upheld/denied/partial plus a note — it does not itself trigger a refund, a payout retry, or a verdict override; those stay separate, already-audited actions an operator takes through their own endpoints, so a resolution can never be silently coupled to a side effect that might itself fail.
+
 The existing creator appeal endpoint remains the fast, submission-specific first review. A dispute is the escalated case after ordinary appeal/review or for money operations.
 
 ### Customer safety and abuse reports
@@ -600,6 +602,8 @@ The existing creator appeal endpoint remains the fast, submission-specific first
 | Missing P0 | `GET /admin/reports` | Moderation queue filtered by target type, severity, reason, status, age, and assignee. |
 | Missing P0 | `GET /admin/reports/{report_id}` | Return report evidence, target snapshot, related reports, account/campaign context, and audit data. |
 | Missing P0 | `POST /admin/reports/{report_id}/resolve` | Record no-action, content restriction, campaign pause, account sanction, or escalation through audited domain services. |
+
+**2026-09-22 — Built**, all five rows. Same `resolve()`-records-the-decision pattern as disputes: it doesn't itself pause a campaign or sanction an account. `target_type` covers campaign/creator-profile/organisation-profile/submission, matching "accessible campaign, public profile, source asset, or public clip" minus source assets (no source-asset entity exists yet — see §H). `POST /reports` is rate-limited (10/minute); the reporter's identity (`reporter_id`) is stored but only the admin queue/detail ever returns it — `GET /reports/me` and the create response never do.
 
 ## M. Business verification/KYB
 

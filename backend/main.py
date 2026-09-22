@@ -27,6 +27,7 @@ from modules.campaigns.brand_router import router as brand_router
 from modules.campaigns.drafts_router import router as campaign_drafts_router
 from modules.campaigns.router import router as campaigns_router
 from modules.creators.router import router as creators_router
+from modules.disputes.router import admin_router as disputes_admin_router, router as disputes_router
 from modules.earnings.router import router as earnings_router
 from modules.funding.router import router as funding_router
 from modules.intelligence.internal_router import router as intelligence_internal_router
@@ -38,6 +39,7 @@ from modules.payouts.router import router as payouts_router
 from modules.product.router import router as product_router
 from modules.receipts.router import router as receipts_router
 from modules.refunds.router import router as refunds_router
+from modules.reports.router import admin_router as reports_admin_router, router as reports_router
 from modules.reviews.router import router as reviews_router
 from modules.submissions.router import router as submissions_router
 from modules.support.admin_router import router as support_admin_router
@@ -103,6 +105,10 @@ app.include_router(refunds_router)
 app.include_router(receipts_router)
 app.include_router(support_router)
 app.include_router(support_admin_router)
+app.include_router(disputes_router)
+app.include_router(disputes_admin_router)
+app.include_router(reports_router)
+app.include_router(reports_admin_router)
 
 
 @app.get("/health")
