@@ -630,7 +630,7 @@ export function SettingsScreen() {
           </section>
           <section className="settings-sheet">
             <div className="settings-sheet__title"><div><h2>Account records</h2><p>Verification, support and your Clippit data.</p></div><ProductIcon name="brief" /></div>
-            <div className="settings-profile-actions"><Link className="lime-button" href="/dashboard/verification">Identity verification<ProductIcon name="arrow" /></Link><Link className="ink-button" href="/account/data">Download my data<ProductIcon name="arrow" /></Link><Link className="ink-button" href="/support/tickets">Support tickets<ProductIcon name="arrow" /></Link></div>
+            <div className="settings-profile-actions"><Link className="lime-button" href="/dashboard/verification">Identity verification<ProductIcon name="arrow" /></Link><Link className="ink-button" href="/account/data">Account and data<ProductIcon name="arrow" /></Link><Link className="ink-button" href="/support/tickets">Support tickets<ProductIcon name="arrow" /></Link><Link className="ink-button" href="/disputes">Disputes<ProductIcon name="arrow" /></Link><Link className="ink-button" href="/legal">Legal centre<ProductIcon name="arrow" /></Link><Link className="ink-button" href="/account/delete">Delete account<ProductIcon name="arrow" /></Link></div>
           </section>
         </div>
       </div>

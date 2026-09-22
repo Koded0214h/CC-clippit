@@ -62,8 +62,11 @@ export function SignUpChoice() {
   const { role, setRole } = useAuthFlow();
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const submittedRole = new FormData(event.currentTarget).get("role");
+    const nextRole: AccountRole = submittedRole === "organisation" ? "organisation" : "creator";
+    setRole(nextRole);
     router.push(
-      role === "organisation"
+      nextRole === "organisation"
         ? "/auth/sign-up/organisation"
         : "/auth/sign-up/creator",
     );
@@ -86,7 +89,7 @@ export function SignUpChoice() {
           </>
         }
       />
-      <form id="roleForm" className="auth-form role-form" onSubmit={submit}>
+      <form id="roleForm" className="auth-form role-form" action="/auth/sign-up/continue" method="get" onSubmit={submit}>
         <fieldset>
           <legend className="sr-only">Choose an account type</legend>
           <RoleCard

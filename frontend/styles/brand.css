@@ -1200,3 +1200,29 @@
   .brand-mobile-dock,
   .brand-mobile-more { transition: none; }
 }
+
+/* Brand account and support navigation --------------------------------- */
+.brand-rail .brand-resource-nav {
+  gap: 3px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, .12);
+}
+
+.brand-rail .brand-resource-nav a {
+  min-height: 40px;
+  padding-inline: 14px;
+  font-size: 10px;
+}
+
+.brand-rail .brand-resource-nav a svg { width: 18px; color: var(--brand-lime); }
+
+@media (max-width: 900px) {
+  .brand-mobile-more nav a > p { display: grid; gap: 2px; min-width: 0; margin: 0; }
+  .brand-mobile-more nav a > p strong { font-size: 10px; }
+  .brand-mobile-more nav a > p small { overflow: hidden; color: #687063; font-size: 7px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+}
+
+@media (max-width: 620px) {
+  .brand-mobile-more nav a > p small { white-space: normal; }
+}

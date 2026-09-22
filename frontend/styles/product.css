@@ -7417,3 +7417,93 @@
 @media (prefers-reduced-motion: reduce) {
   .mobile-dock { transition: none; }
 }
+
+/* Creator account and support navigation ------------------------------- */
+.studio-resource-nav {
+  display: grid;
+  gap: 3px;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, .12);
+}
+
+.studio-resource-nav a {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 38px;
+  padding: 0 14px;
+  color: rgba(255, 255, 255, .52);
+  border-radius: 7px;
+  font-size: 10px;
+  font-weight: 690;
+}
+
+.studio-resource-nav a:hover { color: var(--white); background: rgba(255, 255, 255, .06); }
+.studio-resource-nav svg { width: 18px; color: var(--lime); }
+.creator-mobile-more,
+.creator-mobile-more-backdrop { display: none; }
+
+@media (max-width: 900px) {
+  .creator-mobile-more-backdrop {
+    position: fixed;
+    z-index: 41;
+    inset: 0;
+    display: block;
+    border: 0;
+    background: rgba(21, 23, 19, .5);
+    backdrop-filter: blur(3px);
+  }
+
+  .creator-mobile-more {
+    position: fixed;
+    right: 12px;
+    bottom: calc(92px + env(safe-area-inset-bottom));
+    left: 12px;
+    z-index: 42;
+    display: block;
+    max-height: min(650px, calc(100svh - 122px));
+    padding: 16px;
+    overflow-y: auto;
+    color: var(--ink);
+    border: 1px solid var(--ink);
+    border-radius: 20px;
+    background: var(--paper);
+    box-shadow: 7px 8px 0 var(--gold);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(18px) scale(.98);
+    transition: opacity 160ms ease, transform 220ms cubic-bezier(.2, .8, .2, 1);
+  }
+
+  .creator-mobile-more.is-open { opacity: 1; pointer-events: auto; transform: none; }
+  .creator-mobile-more > header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 3px 3px 14px; border-bottom: 1px solid var(--line); }
+  .creator-mobile-more > header > div { display: grid; gap: 2px; }
+  .creator-mobile-more > header small { color: var(--muted); font-size: 9px; font-weight: 760; }
+  .creator-mobile-more > header strong { font-size: 22px; letter-spacing: -.045em; }
+  .creator-mobile-more > header button { display: grid; width: 39px; height: 39px; place-items: center; border: 1px solid var(--ink); border-radius: 50%; background: #fff; transform: rotate(90deg); }
+  .creator-mobile-more > header svg { width: 19px; }
+  .creator-mobile-more nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; padding-top: 14px; }
+  .creator-mobile-more nav a { display: grid; grid-template-columns: 38px minmax(0, 1fr) 16px; align-items: center; gap: 9px; min-height: 68px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+  .creator-mobile-more nav a.is-active { border-color: var(--ink); background: var(--lime); box-shadow: 3px 3px 0 var(--ink); }
+  .creator-mobile-more nav a > span { display: grid; width: 38px; height: 38px; place-items: center; border: 1px solid var(--ink); border-radius: 10px; background: var(--gold); }
+  .creator-mobile-more nav a > span svg { width: 18px; }
+  .creator-mobile-more nav a > p { display: grid; gap: 2px; min-width: 0; margin: 0; }
+  .creator-mobile-more nav a strong { font-size: 10px; }
+  .creator-mobile-more nav a small { overflow: hidden; color: var(--muted); font-size: 7px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+  .creator-mobile-more nav a > svg { width: 15px; }
+  .mobile-dock :is(a, button) { position: relative; display: grid; justify-items: center; gap: 5px; padding: 7px 2px; color: inherit; border: 0; border-radius: 10px; background: transparent; font: inherit; font-size: 7px; }
+  .mobile-dock :is(a, button) svg { width: 19px; }
+  .mobile-dock :is(a, button).is-active { color: var(--ink); background: var(--gold); }
+}
+
+@media (max-width: 520px) {
+  .creator-mobile-more { right: 8px; left: 8px; padding: 12px; }
+  .creator-mobile-more nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .creator-mobile-more nav a { grid-template-columns: 34px minmax(0, 1fr) 14px; min-height: 64px; gap: 7px; padding: 8px; }
+  .creator-mobile-more nav a > span { width: 34px; height: 34px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .creator-mobile-more { transition: none; }
+}

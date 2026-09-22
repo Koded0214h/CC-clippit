@@ -6,9 +6,9 @@ This is the locked remainder for the current product build. The number does not 
 
 | Category | Remaining | Delivery |
 | --- | ---: | --- |
-| Customer-facing | 29 | Built in the current customer-completion pass |
-| Admin and operations | 32 | Next product pass |
-| **Total remaining** | **61** | **Locked** |
+| Customer-facing | 29 | Built in the customer-completion pass |
+| Admin and operations | 32 | Built in the operations-completion pass |
+| **Total delivered** | **61** | **Complete and locked** |
 
 The 51 routes that existed before this pass are not counted again. Drawers, filters, confirmations, upload states, success states and mobile layouts are not counted as additional screens.
 
