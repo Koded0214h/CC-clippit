@@ -50,6 +50,38 @@ class EarningsHistory(BaseModel):
     total: int
 
 
+class EarningEntryDetail(BaseModel):
+    """One immutable accrual, traced back to the platform reading that
+    justified it — "every naira traces to a platform snapshot"
+    (production-api-inventory.md Part VIII)."""
+
+    id: uuid.UUID
+    submission_id: uuid.UUID
+    campaign_id: uuid.UUID
+    campaign_title: str
+    campaign_slug: str
+    clip_title: str | None
+    brand: str | None
+    #: Views gained since the previous entry, and the cumulative reading
+    #: this entry settled against — the whole-thousands math is
+    #: `views_total // 1000 - (thousands already billed before this entry)`.
+    billable_views: int
+    views_total: int
+    thousands: int
+    rate_per_1000_views: float
+    cap_amount: float | None
+    amount: Money
+    #: Payable | Accrued | Processing | Paid — see EarningRow's state.
+    state: str
+    accrued_at: datetime
+    payable_at: datetime
+    #: The Intelligence snapshot this entry billed against (decision D18);
+    #: null only for entries settled before that provenance field existed.
+    snapshot_id: uuid.UUID | None
+    reference: str
+    payout_id: uuid.UUID | None
+
+
 class LeaderRow(BaseModel):
     rank: int
     creator_id: uuid.UUID

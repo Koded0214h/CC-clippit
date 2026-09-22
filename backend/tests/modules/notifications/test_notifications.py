@@ -95,3 +95,62 @@ async def test_notification_settings_merge_and_default(api):
     r = await api.patch("/profile/preferences", headers=_auth(cr), json={"notifications": {"new_campaigns": False}})
     n = r.json()["notifications"]
     assert n["new_campaigns"] is False and n["campaign_closing"] is True  # earlier change kept
+
+
+async def test_unread_count_is_cheap_and_excludes_archived(api):
+    import uuid
+
+    _, cr = await signup(api, "creator")
+    uid = uuid.UUID(cr["user"]["id"])
+    n1 = await _notify(api, uid, "payout", "First")
+    await _notify(api, uid, "payout", "Second")
+
+    before_archive = await api.get("/notifications/unread-count", headers=_auth(cr))
+    assert before_archive.json() == {"unread_count": 2}
+
+    archived = await api.post(f"/notifications/{n1.id}/archive", headers=_auth(cr))
+    assert archived.status_code == 204
+    after_archive = await api.get("/notifications/unread-count", headers=_auth(cr))
+    assert after_archive.json() == {"unread_count": 1}
+
+    inbox = (await api.get("/notifications", headers=_auth(cr))).json()
+    assert len(inbox["items"]) == 1 and inbox["unread_count"] == 1  # archived one is hidden, not just unread
+
+
+async def test_archiving_someone_elses_notification_is_404(api):
+    import uuid
+
+    _, cr = await signup(api, "creator")
+    _, other = await signup(api, "creator")
+    n = await _notify(api, uuid.UUID(cr["user"]["id"]), "payout", "Mine")
+    r = await api.post(f"/notifications/{n.id}/archive", headers=_auth(other))
+    assert r.status_code == 404
+
+
+async def test_push_subscriptions_register_update_and_remove(api):
+    _, cr = await signup(api, "creator")
+    body = {"endpoint": "https://push.example/abc", "p256dh_key": "key1", "auth_key": "auth1"}
+
+    first = await api.post("/push-subscriptions", headers=_auth(cr), json=body)
+    assert first.status_code == 201
+    sub_id = first.json()["id"]
+
+    # Re-registering the same endpoint updates in place, not duplicates.
+    again = await api.post("/push-subscriptions", headers=_auth(cr), json={**body, "p256dh_key": "key2"})
+    assert again.status_code == 201 and again.json()["id"] == sub_id
+
+    gone = await api.delete(f"/push-subscriptions/{sub_id}", headers=_auth(cr))
+    assert gone.status_code == 204
+    twice = await api.delete(f"/push-subscriptions/{sub_id}", headers=_auth(cr))
+    assert twice.status_code == 404
+
+
+async def test_a_creator_cannot_remove_someone_elses_push_subscription(api):
+    _, cr = await signup(api, "creator")
+    _, other = await signup(api, "creator")
+    sub = (await api.post(
+        "/push-subscriptions", headers=_auth(cr),
+        json={"endpoint": "https://push.example/xyz", "p256dh_key": "k", "auth_key": "a"},
+    )).json()
+    r = await api.delete(f"/push-subscriptions/{sub['id']}", headers=_auth(other))
+    assert r.status_code == 404

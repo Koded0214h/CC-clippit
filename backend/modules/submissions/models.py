@@ -83,6 +83,12 @@ class Submission(Base):
     video_upload_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("uploads.id", ondelete="SET NULL"), nullable=True
     )
+    #: Set only on a correction created via `POST .../resubmit`. The
+    #: predecessor's own verdict, requirement results, and appeal are
+    #: never rewritten — this just links the chain.
+    resubmitted_from_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("submissions.id", ondelete="SET NULL"), nullable=True
+    )
     verification_status: Mapped[VerificationStatus] = mapped_column(
         Enum(VerificationStatus, name="verification_status"),
         nullable=False,

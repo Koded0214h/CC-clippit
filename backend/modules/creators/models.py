@@ -17,8 +17,8 @@ abstraction), not this one's.
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.database import Base
@@ -55,6 +55,12 @@ class CreatorProfile(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
     display_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    #: The public handle behind `/profiles/creators/{handle}`. Null until
+    #: the creator picks one — no public profile page exists before then.
+    handle: Mapped[str | None] = mapped_column(String(30), unique=True, nullable=True)
+    #: A public profile still needs `handle` set; this is the separate
+    #: "don't list me" toggle on top of that.
+    public_profile: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     bio: Mapped[str | None] = mapped_column(Text, nullable=True)
     photo_upload_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("uploads.id", ondelete="SET NULL"), nullable=True
@@ -69,3 +75,13 @@ class CreatorProfile(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+    # --- resumable onboarding draft (production-api-inventory.md §C) -----
+    # Autosaved per screen, ahead of `complete`. `draft_answers` holds
+    # whatever subset of `CreatorOnboarding` fields have been saved so
+    # far — not yet the creator's real profile, which is only written by
+    # `complete`. `draft_revision` guards two tabs from clobbering each
+    # other: a PATCH must send back the revision it last read.
+    draft_answers: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    draft_step: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    draft_revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")

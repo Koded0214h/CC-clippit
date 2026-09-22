@@ -11,7 +11,6 @@ from core.deps import get_db
 from core.email import EmailSender, get_email_sender
 from core.rate_limit import limiter
 from core.security import (
-    create_access_token,
     create_purpose_token,
     decode_access_token,
     decode_purpose_token,
@@ -19,7 +18,7 @@ from core.security import (
     verify_password,
 )
 
-from . import codes, emails, models, schemas
+from . import codes, emails, models, schemas, sessions
 from .deps import get_current_user, get_optional_user, oauth2_scheme
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -62,13 +61,15 @@ async def signup(
     await db.flush()  # assigns user.id (client-side default) without committing yet
     db.add(models.UserPreferences(user_id=user.id))
     code = await codes.issue_code(db, user, models.AuthCodePurpose.email_verify)
+    issued = await sessions.start_session(db, user, request)
     await db.commit()
     await db.refresh(user)
 
     await _deliver(sender, emails.verification_email(user.email, code))
 
-    token = create_access_token(user.id, user.role.value)
-    return schemas.TokenResponse(access_token=token, user=schemas.UserOut.model_validate(user))
+    return schemas.TokenResponse(
+        access_token=issued.access_token, refresh_token=issued.refresh_token, user=schemas.UserOut.model_validate(user)
+    )
 
 
 @router.post("/login", response_model=schemas.TokenResponse)
@@ -76,11 +77,29 @@ async def signup(
 async def login(request: Request, payload: schemas.LoginRequest, db: AsyncSession = Depends(get_db)):
     invalid = HTTPException(status.HTTP_401_UNAUTHORIZED, "Incorrect email or password.")
     user = await _user_by_email(db, payload.email)
-    if not user or not verify_password(payload.password, user.password_hash):
+    if not user or user.deleted_at is not None or not user.has_password or not verify_password(payload.password, user.password_hash):
         raise invalid
 
-    token = create_access_token(user.id, user.role.value)
-    return schemas.TokenResponse(access_token=token, user=schemas.UserOut.model_validate(user))
+    issued = await sessions.start_session(db, user, request)
+    await db.commit()
+    return schemas.TokenResponse(
+        access_token=issued.access_token, refresh_token=issued.refresh_token, user=schemas.UserOut.model_validate(user)
+    )
+
+
+@router.post("/refresh", response_model=schemas.TokenResponse)
+@limiter.limit("30/minute")
+async def refresh(request: Request, payload: schemas.RefreshRequest, db: AsyncSession = Depends(get_db)):
+    try:
+        issued = await sessions.rotate(db, payload.refresh_token)
+    except sessions.RefreshError as exc:
+        await db.commit()  # persist a reuse-detected revocation even though the call itself fails
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, exc.message) from exc
+    user = await db.get(models.User, issued.session.user_id)
+    await db.commit()
+    return schemas.TokenResponse(
+        access_token=issued.access_token, refresh_token=issued.refresh_token, user=schemas.UserOut.model_validate(user)
+    )
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -91,7 +110,8 @@ async def logout(
 ):
     """Revokes only the token used to call this endpoint — every other
     token this user holds (another device, another tab) stays valid. See
-    modules.auth.models.RevokedToken."""
+    modules.auth.models.RevokedToken. Also revokes the underlying session,
+    so its refresh token can't mint a new access token either."""
     payload = decode_access_token(token) if token else None
     jti = payload.get("jti") if payload else None
     if jti and not await db.get(models.RevokedToken, jti):
@@ -101,7 +121,61 @@ async def logout(
                 expires_at=datetime.fromtimestamp(payload["exp"], tz=timezone.utc),
             )
         )
-        await db.commit()
+    sid = payload.get("sid") if payload else None
+    if sid:
+        await sessions.revoke_session(db, user.id, uuid.UUID(sid))
+    await db.commit()
+
+
+# --- sessions ----------------------------------------------------------------
+
+
+def _session_out(session: models.Session, current_id: uuid.UUID | None) -> schemas.SessionOut:
+    return schemas.SessionOut(
+        id=session.id,
+        device_label=session.device_label,
+        ip_address=session.ip_address,
+        created_at=session.created_at,
+        last_seen_at=session.last_seen_at,
+        current=session.id == current_id,
+    )
+
+
+@router.get("/sessions", response_model=list[schemas.SessionOut])
+async def list_sessions(
+    user: models.User = Depends(get_current_user),
+    token: str | None = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+):
+    payload = decode_access_token(token) if token else None
+    current_id = uuid.UUID(payload["sid"]) if payload and payload.get("sid") else None
+    rows = await sessions.list_sessions(db, user.id)
+    return [_session_out(s, current_id) for s in rows]
+
+
+@router.delete("/sessions/others", response_model=schemas.RevokedCountOut)
+async def revoke_other_sessions(
+    user: models.User = Depends(get_current_user),
+    token: str | None = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+):
+    payload = decode_access_token(token) if token else None
+    current_id = uuid.UUID(payload["sid"]) if payload and payload.get("sid") else None
+    count = await sessions.revoke_other_sessions(db, user.id, current_id)
+    await db.commit()
+    return schemas.RevokedCountOut(revoked=count)
+
+
+@router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def revoke_one_session(
+    session_id: uuid.UUID,
+    user: models.User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    session = await sessions.revoke_session(db, user.id, session_id)
+    if session is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Session not found")
+    await db.commit()
 
 
 @router.get("/me", response_model=schemas.UserOut)
@@ -236,6 +310,7 @@ async def reset_password(
 
     now = datetime.now(timezone.utc)
     user.password_hash = hash_password(payload.password)
+    user.has_password = True
     user.tokens_valid_after = now
     if not user.email_verified:
         # They just proved control of the inbox.
@@ -243,4 +318,199 @@ async def reset_password(
         user.email_verified_at = now
     # Single use: spend the token so it can't set the password twice.
     db.add(models.RevokedToken(jti=claims["jti"], expires_at=datetime.fromtimestamp(claims["exp"], tz=timezone.utc)))
+    await db.commit()
+
+
+# --- security settings: password, providers, step-up, account lifecycle ------
+
+
+@router.post("/change-password", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("5/minute")
+async def change_password(
+    request: Request,
+    payload: schemas.ChangePasswordRequest,
+    user: models.User = Depends(get_current_user),
+    token: str | None = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+):
+    if not user.has_password or not verify_password(payload.current_password, user.password_hash):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Current password is incorrect.")
+    user.password_hash = hash_password(payload.new_password)
+    if payload.revoke_other_sessions:
+        session_payload = decode_access_token(token) if token else None
+        current_id = uuid.UUID(session_payload["sid"]) if session_payload and session_payload.get("sid") else None
+        await sessions.revoke_other_sessions(db, user.id, current_id)
+    await db.commit()
+
+
+def _step_up_challenge_purpose(action: str) -> str:
+    return f"step_up_challenge:{action}"
+
+
+def _step_up_purpose(action: str) -> str:
+    return f"step_up:{action}"
+
+
+@router.post("/step-up/request", response_model=schemas.StepUpChallengeOut)
+@limiter.limit("10/minute")
+async def request_step_up(
+    request: Request,
+    payload: schemas.StepUpRequestIn,
+    user: models.User = Depends(get_current_user),
+):
+    """Starts a sensitive-action challenge. Today the only verified factor
+    an account has is its password, so this mints a short-lived challenge
+    token binding *who* and *which action* — `verify` below is what
+    actually checks the password. Once 2FA exists, this is where the
+    choice of factor (TOTP vs. recovery code) would be offered."""
+    minutes = 5
+    return schemas.StepUpChallengeOut(
+        challenge_token=create_purpose_token(user.id, _step_up_challenge_purpose(payload.action), minutes),
+        expires_in=minutes * 60,
+    )
+
+
+@router.post("/step-up/verify", response_model=schemas.StepUpTokenOut)
+@limiter.limit("10/minute")
+async def verify_step_up(
+    request: Request,
+    payload: schemas.StepUpVerifyIn,
+    user: models.User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    claims = decode_access_token(payload.challenge_token)
+    purpose = claims.get("purpose") if claims else None
+    if not claims or not purpose or not purpose.startswith("step_up_challenge:") or claims.get("sub") != str(user.id):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "This challenge has expired. Start again.")
+    if await db.get(models.RevokedToken, claims["jti"]):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "This challenge has already been used.")
+    if not user.has_password or not verify_password(payload.password, user.password_hash):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Incorrect password.")
+
+    action = purpose.removeprefix("step_up_challenge:")
+    db.add(models.RevokedToken(jti=claims["jti"], expires_at=datetime.fromtimestamp(claims["exp"], tz=timezone.utc)))
+    await db.commit()
+    minutes = 5
+    return schemas.StepUpTokenOut(
+        step_up_token=create_purpose_token(user.id, _step_up_purpose(action), minutes),
+        action=action,
+        expires_in=minutes * 60,
+    )
+
+
+async def consume_step_up(db: AsyncSession, token: str, action: str, user_id: uuid.UUID) -> None:
+    """Spends a step-up token for exactly the action it names. Raises a 401
+    if it's missing, wrong-action, someone else's, or already spent."""
+    invalid = HTTPException(status.HTTP_401_UNAUTHORIZED, "Recent verification required — request a new one.")
+    claims = decode_purpose_token(token, _step_up_purpose(action))
+    if not claims or claims.get("sub") != str(user_id):
+        raise invalid
+    if await db.get(models.RevokedToken, claims["jti"]):
+        raise invalid
+    db.add(models.RevokedToken(jti=claims["jti"], expires_at=datetime.fromtimestamp(claims["exp"], tz=timezone.utc)))
+
+
+@router.get("/providers", response_model=schemas.ProvidersOut)
+async def list_providers(user: models.User = Depends(get_current_user)):
+    return schemas.ProvidersOut(
+        providers=[
+            schemas.ProviderStatus(
+                provider="password", linked=user.has_password, removable=user.google_id is not None
+            ),
+            schemas.ProviderStatus(
+                provider="google", linked=user.google_id is not None, removable=user.has_password,
+                email=user.google_email,
+            ),
+        ]
+    )
+
+
+@router.post("/password", status_code=status.HTTP_204_NO_CONTENT)
+async def set_first_password(
+    payload: schemas.SetPasswordRequest,
+    user: models.User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """A provider-only account (Google, no password yet) sets one for the
+    first time. Use `/change-password` once one already exists."""
+    if user.has_password:
+        raise HTTPException(status.HTTP_409_CONFLICT, "This account already has a password — use change-password.")
+    await consume_step_up(db, payload.step_up_token, "set_password", user.id)
+    user.password_hash = hash_password(payload.password)
+    user.has_password = True
+    await db.commit()
+
+
+@router.delete("/providers/google", status_code=status.HTTP_204_NO_CONTENT)
+async def unlink_google(
+    payload: schemas.StepUpOnly,
+    user: models.User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if user.google_id is None:
+        raise HTTPException(status.HTTP_409_CONFLICT, "No Google account is linked.")
+    if not user.has_password:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "Set a password first — removing Google would leave no way to sign in."
+        )
+    await consume_step_up(db, payload.step_up_token, "unlink_google", user.id)
+    user.google_id = None
+    user.google_email = None
+    await db.commit()
+
+
+@router.delete("/account", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_account(
+    payload: schemas.StepUpOnly,
+    user: models.User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Anonymises rather than hard-deletes: campaigns, submissions and
+    ledger rows keep a valid (now-anonymous) foreign key, and finance
+    history that must be retained survives. Refuses while money that
+    traces back to this account is still unsettled."""
+    await consume_step_up(db, payload.step_up_token, "delete_account", user.id)
+
+    if user.role == models.Role.creator:
+        from modules.earnings.queries import balances
+
+        b = await balances(db, user.id)
+        if b.payable > 0 or b.in_hold > 0 or b.processing > 0:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "You have money that hasn't been paid out yet. Withdraw it first, then delete your account.",
+            )
+    elif user.role == models.Role.organisation:
+        from sqlalchemy import select as _select
+
+        from modules.campaigns.models import Campaign, CampaignStatus
+
+        unresolved = await db.scalar(
+            _select(Campaign.id).where(
+                Campaign.event_manager_id == user.id,
+                Campaign.status.in_((CampaignStatus.pending_funding, CampaignStatus.active)),
+            )
+        )
+        if unresolved:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                "You have a campaign that's funding or live. Close it first, then delete your account.",
+            )
+
+    now = datetime.now(timezone.utc)
+    user.deleted_at = now
+    user.tokens_valid_after = now
+    user.email = f"deleted-{user.id}@deleted.clippit.invalid"
+    user.full_name = "Deleted user"
+    user.password_hash = hash_password(uuid.uuid4().hex)
+    user.has_password = False
+    user.google_id = None
+    user.google_email = None
+    await db.execute(
+        models.SocialAccount.__table__.delete().where(models.SocialAccount.user_id == user.id)
+    )
+    await sessions.revoke_other_sessions(db, user.id, keep_session_id=None)
+    from modules.audit import service as audit
+
+    audit.record(db, "account.deleted", actor_id=user.id)
     await db.commit()

@@ -9,8 +9,8 @@ it (the settings screen shows it as a verified-funder badge).
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.database import Base
@@ -23,6 +23,10 @@ class OrganisationProfile(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
     name: Mapped[str] = mapped_column(String(80), nullable=False)
+    #: The public slug behind `/profiles/organisations/{slug}`. Null until
+    #: set — no public profile page exists before then.
+    slug: Mapped[str | None] = mapped_column(String(60), unique=True, nullable=True)
+    public_profile: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     bio: Mapped[str | None] = mapped_column(Text, nullable=True)
     website: Mapped[str | None] = mapped_column(String(255), nullable=True)
     photo_upload_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -40,3 +44,8 @@ class OrganisationProfile(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+    # --- resumable onboarding draft — see the same fields on CreatorProfile.
+    draft_answers: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    draft_step: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    draft_revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")

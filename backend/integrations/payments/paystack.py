@@ -50,6 +50,7 @@ from .base import (
     CollectionAccount,
     CollectionStatus,
     ProviderError,
+    RefundResult,
     ResolvedAccount,
     TransferRejected,
     TransferResult,
@@ -264,6 +265,42 @@ class PaystackProvider:
         ref = paystack_reference(reference)
         found = await self._existing_transfer(ref)
         return found if found is not None else TransferResult(status=TransferStatus.pending, provider_reference=ref)
+
+    async def create_refund(
+        self, *, reference: str, collection_reference: str, amount: Decimal, reason: str
+    ) -> RefundResult:
+        """Paystack's `/refund` doesn't accept a caller-supplied idempotency
+        reference the way transfers do, so unlike `create_transfer` this
+        can't check for an existing attempt first — a duplicate call here
+        risks a duplicate refund. The caller (`modules.refunds.service`)
+        is responsible for only calling this once per `Refund` row."""
+        status, body = await self._call(
+            "POST", "/refund",
+            body={
+                "transaction": paystack_reference(collection_reference),
+                "amount": to_kobo(amount),
+                "customer_note": reason[:180],
+                "merchant_note": f"Clippit refund {reference}"[:180],
+            },
+        )
+        if status not in (200, 201) or not body.get("status"):
+            raise ProviderError(str(body.get("message") or "Paystack refused the refund."))
+        data = body.get("data") or {}
+        provider_reference = str(data.get("id") or "")
+        pstatus = str(data.get("status") or "").lower()
+        if pstatus in ("processed", "success", "successful"):
+            return RefundResult(status=TransferStatus.success, provider_reference=provider_reference)
+        if pstatus == "failed":
+            return RefundResult(status=TransferStatus.failed, provider_reference=provider_reference, failure_reason="Paystack marked this refund failed.")
+        return RefundResult(status=TransferStatus.pending, provider_reference=provider_reference)
+
+    async def get_refund(self, *, reference: str) -> RefundResult:
+        # Paystack has no lookup by a caller reference for refunds (unlike
+        # transfers' /transfer/verify/{reference}); polling would need the
+        # provider's own refund id, which the caller already has from
+        # create_refund's result. Reconciliation here waits on a real
+        # provider account to confirm the exact endpoint shape.
+        return RefundResult(status=TransferStatus.pending)
 
     # -- webhooks --------------------------------------------------------------------------
     def verify_webhook(self, headers: Mapping[str, str], body: bytes) -> bool:

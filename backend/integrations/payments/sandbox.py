@@ -32,6 +32,7 @@ from .base import (
     Bank,
     CollectionAccount,
     CollectionStatus,
+    RefundResult,
     ResolvedAccount,
     TransferRejected,
     TransferResult,
@@ -107,6 +108,16 @@ class SandboxProvider:
     async def get_transfer(self, *, reference: str) -> TransferResult:
         provider_reference = f"SBX-TRF-{hashlib.sha256(reference.encode()).hexdigest()[:10].upper()}"
         return TransferResult(status=TransferStatus.success, provider_reference=provider_reference)
+
+    async def create_refund(
+        self, *, reference: str, collection_reference: str, amount: Decimal, reason: str
+    ) -> RefundResult:
+        provider_reference = f"SBX-RFD-{hashlib.sha256(reference.encode()).hexdigest()[:10].upper()}"
+        return RefundResult(status=TransferStatus.success, provider_reference=provider_reference)
+
+    async def get_refund(self, *, reference: str) -> RefundResult:
+        provider_reference = f"SBX-RFD-{hashlib.sha256(reference.encode()).hexdigest()[:10].upper()}"
+        return RefundResult(status=TransferStatus.success, provider_reference=provider_reference)
 
     def verify_webhook(self, headers: Mapping[str, str], body: bytes) -> bool:
         supplied = headers.get("x-signature") or headers.get("X-Signature") or ""

@@ -72,6 +72,18 @@ These rules apply to every route, including routes already built.
 | `POST /auth/forgot-password` | Public, enumeration safe | Starts password recovery and always returns a neutral accepted response. | Built, dependency pending: production email delivery |
 | `POST /auth/recovery-code/verify` | Public, attempt limited | Validates a recovery code and returns a single-use reset token. | Built |
 | `POST /auth/reset-password` | Reset-token flow | Replaces the password and invalidates existing sessions/tokens. | Built |
+| `POST /auth/refresh` | Refresh-token flow | Rotates a refresh token; reuse of an already-spent one revokes the whole session. | Built 2026-09-22 |
+| `GET /auth/sessions` | Signed in | Lists this account's active sessions/devices, marking the current one. | Built 2026-09-22 |
+| `DELETE /auth/sessions/{session_id}` | Signed in, owner | Revokes one session immediately (its access tokens stop working, not just its refresh token). | Built 2026-09-22 |
+| `DELETE /auth/sessions/others` | Signed in | Revokes every session but the caller's own. | Built 2026-09-22 |
+| `POST /auth/change-password` | Signed in | Requires the current password; revokes other sessions by default. | Built 2026-09-22 |
+| `POST /auth/password` | Signed in, step-up | Sets a first password for a Google-only account. | Built 2026-09-22 |
+| `GET /auth/providers` | Signed in | Which sign-in methods are linked and which are safe to remove. | Built 2026-09-22 |
+| `DELETE /auth/providers/google` | Signed in, step-up | Unlinks Google — refused if no password exists to fall back to. | Built 2026-09-22 |
+| `POST /auth/step-up/request`, `POST /auth/step-up/verify` | Signed in | Generic action-bound re-authentication proof (password only — the only factor that exists). Built as a primitive; not yet required by the endpoints that should ask for it (payout destination, refunds, email change). | Built 2026-09-22 |
+| `DELETE /auth/account` | Signed in, step-up | Anonymises the account (email/name scrubbed, socials disconnected, every session revoked); refuses while money traces back to it unsettled. | Built 2026-09-22 |
+| `GET /auth/google/login`, `GET /auth/google/callback` | Public / OAuth callback | Google OIDC sign-in — creates, signs in to, or (email-verified match only) auto-links an account. Verifies via Google's `tokeninfo` endpoint, not local JWKS. | Built 2026-09-22, dependency pending: real `GOOGLE_CLIENT_ID`/`SECRET`, never exercised against real Google |
+| `GET /auth/google/link` | Signed in | Attaches Google to the current account (a redirect flow, not the `POST .../link` the inventory names — see the note in Part II §B). | Built 2026-09-22 |
 
 ## Connected social accounts
 
@@ -293,6 +305,14 @@ These endpoints are required by the existing Google buttons and security/device 
 | Missing P0 | `DELETE /auth/account` | Re-authenticate, apply legal/ledger retention rules, revoke sessions/tokens, disconnect socials, and schedule deletion/anonymisation. Refuse unsafe deletion while money is unsettled. |
 | Missing P1 | `GET /auth/account-export/{job_id}` | Return export status and a short-lived download URL when ready. |
 
+**2026-09-22 — Built**, all P0 rows above except the 2FA/email-change P1 rows (still missing, along with account-export):
+- `POST /auth/refresh`, `GET/DELETE /auth/sessions*`: a new `sessions`/`refresh_tokens` pair backs real, revocable devices. Access tokens now carry a `sid` claim checked on every request; revoking a session invalidates its access tokens immediately, not just its refresh token. Refresh-token reuse (a token presented twice) revokes the whole session — signup/login now return a `refresh_token` alongside `access_token`.
+- `POST /auth/change-password`, `POST /auth/password` (first password for a Google-only account), `GET /auth/providers`, `DELETE /auth/providers/google`: `users` gained `has_password`/`google_id`/`google_email`; `/auth/providers` reports which method is safe to remove (never the last one).
+- `POST /auth/step-up/{request,verify}`: a generic, action-bound proof primitive (password only today — the only factor that exists; 2FA would add a factor choice at `request` without changing the shape). **Not yet wired to the endpoints that should require it** — payout-destination change, refunds, email change — those still accept the request without a step-up token. `DELETE /auth/account` and `POST /auth/password`/`DELETE /auth/providers/google` do require and consume one.
+- `GET /auth/google/login`, `GET /auth/google/callback`: real OIDC (state+nonce, verified via Google's `tokeninfo` endpoint rather than local JWKS/RS256 — this environment has no `cryptography` wheel; see `modules/auth/google.py`'s docstring). Auto-links onto an existing account only when Google reports the email verified; an unverified match or one already linked to a different Google account is refused, not silently taken over or duplicated. **Needs a real `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`** (both empty by default; `/auth/google/login` 503s without them) — never exercised against real Google.
+- `POST /auth/providers/google/link` is built as `GET /auth/google/link` instead (a redirect-flow login, matching how `/social/{platform}/login` already works) rather than a POST — the doc's path assumed a JSON call, but starting an OAuth round trip needs a browser navigation either way.
+- PKCE was scoped out of the Google flow: Google's server-side (confidential-client) OAuth flow doesn't require it the way TikTok's public-client PKCE flow does; the state token still carries a nonce, which is what OIDC actually needs checked back against the id_token.
+
 ## C. Onboarding lifecycle: creator and brand
 
 Onboarding is a first-class product domain. Authentication already determines whether the account is a creator or an organisation; onboarding must never ask the user to choose that account role again. An organisation account may still branch between an individual funder and a brand/business because those paths collect different data.
@@ -312,6 +332,8 @@ The two existing `PUT .../onboarding` routes are final-submit endpoints, not a c
 | Missing P0 | `PATCH /organisations/me/onboarding` | Autosave any valid subset of organisation answers, recalculate the conditional step graph, clear answers made invalid by an intentional branch change, and return the canonical next step. It must not mark onboarding complete. |
 | Missing P0 | `POST /organisations/me/onboarding/complete` | Validate the appropriate individual or business branch, update the organisation/funder profile atomically, set `onboarding_completed`, create the verification state where applicable, and return `next_route: /brand`. Idempotent after completion. |
 | Missing P0 | `DELETE /organisations/me/onboarding/draft` | Reset an incomplete organisation draft without deleting the account, profile, uploaded image, or completed record. |
+
+**2026-09-22 — Built** (all eight `GET`/`PATCH`/`.../complete`/`.../draft` rows above, both creator and organisation): answers autosave into a JSONB draft on the existing profile row, guarded by `revision` for the two-tabs case; `complete` re-validates the accumulated draft against the same schema the old `PUT` used and is idempotent once `onboarding_completed`; `DELETE .../draft` refuses once complete. Still missing from this pass: `GET /onboarding/options` (the versioned catalogue — answers are still validated against hand-coded bounds, not a driven list), the organisation individual/business branch recalculation, `next_route`/analytics-event on completion, and the wider creator/organisation field contract below (location, makes/watches split, funder identity) — the draft still only carries the original `PUT` schemas' fields.
 
 The existing `PUT /creators/me/onboarding` and `PUT /organisations/me/onboarding` may temporarily remain as backwards-compatible all-at-once completion calls. New frontend work should use GET/PATCH/complete so a phone refresh or connection loss never destroys progress. Remove or deprecate the PUT routes only in a versioned API change.
 
@@ -380,6 +402,8 @@ The campaign builder, onboarding choices, creator settings, public creator profi
 
 No separate endpoint is required to edit handle, location, lane, public visibility, or availability if `PUT /creators/me/profile` is expanded to support them with uniqueness/privacy validation. The current profile schema does not support those fields and must be widened. Likewise `PUT /organisations/me/profile` must support a stable public slug if organisation profiles are exposed.
 
+**2026-09-22 — Built**: all five rows. `creator_profiles.handle` and `organisation_profiles.slug` (both nullable — no public page exists before one is set) plus a `public_profile` toggle on each, edited through the existing `PUT` profile routes (as this section anticipated) with uniqueness checked across *both* tables — a creator's handle and a brand's slug share one namespace, so `GET /handles/{handle}/availability` checks both. Not modeled: `location` (no location field exists anywhere yet — see the still-open field-contract gap in §C) and a separate "availability for briefs" flag. Public creator stats are `approved_clips` and lifetime `verified_views` (summed from `EarningAccount.cumulative_views`, never a payout amount); `recent_work` is the 6 most recent approved, non-withdrawn submissions. `/handles/.../availability` isn't rate-limited yet (P1 in the row, not done).
+
 ## E. Creator identity verification/KYC
 
 The payout-account UI says the bank name must match a verified identity, but the backend has no creator identity-verification record or workflow. The exact evidence and provider must be approved by payment/compliance counsel; Clippit should prefer a hosted verification session and avoid storing raw identity documents or numbers unless necessary.
@@ -419,6 +443,8 @@ The PRD explicitly says a creator joins a campaign. The current API infers parti
 | Missing P1 | `DELETE /campaigns/{campaign_ref}` | Permanently delete an unfunded draft owned by the organisation. Refuse once funding or submissions exist. |
 | Missing P1 | `POST /campaigns/{campaign_ref}/duplicate` | Copy an owned campaign into a new unfunded draft without copying transactions, submissions, dates, or provider references. |
 
+**2026-09-22 — Built**: a new `campaign_memberships` table backs `POST`/`DELETE /campaigns/{campaign_ref}/join` (idempotent join, requires a connected account for one of the campaign's platforms, refuses leaving after an approved submission) and `GET /creators/me/campaigns` (joined/submitted/active/completed/left, filterable by `membership_status`). `joined`/`open` feed filters and the `joined`/`feed_status` card fields now read membership as well as submissions, so a creator who joined without submitting still shows as Joined. Pagination is `limit`/`offset`, matching every other list route today, not the cursor pagination this section calls for — that's a cross-cutting change (see "Existing contract corrections" below), not specific to this endpoint. Headcount capacity/caps aren't modeled (there's no max-creators field on a campaign yet) so that check is a no-op. `DELETE /campaigns/{campaign_ref}` and `POST .../duplicate` are still missing.
+
 Campaign editing does not need a new endpoint: `PATCH /campaigns/{campaign_ref}`, `PUT .../rules`, and `PUT .../payout-rule` already cover it.
 
 ## H. Campaign-studio drafts, source assets, analytics, and closeout
@@ -437,6 +463,8 @@ The six-screen campaign studio currently persists only to browser `localStorage`
 | Missing P0 | `POST /campaign-drafts/{draft_id}/finalize` | Validate all campaign invariants, atomically create the canonical unfunded Campaign and checklist, consume the draft, and return the campaign ID/slug and funding next route. Idempotent. |
 
 The existing `POST /campaigns` remains useful for API clients that already have a complete campaign payload. The frontend campaign studio should use the draft lifecycle.
+
+**2026-09-22 — Built**, all six rows: a `campaign_drafts` table (JSONB `draft_answers`, revisioned autosave, same pattern as the onboarding drafts in §C). `GET`/`PATCH` return a `blockers` map (field → what's missing) computed without raising, so the builder can flag the exact incomplete screen live. `finalize` re-validates the accumulated draft as the same `CampaignCreate` shape `POST /campaigns` uses — that route's creation logic was factored into `service.create_campaign` so there's exactly one place a `Campaign` row gets made — and is idempotent (`finalized_campaign_id` on the draft; a second call returns the same campaign rather than erroring or duplicating). `GET /campaign-drafts` lists only unfinalized drafts. **Not built**: source-asset attachment (`POST /uploads/campaign-assets`, `/campaigns/{ref}/assets`, and the equivalent PATCH-the-draft path this section allows for) — `CampaignDraftPatch` covers details/platforms/rules/budget/cover image only, not source material. `expires_at` is a column with no sweep job behind it yet (nothing expires stale drafts). Analytics and closeout (below) are also still open.
 
 ### Campaign source materials
 
@@ -473,6 +501,8 @@ The existing CSV `GET /campaigns/{campaign_ref}/report` remains the machine-read
 
 Processing progress, approved/rejected verdicts, appeals, clip detail, performance, and clip earnings already resolve through the existing submission endpoints; they need dynamic IDs in the frontend, not duplicate APIs.
 
+**2026-09-22 — Built**: `POST /submissions/{submission_id}/resubmit` and `GET /earnings/entries/{entry_id}`. Resubmit works on a submission whose link was rejected at registration *or* whose verdict is `rejected` (which covers both an ordinary rejection and a brand's "request correction" — both land on the same status); it links the new submission via `resubmitted_from_id` without touching the original's verdict, requirement results, or appeal, and caps a chain at 3 attempts (the original plus two corrections). `POST /submissions` and the resubmit route now share one registration path (`_register` in the submissions router) so campaign/account/platform validation can't drift between them. The entry-provenance route returns the rate and cap the entry was billed under (from the campaign's payout rule, not a per-entry snapshot — caps aren't tracked per-entry in the model), its pipeline state (Accrued/Payable/Processing/Paid, same rule as `earnings/history`), and its allocated payout id if any. `GET /earnings/export` and `GET /earnings/statement.pdf` (both P1) are still missing.
+
 ## J. Brand ledger, refunds, statements, official receipts, and public verification
 
 The frontend currently fabricates brand transactions and prints client-rendered receipts. Official financial records must come from the server-side ledger.
@@ -497,6 +527,13 @@ The frontend currently fabricates brand transactions and prints client-rendered 
 | Missing P1 | `POST /admin/refunds/{refund_id}/retry` | Re-drive a retryable provider refund idempotently and audit the operator. |
 | Missing P1 | `POST /admin/refunds/{refund_id}/fail` | Finalise an unrecoverable refund failure with an operator reason and escalation state. |
 
+**2026-09-22 — Built**: transactions ledger, funding quote, and refunds — the three rows that don't need a PDF library or a tax/billing decision. **Not built, and each needs a real decision, not an assumption**: every `*.pdf` row (no PDF library is wired in; needs a template/branding decision), invoices (needs the tax/accounting structure), and `POST /payouts/quote` + `DELETE /creators/me/bank-details` (straightforward, just not done this pass).
+
+- `GET /organisations/me/transactions(+/{id})`: not a new table — it presents `FundingOrder` and `Refund` rows (each already an immutable record) as one merged, sorted list (`modules/organisations/ledger.py`). Creator payouts are deliberately excluded from the *brand's* ledger: the brand's money movement ends at funding; where the pot goes afterwards is the creator's earnings/payout history, a separate ledger. Cursor pagination wasn't done — same `limit`/`offset` gap as the rest of the app. `/export` (P1) is still missing.
+- `POST /campaigns/{ref}/funding/quote`: pure calculation (pot × current fee rate), doesn't lock anything or create an order.
+- `POST`/`GET /campaigns/{ref}/refunds`: **refunds only the unspent pot, never the 1.5% funding fee — an assumption, not a confirmed policy** (see `modules.refunds.models`'s docstring). Idempotent per campaign (a second request returns the existing refund). Needs a closed campaign. Routes through a new `PaymentProvider.create_refund`/`get_refund` (added to the provider interface alongside `create_transfer`; sandbox always succeeds). **The Paystack refund implementation is unverified against a real account** — Paystack's `/refund` endpoint doesn't accept a caller-supplied idempotency reference the way transfers do, and its refund-status lookup/webhook shape wasn't confirmed against live docs, so reconciliation (`get_refund`) is a stub and the admin retry/fail rows are still open.
+- `GET /receipts/{reference}/verify`: public, rate-limited, checks funding orders, refunds, and payouts by reference and returns safe facts plus a tamper-check digest (`core/receipts.py`) — not a signature over a document, since no PDF exists yet.
+
 ## K. Support centre and customer tickets
 
 Support must serve both creator and brand accounts. A ticket belongs to the caller and may reference a campaign, submission, payout, funding order, or transaction.
@@ -517,6 +554,8 @@ Support must serve both creator and brand accounts. A ticket belongs to the call
 | Missing P0 | `POST /admin/support/tickets/{ticket_id}/messages` | Add an operator reply and notify the customer. |
 | Missing P0 | `PATCH /admin/support/tickets/{ticket_id}` | Assign, change priority/status/category, and record internal disposition. |
 | Missing P1 | `POST /admin/support/tickets/{ticket_id}/notes` | Add an internal-only note that is never returned to the customer endpoint. |
+
+**2026-09-22 — Built**: every row in the ticket table above (customer and admin sides). `category` is a free-text field, not a controlled taxonomy — there's no `GET /support/categories` behind it, since that (and the help articles below it) needs real content that doesn't exist yet. Unread is measured against a `customer_last_read_at` timestamp the customer's own `GET .../{id}` bumps; the admin queue doesn't get a symmetric "unread from customer" signal (not asked for in this row's contract). A customer message on a closed ticket reopens it automatically; the explicit `/reopen` route is for reopening *without* a new message, and refuses past a 14-day window (arbitrary — no policy was specified; change it if the real support process wants something else). `resource_type`/`resource_id` are a loose, unenforced reference (same pattern as `audit_events`), not a foreign key into whichever module owns that resource. Attachments reuse the existing `image`/`evidence` upload kinds rather than a dedicated `support-attachments` kind (still open, P1). "Notify the customer" on an operator reply isn't wired to email — only the in-app unread count reflects it.
 
 If Clippit owns help content instead of using an external CMS, the following content-management routes are also required:
 
@@ -680,6 +719,8 @@ The existing streaming upload routes are acceptable for development and small pi
 
 Push can be deferred during a controlled pilot if in-app and transactional email delivery are operational.
 
+**2026-09-22 — Built**, all four rows: `GET /notifications/unread-count` (excludes archived, matching the inbox's own count); `POST /notifications/{id}/archive` (hides from the default inbox list; the row and its audit trail stay); `POST`/`DELETE /push-subscriptions*` (re-registering the same browser endpoint updates the row rather than duplicating it). Nothing actually sends a push yet — these endpoints only manage subscriptions; the send side is still whatever web-push integration is chosen.
+
 ## R. Legal documents and consent records
 
 The frontend currently links to `/terms` and `/privacy`, but those pages do not exist. The pages may be statically rendered; the acceptance record still belongs in the backend.
@@ -689,6 +730,8 @@ The frontend currently links to `/terms` and `/privacy`, but those pages do not 
 | Missing P0 | `GET /legal/documents/{slug}` | Return the currently published Terms, Privacy Policy, Community Rules, or campaign-funding terms with immutable version and effective date. A static frontend can consume this at build time. |
 | Missing P0 | `POST /legal/acceptances` | Record user, document/version, accepted time, IP/user-agent hash, and the action that required consent. Idempotent per version. |
 | Missing P1 | `GET /legal/acceptances/me` | Return the caller's accepted versions and any newly required consent. |
+
+**2026-09-22 — Built**: content lives in a small static, versioned registry (`modules/legal/documents.py` — deployed with the app, per the "may be statically rendered" note), so the conditional `/admin/legal/*` CRUD rows below weren't built. `POST /legal/acceptances` is idempotent per `(user, slug, version)` and 409s on a stale version. **The four documents' bodies are placeholder text, not real legal copy** — this needs counsel review before launch. `product-config`'s `legal` array exposes the current versions.
 
 If legal documents are managed in Clippit rather than versioned files deployed with the application:
 
@@ -764,7 +807,7 @@ The current onboarding components are a concrete example of this gap: they write
 - `PUT /creators/me/profile` must add handle, structured location, primary/content lanes, public visibility, and available-for-briefs fields. The current settings screen edits these values but the schema cannot store them.
 - `GET /creators/me/profile` must return the same fields plus handle-change limits and safe public-profile URL.
 - `PUT /organisations/me/profile` must distinguish the workspace user's preferred name from the public organisation/funder name and support a stable public slug if brand profiles are enabled.
-- `POST /campaigns` and `PATCH /campaigns/{campaign_ref}` must model the end condition explicitly. `duration_days = null` means **no calendar deadline; close only when the pot is exhausted or an authorised actor closes it**. The current funding service incorrectly converts null to a default 14-day deadline.
+- ~~`POST /campaigns` and `PATCH /campaigns/{campaign_ref}` must model the end condition explicitly. `duration_days = null` means **no calendar deadline; close only when the pot is exhausted or an authorised actor closes it**. The current funding service incorrectly converts null to a default 14-day deadline.~~ **Fixed 2026-09-22**: `funding.service.open_campaign` no longer defaults a null `duration_days` to 14; `ends_at` stays null and the rest of the codebase already treated `ends_at is None` as no-deadline correctly (list filters, `time_left`, `is_open_for_entries`, the sweep job). The explicit end-condition field on create/update responses (separate from just `duration_days`/`ends_at`) is still not modeled.
 - Campaign create/update responses must expose source assets, end condition, close policy, funding lock state, and revision. A single `source_link` cannot power the sound plus visual-reference UI.
 - Campaign money schema fields currently use Python `float` in several Pydantic models. They must accept/return decimal money values consistently with the NUMERIC ledger.
 - `GET /campaigns`, `/submissions`, `/campaigns/{ref}/submissions`, `/earnings/history`, `/leaderboard`, `/notifications`, review queues, and every admin list need consistent cursor pagination and total/next-cursor metadata. Offset may remain for exports but is not the primary customer pagination contract.

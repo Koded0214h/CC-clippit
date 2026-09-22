@@ -31,3 +31,19 @@ class NotificationOut(BaseModel):
 class NotificationList(BaseModel):
     unread_count: int
     items: list[NotificationOut]
+
+
+class UnreadCountOut(BaseModel):
+    unread_count: int
+
+
+class PushSubscriptionIn(BaseModel):
+    endpoint: str
+    p256dh_key: str
+    auth_key: str
+
+
+class PushSubscriptionOut(BaseModel):
+    id: uuid.UUID
+    endpoint: str
+    created_at: datetime

@@ -32,6 +32,19 @@ from . import models, pool, schemas, service
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
 
 
+def _joined_campaign_ids(creator_id: uuid.UUID):
+    """Subquery: campaigns this creator has joined or submitted to (and not
+    left/withdrawn) — see `service.joined_campaigns` for the same rule
+    applied to a fixed list of campaigns."""
+    from_membership = select(models.CampaignMembership.campaign_id).where(
+        models.CampaignMembership.creator_id == creator_id, models.CampaignMembership.left_at.is_(None)
+    )
+    from_submission = select(Submission.campaign_id).where(
+        Submission.creator_id == creator_id, Submission.status != SubmissionStatus.withdrawn
+    )
+    return from_membership.union(from_submission)
+
+
 async def _load(ref: str, db: AsyncSession) -> models.Campaign:
     campaign = await service.resolve(db, ref)
     if campaign is None:
@@ -57,32 +70,9 @@ async def create_campaign(
     if payload.cover_image_upload_id:
         await owned_upload(db, payload.cover_image_upload_id, user.id, kinds=("image",))
     try:
-        pot, expected_views = service.derive_budget(
-            pot=payload.pot, expected_views=payload.expected_views, rate=payload.payout_rule.rate_per_1000_views
-        )
+        campaign = await service.create_campaign(db, user, payload)
     except ValueError as exc:
         raise HTTPException(422, str(exc)) from exc
-
-    campaign = models.Campaign(
-        event_manager_id=user.id,
-        slug=await service.unique_slug(db, payload.title),
-        title=payload.title,
-        tagline=payload.tagline,
-        description=payload.description,
-        category=payload.category,
-        source_link=payload.source_link,
-        cover_image_upload_id=payload.cover_image_upload_id,
-        expected_views=expected_views,
-        pot_amount=pot,
-        duration_days=payload.duration_days,
-        platforms=[p.value for p in payload.platforms],
-    )
-    db.add(campaign)
-    await db.flush()
-    db.add(models.CampaignPayoutRule(campaign_id=campaign.id, **payload.payout_rule.model_dump()))
-    for position, rule in enumerate(payload.rules):
-        db.add(models.CampaignRule(campaign_id=campaign.id, kind=rule.kind, text=rule.text, position=position))
-    audit.record(db, "campaign.created", actor_id=user.id, campaign_id=campaign.id, amount=pot)
     await db.commit()
     return await _out(db, await _load(str(campaign.id), db), user)
 
@@ -137,21 +127,9 @@ async def list_campaigns(
         query = query.where(models.Campaign.ends_at <= service.now() + service.CLOSING_SOON)
         order = models.Campaign.ends_at.asc()
     elif feed == "joined" and user.role == Role.creator:
-        query = query.where(
-            models.Campaign.id.in_(
-                select(Submission.campaign_id).where(
-                    Submission.creator_id == user.id, Submission.status != SubmissionStatus.withdrawn
-                )
-            )
-        )
+        query = query.where(models.Campaign.id.in_(_joined_campaign_ids(user.id)))
     elif feed == "open" and user.role == Role.creator:
-        query = query.where(
-            models.Campaign.id.not_in(
-                select(Submission.campaign_id).where(
-                    Submission.creator_id == user.id, Submission.status != SubmissionStatus.withdrawn
-                )
-            )
-        )
+        query = query.where(models.Campaign.id.not_in(_joined_campaign_ids(user.id)))
     elif feed == "for_you" and user.role == Role.creator:
         profile = await db.get(CreatorProfile, user.id)
         interests = [i.lower() for i in (profile.interests if profile else [])]
@@ -205,6 +183,43 @@ async def read_pool(
         )
     summary = pool.summarize(size, obligations)
     return schemas.PoolOut(campaign_id=campaign.id, **asdict(summary))
+
+
+@router.post("/{campaign_ref}/join", response_model=schemas.MembershipOut, status_code=status.HTTP_201_CREATED)
+async def join_campaign(
+    campaign_ref: str,
+    user: User = Depends(get_verified_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Join before submitting — powers the Joined badge and capacity checks
+    even for a creator who hasn't posted a clip yet."""
+    if user.role != Role.creator:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only a creator account can join a campaign")
+    campaign = await _load(campaign_ref, db)
+    service.ensure_visible(campaign, user)
+    try:
+        membership = await service.join_campaign(db, campaign, user)
+    except service.MembershipError as exc:
+        raise HTTPException(exc.status_code, exc.message) from exc
+    await db.commit()
+    return membership
+
+
+@router.delete("/{campaign_ref}/join", response_model=schemas.MembershipOut)
+async def leave_campaign(
+    campaign_ref: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if user.role != Role.creator:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only a creator account can leave a campaign")
+    campaign = await _load(campaign_ref, db)
+    try:
+        membership = await service.leave_campaign(db, campaign, user)
+    except service.MembershipError as exc:
+        raise HTTPException(exc.status_code, exc.message) from exc
+    await db.commit()
+    return membership
 
 
 async def _latest_views(client: httpx.AsyncClient, submission_id: uuid.UUID) -> int:

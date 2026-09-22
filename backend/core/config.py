@@ -54,6 +54,16 @@ class Settings(BaseSettings):
     x_redirect_uri: str = "http://localhost:8000/social/x/callback"
     twitterapi_io_key: str = ""
 
+    # Google Sign-In (identity, not a connected social account — see
+    # modules/auth/google.py). Verifies id_tokens via Google's tokeninfo
+    # endpoint rather than local JWKS/RS256 verification: this environment
+    # doesn't have the `cryptography` package (slow source build, no
+    # prebuilt wheel here — see backend/README's test-setup notes), and
+    # tokeninfo is Google's own documented alternative for exactly that case.
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = "http://localhost:8000/auth/google/callback"
+
     # --- Email / one-time codes -------------------------------------------
     # `console` logs the message (and keeps the last few in memory so dev
     # and tests can read a code). `smtp` sends for real.

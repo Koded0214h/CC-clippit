@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.config import get_settings
 from core.money import ZERO, to_decimal
 from modules.auth.models import SocialAccount, User
-from modules.campaigns.models import Campaign
+from modules.campaigns.models import Campaign, CampaignPayoutRule
 from modules.campaigns.service import brands, now
 from modules.creators.models import CreatorProfile
 from modules.payouts.models import Payout, PayoutAllocation, PayoutStatus
@@ -157,6 +157,58 @@ async def history(db: AsyncSession, creator_id: uuid.UUID, limit: int, offset: i
             )
         )
     return schemas.EarningsHistory(items=items, total=int(total or 0))
+
+
+async def entry_detail(db: AsyncSession, entry_id: uuid.UUID) -> schemas.EarningEntryDetail | None:
+    """One accrual with everything an appeal, a dispute, or an admin
+    investigation would need to check it: the rate/cap it was billed
+    under, its state in the payout pipeline, and its snapshot reference."""
+    row = (
+        await db.execute(
+            select(models.EarningEntry, Submission.title, Campaign, CampaignPayoutRule)
+            .join(Submission, Submission.id == models.EarningEntry.submission_id)
+            .join(Campaign, Campaign.id == models.EarningEntry.campaign_id)
+            .outerjoin(CampaignPayoutRule, CampaignPayoutRule.campaign_id == Campaign.id)
+            .where(models.EarningEntry.id == entry_id)
+        )
+    ).first()
+    if row is None:
+        return None
+    entry, clip_title, campaign, rule = row
+
+    brand_map = await brands(db, {campaign.event_manager_id})
+    alloc = (
+        await db.execute(
+            select(PayoutAllocation.payout_id, _sum(PayoutAllocation.amount), Payout.status)
+            .join(Payout, Payout.id == PayoutAllocation.payout_id)
+            .where(
+                PayoutAllocation.entry_id == entry_id,
+                Payout.status.in_((PayoutStatus.pending, PayoutStatus.processing, PayoutStatus.succeeded)),
+            )
+            .group_by(PayoutAllocation.payout_id, Payout.status)
+        )
+    ).first()
+
+    at = now()
+    if entry.payable_at > at:
+        state = "Accrued"
+    elif alloc and alloc[2] == PayoutStatus.succeeded and to_decimal(alloc[1]) >= entry.amount:
+        state = "Paid"
+    elif alloc and to_decimal(alloc[1]) > 0:
+        state = "Processing"
+    else:
+        state = "Payable"
+
+    return schemas.EarningEntryDetail(
+        id=entry.id, submission_id=entry.submission_id, campaign_id=entry.campaign_id,
+        campaign_title=campaign.title, campaign_slug=campaign.slug, clip_title=clip_title,
+        brand=brand_map[campaign.event_manager_id].name if campaign.event_manager_id in brand_map else None,
+        billable_views=int(entry.billable_views), views_total=int(entry.views_total), thousands=entry.thousands,
+        rate_per_1000_views=rule.rate_per_1000_views if rule else 0.0,
+        cap_amount=rule.cap_amount if rule else None,
+        amount=entry.amount, state=state, accrued_at=entry.accrued_at, payable_at=entry.payable_at,
+        snapshot_id=entry.snapshot_id, reference=entry.reference, payout_id=alloc[0] if alloc else None,
+    )
 
 
 async def leaderboard(

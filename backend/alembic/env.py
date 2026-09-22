@@ -15,10 +15,13 @@ import modules.creators.models  # noqa: E402,F401
 import modules.earnings.models  # noqa: E402,F401
 import modules.funding.models  # noqa: E402,F401
 import modules.intelligence.models  # noqa: E402,F401
+import modules.legal.models  # noqa: E402,F401
 import modules.notifications.models  # noqa: E402,F401
 import modules.organisations.models  # noqa: E402,F401
 import modules.payouts.models  # noqa: E402,F401
+import modules.refunds.models  # noqa: E402,F401
 import modules.submissions.models  # noqa: E402,F401
+import modules.support.models  # noqa: E402,F401
 import modules.uploads.models  # noqa: E402,F401
 
 config = context.config

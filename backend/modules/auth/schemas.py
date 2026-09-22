@@ -46,6 +46,9 @@ class UserOut(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
+    #: Exchange at POST /auth/refresh for a new pair once the access token
+    #: expires; absent from responses that don't start a session (none, today).
+    refresh_token: str | None = None
     token_type: str = "bearer"
     user: UserOut
 
@@ -153,6 +156,98 @@ class ResetPasswordRequest(BaseModel):
         if len(value) < 8 or not any(c.isdigit() for c in value):
             raise ValueError("Password must be at least 8 characters and include a number.")
         return value
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class SessionOut(BaseModel):
+    id: uuid.UUID
+    device_label: str | None
+    ip_address: str | None
+    created_at: datetime
+    last_seen_at: datetime
+    current: bool
+
+
+class RevokedCountOut(BaseModel):
+    revoked: int
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+    #: Default true: changing a password is exactly the moment a stolen
+    #: session elsewhere should be kicked out.
+    revoke_other_sessions: bool = True
+
+    @field_validator("new_password")
+    @classmethod
+    def password_is_strong(cls, value: str) -> str:
+        if len(value) < 8 or not any(c.isdigit() for c in value):
+            raise ValueError("Password must be at least 8 characters and include a number.")
+        return value
+
+
+class SetPasswordRequest(BaseModel):
+    """For a Google-only account setting its first local password —
+    distinct from `ChangePasswordRequest`, which needs the old one."""
+
+    step_up_token: str
+    password: str
+
+    @field_validator("password")
+    @classmethod
+    def password_is_strong(cls, value: str) -> str:
+        if len(value) < 8 or not any(c.isdigit() for c in value):
+            raise ValueError("Password must be at least 8 characters and include a number.")
+        return value
+
+
+class StepUpRequestIn(BaseModel):
+    #: A short name for what this proof will authorise, e.g.
+    #: "payout_destination_change", "delete_account", "unlink_google".
+    action: str = Field(min_length=2, max_length=60)
+
+
+class StepUpChallengeOut(BaseModel):
+    challenge_token: str
+    expires_in: int
+
+
+class StepUpVerifyIn(BaseModel):
+    challenge_token: str
+    #: The strongest factor this account currently has is a password;
+    #: this widens to a TOTP/recovery code once 2FA exists.
+    password: str
+
+
+class StepUpTokenOut(BaseModel):
+    #: Pass this to whichever sensitive action it was requested for. Short
+    #: expiry, single action, never a general-purpose access token.
+    step_up_token: str
+    action: str
+    expires_in: int
+
+
+class ProviderStatus(BaseModel):
+    provider: str  # "password" | "google"
+    linked: bool
+    #: False when removing it would leave the account with no way in.
+    removable: bool
+    email: str | None = None
+
+
+class ProvidersOut(BaseModel):
+    providers: list[ProviderStatus]
+
+
+class StepUpOnly(BaseModel):
+    """The shape of every sensitive action that needs nothing but a fresh
+    step-up proof: unlinking Google, deleting the account."""
+
+    step_up_token: str
 
 
 class ProfileOut(BaseModel):

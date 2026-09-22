@@ -21,7 +21,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.money import ZERO, quantize, to_decimal
 from modules.audit import service as audit
-from modules.auth.models import Role, User
+from modules.auth.models import Platform as AuthPlatform
+from modules.auth.models import Role, SocialAccount, User
 from modules.earnings.models import EarningAccount, EarningEntry
 from modules.organisations.models import OrganisationProfile
 from modules.submissions.models import Submission, SubmissionStatus, VerificationStatus
@@ -58,6 +59,38 @@ async def unique_slug(db: AsyncSession, title: str) -> str:
     while await db.scalar(select(models.Campaign.id).where(models.Campaign.slug == candidate)):
         candidate = f"{base}-{secrets.token_hex(2)}"
     return candidate
+
+
+async def create_campaign(db: AsyncSession, owner: User, payload: schemas.CampaignCreate) -> models.Campaign:
+    """The one place a `Campaign` row gets created — used by `POST
+    /campaigns` directly and by `POST /campaign-drafts/{id}/finalize`
+    (which re-validates its accumulated draft as this same
+    `CampaignCreate` shape first). Does not commit; the caller decides
+    the transaction boundary."""
+    pot, expected_views = derive_budget(
+        pot=payload.pot, expected_views=payload.expected_views, rate=payload.payout_rule.rate_per_1000_views
+    )
+    campaign = models.Campaign(
+        event_manager_id=owner.id,
+        slug=await unique_slug(db, payload.title),
+        title=payload.title,
+        tagline=payload.tagline,
+        description=payload.description,
+        category=payload.category,
+        source_link=payload.source_link,
+        cover_image_upload_id=payload.cover_image_upload_id,
+        expected_views=expected_views,
+        pot_amount=pot,
+        duration_days=payload.duration_days,
+        platforms=[p.value for p in payload.platforms],
+    )
+    db.add(campaign)
+    await db.flush()
+    db.add(models.CampaignPayoutRule(campaign_id=campaign.id, **payload.payout_rule.model_dump()))
+    for position, rule in enumerate(payload.rules):
+        db.add(models.CampaignRule(campaign_id=campaign.id, kind=rule.kind, text=rule.text, position=position))
+    audit.record(db, "campaign.created", actor_id=owner.id, campaign_id=campaign.id, amount=pot)
+    return campaign
 
 
 async def resolve(db: AsyncSession, ref: str) -> models.Campaign | None:
@@ -190,16 +223,97 @@ async def cover_urls(db: AsyncSession, campaigns: list[models.Campaign]) -> dict
 
 
 async def joined_campaigns(db: AsyncSession, creator_id: uuid.UUID, ids: list[uuid.UUID]) -> set[uuid.UUID]:
+    """"Joined" is true from an explicit `CampaignMembership`, or — for
+    creators who submitted before that existed, or resubmit straight from
+    the feed — from having a live submission either way."""
     if not ids:
         return set()
-    rows = await db.scalars(
+    from_membership = await db.scalars(
+        select(models.CampaignMembership.campaign_id).where(
+            models.CampaignMembership.creator_id == creator_id,
+            models.CampaignMembership.campaign_id.in_(ids),
+            models.CampaignMembership.left_at.is_(None),
+        )
+    )
+    from_submission = await db.scalars(
         select(Submission.campaign_id).where(
             Submission.creator_id == creator_id,
             Submission.campaign_id.in_(ids),
             Submission.status != SubmissionStatus.withdrawn,
         )
     )
-    return set(rows)
+    return set(from_membership) | set(from_submission)
+
+
+# --- membership ---------------------------------------------------------------
+
+
+class MembershipError(Exception):
+    def __init__(self, message: str, status_code: int = 409) -> None:
+        super().__init__(message)
+        self.message = message
+        self.status_code = status_code
+
+
+async def active_membership(
+    db: AsyncSession, campaign_id: uuid.UUID, creator_id: uuid.UUID
+) -> models.CampaignMembership | None:
+    return await db.scalar(
+        select(models.CampaignMembership).where(
+            models.CampaignMembership.campaign_id == campaign_id,
+            models.CampaignMembership.creator_id == creator_id,
+            models.CampaignMembership.left_at.is_(None),
+        )
+    )
+
+
+async def join_campaign(
+    db: AsyncSession, campaign: models.Campaign, creator: User
+) -> models.CampaignMembership:
+    """Idempotent: joining twice returns the existing membership rather
+    than erroring, since the frontend can't always tell whether a click
+    landed the first time."""
+    if not is_open_for_entries(campaign):
+        raise MembershipError("This campaign isn't accepting new creators right now.")
+    existing = await active_membership(db, campaign.id, creator.id)
+    if existing:
+        return existing
+
+    has_account = await db.scalar(
+        select(SocialAccount.id).where(
+            SocialAccount.user_id == creator.id,
+            SocialAccount.platform.in_([AuthPlatform(p) for p in campaign.platforms]),
+        )
+    )
+    if not has_account:
+        raise MembershipError(
+            "Connect one of this campaign's platforms from your profile before joining.", status_code=409
+        )
+
+    membership = models.CampaignMembership(campaign_id=campaign.id, creator_id=creator.id)
+    db.add(membership)
+    await db.flush()
+    audit.record(db, "campaign.joined", actor_id=creator.id, campaign_id=campaign.id)
+    return membership
+
+
+async def leave_campaign(db: AsyncSession, campaign: models.Campaign, creator: User) -> models.CampaignMembership:
+    membership = await active_membership(db, campaign.id, creator.id)
+    if membership is None:
+        raise MembershipError("You haven't joined this campaign.", status_code=404)
+    has_accepted = await db.scalar(
+        select(Submission.id).where(
+            Submission.campaign_id == campaign.id,
+            Submission.creator_id == creator.id,
+            Submission.status == SubmissionStatus.submitted,
+            Submission.verification_status == VerificationStatus.approved,
+        )
+    )
+    if has_accepted:
+        raise MembershipError("You can't leave after a clip has been accepted — withdraw the clip instead.")
+    membership.left_at = now()
+    audit.record(db, "campaign.left", actor_id=creator.id, campaign_id=campaign.id)
+    return membership
 
 
 # --- shaping -----------------------------------------------------------------
@@ -356,6 +470,45 @@ def is_open_for_entries(campaign: models.Campaign, at: datetime | None = None) -
     if campaign.status != models.CampaignStatus.active or not campaign.accepting_entries:
         return False
     return campaign.ends_at is None or campaign.ends_at > (at or now())
+
+
+# --- campaign studio drafts ----------------------------------------------------
+
+
+def draft_blockers(answers: dict) -> dict[str, str]:
+    """What `finalize` would still refuse on — computed without raising, so
+    `GET`/`PATCH` can show the builder exactly which screen is incomplete."""
+    blockers: dict[str, str] = {}
+    if not (answers.get("title") or "").strip():
+        blockers["title"] = "Add a campaign title."
+    if not (answers.get("description") or "").strip():
+        blockers["description"] = "Add a brief description."
+    if not answers.get("platforms"):
+        blockers["platforms"] = "Choose at least one platform."
+    payout_rule = answers.get("payout_rule") or {}
+    if not payout_rule.get("rate_per_1000_views"):
+        blockers["payout_rule"] = "Set a rate per 1,000 views."
+    if not answers.get("pot") and not answers.get("expected_views"):
+        blockers["budget"] = "Set a pot or an expected-views target."
+    return blockers
+
+
+async def finalize_draft(db: AsyncSession, draft: models.CampaignDraft, owner: User) -> models.Campaign:
+    if draft.finalized_campaign_id is not None:
+        campaign = await db.get(models.Campaign, draft.finalized_campaign_id)
+        if campaign is not None:
+            return campaign  # idempotent: already finalized
+    blockers = draft_blockers(draft.draft_answers)
+    if blockers:
+        raise ValueError("; ".join(blockers.values()))
+    try:
+        payload = schemas.CampaignCreate.model_validate(draft.draft_answers)
+    except Exception as exc:  # pydantic ValidationError
+        raise ValueError(str(exc)) from exc
+    campaign = await create_campaign(db, owner, payload)
+    await db.flush()
+    draft.finalized_campaign_id = campaign.id
+    return campaign
 
 
 # --- access rules ------------------------------------------------------------

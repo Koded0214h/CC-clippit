@@ -22,12 +22,18 @@ def verify_password(password: str, password_hash: str) -> bool:
     return pwd_context.verify(password, password_hash)
 
 
-def create_access_token(user_id: uuid.UUID, role: str) -> str:
+def create_access_token(user_id: uuid.UUID, role: str, session_id: uuid.UUID | None = None) -> str:
     """Every token gets a unique `jti` so a single token — not every token
-    this user holds — can be revoked on logout (see modules.auth.models.RevokedToken)."""
+    this user holds — can be revoked on logout (see modules.auth.models.RevokedToken).
+    `session_id` (claim `sid`) is what lets `DELETE /auth/sessions/{id}`
+    revoke a whole device immediately rather than waiting out the token's
+    natural expiry — see modules.auth.models.Session. It's optional only
+    because a few internal/legacy call sites don't have a session yet."""
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.jwt_expire_minutes)
     now = datetime.now(timezone.utc)
     payload = {"sub": str(user_id), "role": role, "jti": str(uuid.uuid4()), "iat": now, "exp": expire}
+    if session_id is not None:
+        payload["sid"] = str(session_id)
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 
@@ -55,6 +61,32 @@ def create_oauth_state_token(user_id: uuid.UUID, provider: str, code_verifier: s
 def decode_oauth_state_token(token: str) -> dict | None:
     payload = decode_access_token(token)
     if not payload or payload.get("purpose") != "oauth_state":
+        return None
+    return payload
+
+
+def create_google_state_token(*, nonce: str, intent: str, role: str | None, link_user_id: uuid.UUID | None) -> str:
+    """Same reasoning as `create_oauth_state_token`: the round trip through
+    Google is stateless, so everything the callback needs — including the
+    nonce it must see echoed back in the id_token — travels signed in
+    `state` rather than in a server-side session.
+    `intent` is "login" (sign in or create an account) or "link" (attach
+    Google to the already-signed-in `link_user_id`)."""
+    expire = datetime.now(timezone.utc) + timedelta(minutes=10)
+    payload = {
+        "nonce": nonce,
+        "intent": intent,
+        "role": role,
+        "link_user_id": str(link_user_id) if link_user_id else None,
+        "purpose": "google_oauth_state",
+        "exp": expire,
+    }
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+
+def decode_google_state_token(token: str) -> dict | None:
+    payload = decode_access_token(token)
+    if not payload or payload.get("purpose") != "google_oauth_state":
         return None
     return payload
 
@@ -88,3 +120,30 @@ def decode_purpose_token(token: str, purpose: str) -> dict | None:
     if not payload or payload.get("purpose") != purpose:
         return None
     return payload
+
+
+# --- refresh tokens ----------------------------------------------------------
+# The bearer value returned to a client is "<row id>.<secret>"; only the
+# secret's hash is ever stored (see modules.auth.models.RefreshToken).
+
+
+def new_refresh_secret() -> str:
+    return secrets.token_urlsafe(48)
+
+
+def hash_refresh_secret(secret: str) -> str:
+    return hashlib.sha256(f"{settings.jwt_secret}:{secret}".encode()).hexdigest()
+
+
+def refresh_secret_matches(secret: str, expected_hash: str) -> bool:
+    return hmac.compare_digest(hash_refresh_secret(secret), expected_hash)
+
+
+def parse_refresh_token(token: str) -> tuple[uuid.UUID, str] | None:
+    token_id, _, secret = token.partition(".")
+    if not secret:
+        return None
+    try:
+        return uuid.UUID(token_id), secret
+    except ValueError:
+        return None
