@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { ReceiptHeader } from "@/components/ui/ReceiptHeader";
+import { CREATOR_WITHDRAWAL_FEE_RATE, calculateFee, feePercentage } from "@/lib/fees";
 import { campaigns, money } from "@/lib/product";
 
 const art = {
@@ -168,24 +169,42 @@ export function WithdrawScreen() {
   const balance = 18400;
   const [amount, setAmount] = useState("18400");
   const number = Math.min(balance, Math.max(0, Number(amount) || 0));
+  const fee = calculateFee(number, CREATOR_WITHDRAWAL_FEE_RATE);
+  const amountToReceive = number - fee;
   const valid = number >= 1000;
   return <div className="dashboard-page creator-flow-page withdraw-page"><Link className="product-back" href="/dashboard/earnings"><ProductIcon name="chevron" /> Back to earnings</Link><CreatorHeading title="Withdraw money" copy="Choose an amount and confirm the bank account." />
-    <div className="creator-split"><form className="creator-sheet withdraw-form" onSubmit={(event) => { event.preventDefault(); if (valid) { window.localStorage.setItem("clippit:last-withdrawal", String(number)); router.push("/dashboard/payouts/receipt"); } }}><div className="withdraw-balance"><small>Available to withdraw</small><strong><AnimatedMoney value={balance} /></strong><StatusPill tone="lime">Cleared</StatusPill></div><label className="amount-field"><span>Amount</span><div><b>₦</b><input value={amount} onChange={(event) => setAmount(event.target.value.replace(/\D/g, "").slice(0, 8))} inputMode="numeric" aria-label="Withdrawal amount" /></div></label><div className="amount-chips">{[5000, 10000, balance].map((value) => <button type="button" className={number === value ? "is-selected" : ""} onClick={() => setAmount(String(value))} key={value}>{value === balance ? "All" : money(value)}</button>)}</div><div className="withdraw-bank"><span><ProductIcon name="bank" /></span><p><small>Destination</small><strong>GTBank · 6789</strong><em>Tobi Adeyemi · Verified</em></p><Link href="/dashboard/payout-account">Change</Link></div><dl className="withdraw-summary"><div><dt>Withdrawal</dt><dd><AnimatedMoney value={number} /></dd></div><div><dt>Transfer fee</dt><dd><AnimatedMoney value={0} /></dd></div><div><dt>You receive</dt><dd><AnimatedMoney value={number} delay={80} /></dd></div></dl><button className="lime-button" type="submit" disabled={!valid}>Confirm withdrawal<ProductIcon name="arrow" /></button></form>
+    <div className="creator-split"><form className="creator-sheet withdraw-form" onSubmit={(event) => { event.preventDefault(); if (valid) { window.localStorage.setItem("clippit:last-withdrawal", JSON.stringify({ requested: number, fee, received: amountToReceive })); router.push("/dashboard/payouts/receipt"); } }}><div className="withdraw-balance"><small>Available to withdraw</small><strong><AnimatedMoney value={balance} /></strong><StatusPill tone="lime">Cleared</StatusPill></div><label className="amount-field"><span>Amount</span><div><b>₦</b><input value={amount} onChange={(event) => setAmount(event.target.value.replace(/\D/g, "").slice(0, 8))} inputMode="numeric" aria-label="Withdrawal amount" /></div></label><div className="amount-chips">{[5000, 10000, balance].map((value) => <button type="button" className={number === value ? "is-selected" : ""} onClick={() => setAmount(String(value))} key={value}>{value === balance ? "All" : money(value)}</button>)}</div><div className="withdraw-bank"><span><ProductIcon name="bank" /></span><p><small>Destination</small><strong>GTBank · 6789</strong><em>Tobi Adeyemi · Verified</em></p><Link href="/dashboard/payout-account">Change</Link></div><dl className="withdraw-summary"><div><dt>Withdrawal amount</dt><dd><AnimatedMoney value={number} /></dd></div><div><dt>Clippit fee ({feePercentage(CREATOR_WITHDRAWAL_FEE_RATE)}%)</dt><dd>−<AnimatedMoney value={fee} /></dd></div><div><dt>You receive</dt><dd><AnimatedMoney value={amountToReceive} delay={80} /></dd></div></dl><button className="lime-button" type="submit" disabled={!valid}>Withdraw <AnimatedMoney value={number} /><ProductIcon name="arrow" /></button></form>
       <aside className="withdraw-aside"><ArtTile src={art.withdraw} label="Money to bank" tone="gold" large /><h2>Transfer time</h2><p>Most transfers arrive within 24 hours. Rejected transfers return to your payable balance.</p><div><ProductIcon name="shield" />Encrypted bank destination</div></aside></div>
   </div>;
 }
 
 export function PayoutReceiptScreen() {
-  const [amount, setAmount] = useState(18400);
+  const defaultRequested = 18400;
+  const defaultFee = calculateFee(defaultRequested, CREATOR_WITHDRAWAL_FEE_RATE);
+  const [payout, setPayout] = useState({ requested: defaultRequested, fee: defaultFee, received: defaultRequested - defaultFee });
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      const stored = Number(window.localStorage.getItem("clippit:last-withdrawal"));
-      if (stored >= 1000) setAmount(stored);
+      const raw = window.localStorage.getItem("clippit:last-withdrawal");
+      if (!raw) return;
+      try {
+        const stored = JSON.parse(raw) as { requested?: number; fee?: number; received?: number } | number;
+        const requested = typeof stored === "number" ? stored : Number(stored.requested);
+        if (requested < 1000) return;
+        const fee = typeof stored === "number" ? calculateFee(requested, CREATOR_WITHDRAWAL_FEE_RATE) : Number(stored.fee) || calculateFee(requested, CREATOR_WITHDRAWAL_FEE_RATE);
+        const received = typeof stored === "number" ? requested - fee : Number(stored.received) || requested - fee;
+        setPayout({ requested, fee, received });
+      } catch {
+        const requested = Number(raw);
+        if (requested >= 1000) {
+          const fee = calculateFee(requested, CREATOR_WITHDRAWAL_FEE_RATE);
+          setPayout({ requested, fee, received: requested - fee });
+        }
+      }
     }, 0);
     return () => window.clearTimeout(timer);
   }, []);
   const reference = useMemo(() => "CLP-260920-1847", []);
-  return <div className="dashboard-page creator-flow-page receipt-page"><section className="receipt-hero"><div className="receipt-art"><ArtTile src={art.withdraw} label="Transfer sent" tone="gold" large /><span><ProductIcon name="check" /></span></div><div className="receipt-hero__details"><StatusPill tone="lime">Transfer successful</StatusPill><h1><AnimatedMoney value={amount} /></h1><p>Sent to GTBank ending 6789.</p><div className="receipt-actions"><PrimaryLink href="/dashboard/earnings">Back to earnings</PrimaryLink><button type="button" className="ink-button" onClick={() => window.print()}>Download receipt<ProductIcon name="brief" /></button></div></div></section>
-    <section className="creator-sheet payout-receipt"><ReceiptHeader title="Official payout receipt" reference={reference} /><div className="payout-receipt__summary"><Image src={art.wallet} alt="" width={92} height={92} /><p><small>Amount transferred</small><strong>{money(amount)}</strong><span><ProductIcon name="check" />Successful transaction</span><time>20 Sep 2026 · 15:07:13 WAT</time></p></div><div className="receipt-parties"><section><h2>Recipient</h2><p><strong>Tobi Adeyemi</strong><span>GTBank · 0123 456 789</span></p></section><section><h2>Sender</h2><p><strong>Clippit Payouts</strong><span>Payaza · 019***9028</span></p></section></div><section className="receipt-information"><h2>Transaction information</h2><dl><div><dt>Transaction type</dt><dd>Campaign earnings payout</dd></div><div><dt>Transaction ID</dt><dd>{reference}</dd></div><div><dt>Session ID</dt><dd>100033260920115117010192295902</dd></div><div><dt>Settlement reference</dt><dd>PYA-7719028-CLP</dd></div><div><dt>Currency</dt><dd>Nigerian naira</dd></div><div><dt>Transfer fee</dt><dd>{money(0)}</dd></div></dl></section><div className="receipt-proof"><h2>Payment breakdown</h2><div><span><ProductIcon name="play" /></span><p><strong>2 approved clips</strong><small>Indomie + Gbedu Records</small></p><i /><span><ProductIcon name="eye" /></span><p><strong>36,800 billable views</strong><small>Read directly from platforms</small></p><i /><span><ProductIcon name="bank" /></span><p><strong>{money(amount)} settled</strong><small>Transfer completed by Payaza</small></p></div></div><footer className="receipt-footer"><ProductIcon name="shield" /><span><strong>Verify this receipt</strong><small>clippit.ng/verify/{reference} · Authenticity code 9F2A-71C8</small></span></footer></section>
+  return <div className="dashboard-page creator-flow-page receipt-page"><section className="receipt-hero"><div className="receipt-art"><ArtTile src={art.withdraw} label="Transfer sent" tone="gold" large /><span><ProductIcon name="check" /></span></div><div className="receipt-hero__details"><StatusPill tone="lime">Transfer successful</StatusPill><h1><AnimatedMoney value={payout.received} /></h1><p>Sent to GTBank ending 6789.</p><div className="receipt-actions"><PrimaryLink href="/dashboard/earnings">Back to earnings</PrimaryLink><button type="button" className="ink-button" onClick={() => window.print()}>Download receipt<ProductIcon name="brief" /></button></div></div></section>
+    <section className="creator-sheet payout-receipt"><ReceiptHeader title="Official payout receipt" reference={reference} /><div className="payout-receipt__summary"><Image src={art.wallet} alt="" width={92} height={92} /><p><small>Amount transferred</small><strong>{money(payout.received)}</strong><span><ProductIcon name="check" />Successful transaction</span><time>20 Sep 2026 · 15:07:13 WAT</time></p></div><div className="receipt-parties"><section><h2>Recipient</h2><p><strong>Tobi Adeyemi</strong><span>GTBank · 0123 456 789</span></p></section><section><h2>Sender</h2><p><strong>Clippit Payouts</strong><span>Payaza · 019***9028</span></p></section></div><section className="receipt-information"><h2>Transaction information</h2><dl><div><dt>Transaction type</dt><dd>Campaign earnings withdrawal</dd></div><div><dt>Transaction ID</dt><dd>{reference}</dd></div><div><dt>Session ID</dt><dd>100033260920115117010192295902</dd></div><div><dt>Settlement reference</dt><dd>PYA-7719028-CLP</dd></div><div><dt>Withdrawal amount</dt><dd>{money(payout.requested)}</dd></div><div><dt>Clippit fee (7%)</dt><dd>−{money(payout.fee)}</dd></div><div><dt>Amount transferred</dt><dd>{money(payout.received)}</dd></div></dl></section><div className="receipt-proof"><h2>Payment breakdown</h2><div><span><ProductIcon name="wallet" /></span><p><strong>{money(payout.requested)} withdrawn</strong><small>From payable earnings</small></p><i /><span><ProductIcon name="brief" /></span><p><strong>{money(payout.fee)} Clippit fee</strong><small>7% withdrawal charge</small></p><i /><span><ProductIcon name="bank" /></span><p><strong>{money(payout.received)} settled</strong><small>Sent to GTBank ending 6789</small></p></div></div><footer className="receipt-footer"><ProductIcon name="shield" /><span><strong>Verify this receipt</strong><small>clippit.ng/verify/{reference} · Authenticity code 9F2A-71C8</small></span></footer></section>
   </div>;
 }

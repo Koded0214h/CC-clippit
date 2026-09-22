@@ -589,7 +589,9 @@ export function SettingsScreen() {
           <a {...sectionLink("accounts")}><ProductIcon name="link" /> Social accounts</a>
           <a {...sectionLink("payouts")}><ProductIcon name="bank" /> Payout account</a>
           <a {...sectionLink("notifications")}><ProductIcon name="bell" /> Notifications</a>
+          <Link href="/dashboard/verification"><ProductIcon name="shield" /> Verification</Link>
           <Link href="/dashboard/security"><ProductIcon name="shield" /> Security</Link>
+          <Link href="/help"><ProductIcon name="brief" /> Help and support</Link>
         </nav>
         <div className="settings-sheets">
           <section id="profile" className="settings-sheet">
@@ -625,6 +627,10 @@ export function SettingsScreen() {
             {["New campaigns in my lanes", "Submission verdicts", "Earnings become payable", "Campaign closing reminders"].map((label, index) => (
               <label className="toggle-row" key={label}><span><strong>{label}</strong><small>{index === 0 ? "Matched campaigns only." : "Delivered by email and in your Clippit inbox."}</small></span><input type="checkbox" defaultChecked={index !== 3} /><i /></label>
             ))}
+          </section>
+          <section className="settings-sheet">
+            <div className="settings-sheet__title"><div><h2>Account records</h2><p>Verification, support and your Clippit data.</p></div><ProductIcon name="brief" /></div>
+            <div className="settings-profile-actions"><Link className="lime-button" href="/dashboard/verification">Identity verification<ProductIcon name="arrow" /></Link><Link className="ink-button" href="/account/data">Download my data<ProductIcon name="arrow" /></Link><Link className="ink-button" href="/support/tickets">Support tickets<ProductIcon name="arrow" /></Link></div>
           </section>
         </div>
       </div>

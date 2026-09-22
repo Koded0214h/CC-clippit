@@ -8,6 +8,7 @@ import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
 import { ProfileAvatar, useStoredProfile, type StoredProfile } from "@/components/ui/ProfilePhotoPicker";
 import { ReceiptHeader } from "@/components/ui/ReceiptHeader";
+import { BRAND_CAMPAIGN_FEE_RATE, calculateFee } from "@/lib/fees";
 import { money } from "@/lib/product";
 
 const CREATOR_PROFILE: StoredProfile = {
@@ -148,16 +149,16 @@ export function SecurityScreen() {
 
 type BrandTransaction = { id: string; type: "Funding" | "Creator payout" | "Refund" | "Fee"; campaign: string; date: string; amount: number; status: string };
 const transactions: BrandTransaction[] = [
-  { id: "CLP-0926-041", type: "Funding", campaign: "No long thing", date: "20 Sep 2026", amount: -525000, status: "Cleared" },
+  { id: "CLP-0926-041", type: "Funding", campaign: "No long thing", date: "20 Sep 2026", amount: -500000, status: "Cleared" },
   { id: "VIEW-21904", type: "Creator payout", campaign: "No long thing", date: "20 Sep 2026", amount: -18400, status: "Settled" },
   { id: "VIEW-21871", type: "Creator payout", campaign: "No long thing", date: "19 Sep 2026", amount: -32100, status: "Settled" },
   { id: "REF-00812", type: "Refund", campaign: "Campus chop stories", date: "16 Sep 2026", amount: 42800, status: "Returned" },
-  { id: "FEE-00419", type: "Fee", campaign: "No long thing", date: "14 Sep 2026", amount: -25000, status: "Settled" },
+  { id: "FEE-00419", type: "Fee", campaign: "No long thing", date: "14 Sep 2026", amount: -calculateFee(500000, BRAND_CAMPAIGN_FEE_RATE), status: "Settled" },
 ];
 
 function BrandReceiptDocument({ selected, fullPage = false }: { selected: BrandTransaction; fullPage?: boolean }) {
   const ticketArt = selected.type === "Funding" ? "/assets/illustrations/clippit-icons/funding-pot.webp" : selected.type === "Refund" ? "/assets/illustrations/clippit-icons/withdraw-bank.webp" : selected.type === "Creator payout" ? "/assets/illustrations/clippit-icons/payout-wallet.webp" : "/assets/illustrations/clippit-icons/verified-proof.webp";
-  const recipient = selected.type === "Funding" ? ["Clippit Campaign Escrow", "Payaza · 019***9028"] : selected.type === "Refund" ? ["Gbedu Records Ltd.", "Wema Bank · 012***0193"] : selected.type === "Fee" ? ["Clippit Services", "Campaign verification account"] : ["Verified creator payout pool", "Payaza creator settlement"];
+  const recipient = selected.type === "Funding" ? ["Clippit Campaign Escrow", "Payaza · 019***9028"] : selected.type === "Refund" ? ["Gbedu Records Ltd.", "Wema Bank · 012***0193"] : selected.type === "Fee" ? ["Clippit Services", "Campaign fee account"] : ["Verified creator payout pool", "Payaza creator settlement"];
   const sender = selected.type === "Refund" ? ["Clippit Campaign Escrow", "Campaign account · 041"] : ["Gbedu Records Ltd.", "Wema Bank · 012***0193"];
   return <aside className={`transaction-ticket${fullPage ? " transaction-ticket--full" : ""}`}><ReceiptHeader title="Official transaction receipt" reference={selected.id} /><div className="transaction-ticket__subject"><span><Image src={ticketArt} width={82} height={82} alt="" /></span><p><small>{selected.type}</small><strong>{selected.amount > 0 ? "+" : "−"}{money(Math.abs(selected.amount))}</strong><em><ProductIcon name="check" />{selected.status}</em><time>{selected.date} · 15:07:13 WAT</time></p></div><div className="transaction-ticket__parties"><section><h2>Recipient</h2><p><strong>{recipient[0]}</strong><span>{recipient[1]}</span></p></section><section><h2>Sender</h2><p><strong>{sender[0]}</strong><span>{sender[1]}</span></p></section></div><section className="transaction-ticket__information"><h2>Transaction information</h2><dl><div><dt>Transaction type</dt><dd>{selected.type}</dd></div><div><dt>Transaction ID</dt><dd>{selected.id}</dd></div><div><dt>Session ID</dt><dd>100033260920115117010192295902</dd></div><div><dt>Campaign</dt><dd>{selected.campaign}</dd></div><div><dt>Ledger entry</dt><dd>LDG-2026-0920-041</dd></div><div><dt>Settlement currency</dt><dd>Nigerian naira</dd></div></dl></section><div className="transaction-ticket__verified"><ProductIcon name="shield" /><span><strong>Verify this receipt</strong><small>clippit.ng/verify/{selected.id} · Code 7A19-C2F4</small></span></div>{selected.campaign === "Campus chop stories" && <Link href="/brand/campaigns/campus-chop/report">Open closeout report<ProductIcon name="arrow" /></Link>}<button type="button" onClick={() => window.print()}>Download receipt<ProductIcon name="brief" /></button></aside>;
 }
@@ -169,7 +170,7 @@ export function BrandTransactionsScreen() {
   const visible = transactions.filter((item) => filter === "All" || item.type === filter);
   return <div className="brand-page customer-page brand-transactions-page">
     <ScreenHead title="Transactions" copy="Campaign funding, creator payouts, fees and returned money." action={<button className="brand-button" type="button" onClick={() => window.print()}>Export statement<ProductIcon name="brief" /></button>} />
-    <section className="transaction-balance"><div><small>Money currently in campaign pots</small><strong><AnimatedNumber value={312500} format="money" /></strong><span><ProductIcon name="shield" />Held in escrow</span></div><dl><div><dt>Funded this month</dt><dd><AnimatedNumber value={875000} format="money" /></dd></div><div><dt>Paid to creators</dt><dd><AnimatedNumber value={187500} format="money" /></dd></div><div><dt>Returned</dt><dd><AnimatedNumber value={42800} format="money" /></dd></div></dl></section>
+    <section className="transaction-balance"><div><small>Money currently in campaign pots</small><strong><AnimatedNumber value={312500} format="money" /></strong><span><ProductIcon name="shield" />Held in escrow</span></div><dl><div><dt>Creator pots funded this month</dt><dd><AnimatedNumber value={850000} format="money" /></dd></div><div><dt>Paid to creators</dt><dd><AnimatedNumber value={187500} format="money" /></dd></div><div><dt>Returned</dt><dd><AnimatedNumber value={42800} format="money" /></dd></div></dl></section>
     <div className="transaction-workspace"><section className="transaction-ledger"><header><div>{["All", "Funding", "Creator payout", "Refund", "Fee"].map((item) => <button type="button" className={filter === item ? "is-active" : ""} onClick={() => setFilter(item)} key={item}>{item}</button>)}</div><span>{visible.length} records</span></header><div className="transaction-labels"><span>Reference</span><span>Campaign</span><span>Date</span><span>Amount</span><span>Status</span></div>{visible.map((item) => <button type="button" className={`transaction-row${selected.id === item.id ? " is-selected" : ""}`} onClick={() => window.matchMedia("(max-width: 900px)").matches ? router.push(`/brand/transactions/${item.id}`) : setSelected(item)} key={item.id}><span><i><ProductIcon name={item.type === "Refund" ? "arrow" : item.type === "Funding" ? "wallet" : "bank"} /></i><b>{item.type}</b><small>{item.id}</small></span><strong>{item.campaign}</strong><time>{item.date}</time><em className={item.amount > 0 ? "is-credit" : ""}>{item.amount > 0 ? "+" : "−"}{money(Math.abs(item.amount))}</em><u>{item.status}</u></button>)}</section><BrandReceiptDocument selected={selected} /></div>
   </div>;
 }

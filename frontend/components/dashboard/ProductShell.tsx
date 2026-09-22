@@ -24,7 +24,7 @@ const mobileNavItems = navItems.filter((item) => item.label !== "Leaderboard");
 
 function isCurrent(pathname: string, href: string) {
   if (href === "/dashboard") return pathname === href;
-  if (href === "/dashboard/settings" && ["/dashboard/accounts", "/dashboard/payout-account", "/dashboard/security", "/dashboard/profile"].some((route) => pathname.startsWith(route))) return true;
+  if (href === "/dashboard/settings" && ["/dashboard/accounts", "/dashboard/payout-account", "/dashboard/security", "/dashboard/profile", "/dashboard/verification"].some((route) => pathname.startsWith(route))) return true;
   return pathname.startsWith(href);
 }
 
