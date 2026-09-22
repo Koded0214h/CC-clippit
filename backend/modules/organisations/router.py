@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.deps import get_db
@@ -23,6 +24,8 @@ async def _out(profile: models.OrganisationProfile, db: AsyncSession) -> schemas
     return schemas.OrganisationProfileOut(
         user_id=profile.user_id,
         name=profile.name,
+        slug=profile.slug,
+        public_profile=profile.public_profile,
         bio=profile.bio,
         website=profile.website,
         photo_url=await url_for_upload(db, profile.photo_upload_id),
@@ -66,6 +69,13 @@ async def update_profile(
     changes = payload.model_dump(exclude_unset=True)
     if "photo_upload_id" in changes and changes["photo_upload_id"] is not None:
         await owned_upload(db, changes["photo_upload_id"], user.id, kinds=("image",))
+    if "slug" in changes and changes["slug"] is not None and changes["slug"] != profile.slug:
+        from modules.creators.models import CreatorProfile
+
+        taken = await db.scalar(select(models.OrganisationProfile.user_id).where(models.OrganisationProfile.slug == changes["slug"])) or \
+            await db.scalar(select(CreatorProfile.user_id).where(CreatorProfile.handle == changes["slug"]))
+        if taken:
+            raise HTTPException(status.HTTP_409_CONFLICT, "That slug is already taken.")
     for field, value in changes.items():
         if field == "finance_email" and value is not None:
             value = str(value)

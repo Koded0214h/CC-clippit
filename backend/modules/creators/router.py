@@ -102,6 +102,8 @@ async def _profile_out(user: User, profile: models.CreatorProfile, db: AsyncSess
     return schemas.CreatorProfileOut(
         user_id=profile.user_id,
         display_name=profile.display_name,
+        handle=profile.handle,
+        public_profile=profile.public_profile,
         bio=profile.bio,
         photo_url=await url_for_upload(db, profile.photo_upload_id),
         interests=list(profile.interests or []),
@@ -141,6 +143,13 @@ async def update_my_profile(
     changes = payload.model_dump(exclude_unset=True)
     if changes.get("photo_upload_id") is not None:
         await owned_upload(db, changes["photo_upload_id"], user.id, kinds=("image",))
+    if "handle" in changes and changes["handle"] is not None and changes["handle"] != profile.handle:
+        from modules.organisations.models import OrganisationProfile
+
+        taken = await db.scalar(select(models.CreatorProfile.user_id).where(models.CreatorProfile.handle == changes["handle"])) or \
+            await db.scalar(select(OrganisationProfile.user_id).where(OrganisationProfile.slug == changes["handle"]))
+        if taken:
+            raise HTTPException(status.HTTP_409_CONFLICT, "That handle is already taken.")
     for field, value in changes.items():
         setattr(profile, field, value)
     await db.commit()

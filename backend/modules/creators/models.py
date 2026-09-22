@@ -55,6 +55,12 @@ class CreatorProfile(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
     display_name: Mapped[str] = mapped_column(String(80), nullable=False)
+    #: The public handle behind `/profiles/creators/{handle}`. Null until
+    #: the creator picks one — no public profile page exists before then.
+    handle: Mapped[str | None] = mapped_column(String(30), unique=True, nullable=True)
+    #: A public profile still needs `handle` set; this is the separate
+    #: "don't list me" toggle on top of that.
+    public_profile: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     bio: Mapped[str | None] = mapped_column(Text, nullable=True)
     photo_upload_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("uploads.id", ondelete="SET NULL"), nullable=True

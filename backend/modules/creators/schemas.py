@@ -63,6 +63,10 @@ class CreatorProfileUpdate(BaseModel):
     """Settings → Profile. Send only what changed."""
 
     display_name: str | None = Field(default=None, min_length=2, max_length=80)
+    #: Use `GET /handles/{handle}/availability` first — this still
+    #: revalidates and 409s on collision rather than trusting the client.
+    handle: str | None = Field(default=None, max_length=30)
+    public_profile: bool | None = None
     bio: str | None = Field(default=None, max_length=240)
     photo_upload_id: uuid.UUID | None = None
     interests: list[str] | None = Field(default=None, max_length=12)
@@ -71,6 +75,18 @@ class CreatorProfileUpdate(BaseModel):
     @classmethod
     def strip(cls, value: str | None) -> str | None:
         return value.strip() if value is not None else None
+
+    @field_validator("handle")
+    @classmethod
+    def normalize_handle(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        from core.handles import is_valid, normalize
+
+        handle = normalize(value)
+        if not is_valid(handle):
+            raise ValueError("Handles are 3-30 characters: lowercase letters, numbers, and underscores.")
+        return handle
 
     @field_validator("interests")
     @classmethod
@@ -112,6 +128,8 @@ class CreatorOnboarding(BaseModel):
 class CreatorProfileOut(BaseModel):
     user_id: uuid.UUID
     display_name: str
+    handle: str | None = None
+    public_profile: bool = True
     bio: str | None
     photo_url: str | None
     interests: list[str]
@@ -121,6 +139,29 @@ class CreatorProfileOut(BaseModel):
     goals: list[str]
     onboarding_completed: bool
     updated_at: datetime
+
+
+class PublicCreatorStats(BaseModel):
+    approved_clips: int
+    verified_views: int
+
+
+class PublicCreatorWork(BaseModel):
+    campaign_title: str
+    campaign_slug: str
+    brand_name: str | None
+    platform: Platform
+    submitted_at: datetime
+
+
+class PublicCreatorProfileOut(BaseModel):
+    handle: str
+    display_name: str
+    photo_url: str | None
+    bio: str | None
+    interests: list[str]
+    stats: PublicCreatorStats
+    recent_work: list[PublicCreatorWork]
 
 
 class ClipRow(BaseModel):

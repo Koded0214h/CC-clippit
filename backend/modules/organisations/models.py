@@ -23,6 +23,10 @@ class OrganisationProfile(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
     name: Mapped[str] = mapped_column(String(80), nullable=False)
+    #: The public slug behind `/profiles/organisations/{slug}`. Null until
+    #: set — no public profile page exists before then.
+    slug: Mapped[str | None] = mapped_column(String(60), unique=True, nullable=True)
+    public_profile: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     bio: Mapped[str | None] = mapped_column(Text, nullable=True)
     website: Mapped[str | None] = mapped_column(String(255), nullable=True)
     photo_upload_id: Mapped[uuid.UUID | None] = mapped_column(

@@ -402,6 +402,8 @@ The campaign builder, onboarding choices, creator settings, public creator profi
 
 No separate endpoint is required to edit handle, location, lane, public visibility, or availability if `PUT /creators/me/profile` is expanded to support them with uniqueness/privacy validation. The current profile schema does not support those fields and must be widened. Likewise `PUT /organisations/me/profile` must support a stable public slug if organisation profiles are exposed.
 
+**2026-09-22 — Built**: all five rows. `creator_profiles.handle` and `organisation_profiles.slug` (both nullable — no public page exists before one is set) plus a `public_profile` toggle on each, edited through the existing `PUT` profile routes (as this section anticipated) with uniqueness checked across *both* tables — a creator's handle and a brand's slug share one namespace, so `GET /handles/{handle}/availability` checks both. Not modeled: `location` (no location field exists anywhere yet — see the still-open field-contract gap in §C) and a separate "availability for briefs" flag. Public creator stats are `approved_clips` and lifetime `verified_views` (summed from `EarningAccount.cumulative_views`, never a payout amount); `recent_work` is the 6 most recent approved, non-withdrawn submissions. `/handles/.../availability` isn't rate-limited yet (P1 in the row, not done).
+
 ## E. Creator identity verification/KYC
 
 The payout-account UI says the bank name must match a verified identity, but the backend has no creator identity-verification record or workflow. The exact evidence and provider must be approved by payment/compliance counsel; Clippit should prefer a hosted verification session and avoid storing raw identity documents or numbers unless necessary.
@@ -713,6 +715,8 @@ The frontend currently links to `/terms` and `/privacy`, but those pages do not 
 | Missing P0 | `GET /legal/documents/{slug}` | Return the currently published Terms, Privacy Policy, Community Rules, or campaign-funding terms with immutable version and effective date. A static frontend can consume this at build time. |
 | Missing P0 | `POST /legal/acceptances` | Record user, document/version, accepted time, IP/user-agent hash, and the action that required consent. Idempotent per version. |
 | Missing P1 | `GET /legal/acceptances/me` | Return the caller's accepted versions and any newly required consent. |
+
+**2026-09-22 — Built**: content lives in a small static, versioned registry (`modules/legal/documents.py` — deployed with the app, per the "may be statically rendered" note), so the conditional `/admin/legal/*` CRUD rows below weren't built. `POST /legal/acceptances` is idempotent per `(user, slug, version)` and 409s on a stale version. **The four documents' bodies are placeholder text, not real legal copy** — this needs counsel review before launch. `product-config`'s `legal` array exposes the current versions.
 
 If legal documents are managed in Clippit rather than versioned files deployed with the application:
 
