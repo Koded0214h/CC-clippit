@@ -12,6 +12,7 @@ import { brandCampaigns, brandReviews, type BrandCampaign, type BrandCampaignSta
 import { brandApi, type BrandOverviewOut, type ReviewCard as ApiReviewCard } from "@/lib/api/brand";
 import { campaignsApi, type CampaignOut, type CampaignStats, type CampaignSubmissionRow } from "@/lib/api/campaigns";
 import { organisationsApi } from "@/lib/api/organisations";
+import { profileApi } from "@/lib/api/profile";
 import { BRAND_CAMPAIGN_FEE_RATE, calculateFee, feePercentage } from "@/lib/fees";
 import { useBrandCampaign, type BriefRule } from "./BrandCampaignProvider";
 import { CampaignCoverPicker } from "./CampaignCoverPicker";
@@ -315,9 +316,24 @@ export function BrandReviewQueueScreen() {
 }
 
 export function BrandReviewDetailScreen({ id = "submission-1042" }: { id?: string }) {
-  const review = brandReviews.find((item) => item.id === id) ?? brandReviews[0];
+  const mockReview = brandReviews.find((item) => item.id === id) ?? brandReviews[0];
+  const [review, setReview] = useState<BrandReview>(mockReview);
   const [decision, setDecision] = useState<"approve" | "changes" | null>(null);
   const [acting, setActing] = useState(false);
+
+  useEffect(() => {
+    brandApi.getReview(id).then((data) => {
+      setReview((current) => ({
+        ...current,
+        creator: data.creator_name,
+        handle: data.creator_handle ?? current.handle,
+        title: data.title ?? current.title,
+        platform: (data.platform as BrandReview["platform"]) ?? current.platform,
+        confidence: data.confidence ?? current.confidence,
+        issue: data.issue ?? current.issue,
+      }));
+    }).catch(() => undefined);
+  }, [id]);
 
   const approve = async () => {
     setActing(true);
@@ -363,7 +379,23 @@ export function BrandSettingsScreen() {
       if (data.business_legal_name) setOrgName(data.business_legal_name);
       setVerified(data.business_verified);
     }).catch(() => undefined);
+    profileApi.getPreferences().then((data) => {
+      setNotices({
+        funding: data.notifications.funding_alerts,
+        reviews: data.notifications.review_alerts,
+        reports: data.notifications.weekly_report,
+      });
+    }).catch(() => undefined);
   }, []);
+
+  const toggleNotice = (key: "funding" | "reviews" | "reports") => {
+    const apiKey = key === "funding" ? "funding_alerts" : key === "reviews" ? "review_alerts" : "weekly_report";
+    setNotices((current) => {
+      const updated = { ...current, [key]: !current[key] };
+      profileApi.updatePreferences({ notifications: { [apiKey]: updated[key] } }).catch(() => undefined);
+      return updated;
+    });
+  };
 
   const saveIdentity = () => {
     const clean = { ...profile, name: profile.name.trim(), bio: profile.bio.trim() };
@@ -373,5 +405,5 @@ export function BrandSettingsScreen() {
     window.setTimeout(() => setSaved(false), 1800);
   };
 
-  return <div className="brand-page brand-settings-page"><PageHeading title="Settings" copy="Manage organisation details, funding contact and campaign alerts." /><div className="brand-settings-layout"><nav><a href="#identity">Organisation identity</a><a href="#funding">Funding contact</a><a href="#alerts">Campaign alerts</a></nav><div><section id="identity" className="brand-settings-sheet"><header><div><h2>Organisation identity</h2><p>Shown to creators on your campaigns.</p></div><ProfileAvatar profile={profile} fallback="GR" className="brand-settings-avatar" /></header><div className="brand-profile-editor"><ProfilePhotoPicker value={profile.photo} name={profile.name} onChange={(photo) => setProfile((current) => ({ ...current, photo }))} tone="gold" compact /><div className="brand-profile-fields"><label><span>Public organisation name</span><input value={profile.name} onChange={(event) => setProfile((current) => ({ ...current, name: event.target.value.slice(0, 60) }))} /></label><label><span>Short description</span><textarea value={profile.bio} onChange={(event) => setProfile((current) => ({ ...current, bio: event.target.value.slice(0, 240) }))} /></label><label><span>Website</span><input value={website} onChange={(event) => setWebsite(event.target.value)} /></label></div></div><button type="button" className="brand-button" disabled={profile.name.trim().length < 2 || profile.bio.trim().length < 2} onClick={saveIdentity}>{saved ? "Changes saved" : "Save identity"}<ProductIcon name={saved ? "check" : "arrow"} /></button></section><section id="funding" className="brand-settings-sheet"><header><div><h2>Funding contact</h2><p>Used for receipts, settlement questions and campaign closeout.</p></div><ProductIcon name="bank" /></header><label><span>Finance email</span><input type="email" value={financeEmail} onChange={(event) => setFinanceEmail(event.target.value)} /></label><div className="verified-funder"><ProductIcon name="shield" /><span><strong>{orgName}</strong><small>Business identity {verified ? "verified" : "pending"}</small></span><Status tone={verified ? "lime" : "gold"}>{verified ? "Verified" : "Pending"}</Status></div></section><section id="alerts" className="brand-settings-sheet"><header><div><h2>Campaign alerts</h2><p>Choose which campaign events send an alert.</p></div><ProductIcon name="bell" /></header>{Object.entries(notices).map(([key, value]) => <label className="brand-toggle" key={key}><span><strong>{key === "funding" ? "Funding and pot alerts" : key === "reviews" ? "Submission review alerts" : "Weekly performance report"}</strong><small>{key === "funding" ? "Cleared funds, low pot and campaign closeout" : key === "reviews" ? "Uncertain checks and creator appeals" : "Verified views and spend summary every Monday"}</small></span><input type="checkbox" checked={value} onChange={() => setNotices((current) => ({ ...current, [key]: !value }))} /><i /></label>)}</section></div></div></div>;
+  return <div className="brand-page brand-settings-page"><PageHeading title="Settings" copy="Manage organisation details, funding contact and campaign alerts." /><div className="brand-settings-layout"><nav><a href="#identity">Organisation identity</a><a href="#funding">Funding contact</a><a href="#alerts">Campaign alerts</a></nav><div><section id="identity" className="brand-settings-sheet"><header><div><h2>Organisation identity</h2><p>Shown to creators on your campaigns.</p></div><ProfileAvatar profile={profile} fallback="GR" className="brand-settings-avatar" /></header><div className="brand-profile-editor"><ProfilePhotoPicker value={profile.photo} name={profile.name} onChange={(photo) => setProfile((current) => ({ ...current, photo }))} tone="gold" compact /><div className="brand-profile-fields"><label><span>Public organisation name</span><input value={profile.name} onChange={(event) => setProfile((current) => ({ ...current, name: event.target.value.slice(0, 60) }))} /></label><label><span>Short description</span><textarea value={profile.bio} onChange={(event) => setProfile((current) => ({ ...current, bio: event.target.value.slice(0, 240) }))} /></label><label><span>Website</span><input value={website} onChange={(event) => setWebsite(event.target.value)} /></label></div></div><button type="button" className="brand-button" disabled={profile.name.trim().length < 2 || profile.bio.trim().length < 2} onClick={saveIdentity}>{saved ? "Changes saved" : "Save identity"}<ProductIcon name={saved ? "check" : "arrow"} /></button></section><section id="funding" className="brand-settings-sheet"><header><div><h2>Funding contact</h2><p>Used for receipts, settlement questions and campaign closeout.</p></div><ProductIcon name="bank" /></header><label><span>Finance email</span><input type="email" value={financeEmail} onChange={(event) => setFinanceEmail(event.target.value)} /></label><div className="verified-funder"><ProductIcon name="shield" /><span><strong>{orgName}</strong><small>Business identity {verified ? "verified" : "pending"}</small></span><Status tone={verified ? "lime" : "gold"}>{verified ? "Verified" : "Pending"}</Status></div></section><section id="alerts" className="brand-settings-sheet"><header><div><h2>Campaign alerts</h2><p>Choose which campaign events send an alert.</p></div><ProductIcon name="bell" /></header>{Object.entries(notices).map(([key, value]) => <label className="brand-toggle" key={key}><span><strong>{key === "funding" ? "Funding and pot alerts" : key === "reviews" ? "Submission review alerts" : "Weekly performance report"}</strong><small>{key === "funding" ? "Cleared funds, low pot and campaign closeout" : key === "reviews" ? "Uncertain checks and creator appeals" : "Verified views and spend summary every Monday"}</small></span><input type="checkbox" checked={value} onChange={() => toggleNotice(key as "funding" | "reviews" | "reports")} /><i /></label>)}</section></div></div></div>;
 }

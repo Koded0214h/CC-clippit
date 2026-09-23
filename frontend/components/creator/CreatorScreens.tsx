@@ -135,7 +135,13 @@ export function ConnectedAccountsScreen() {
     }).catch(() => undefined);
   }, []);
 
-  const toggle = (name: string) => setAccounts((current) => current.map((account) => account.name === name ? { ...account, connected: !account.connected, handle: account.handle || "@tobioncam", note: account.connected ? "Required for this platform" : "Connection ready for demo" } : account));
+  const toggle = (name: string) => {
+    const account = accounts.find((a) => a.name === name);
+    if (account?.connected) {
+      socialApi.disconnect(name).catch(() => undefined);
+    }
+    setAccounts((current) => current.map((a) => a.name === name ? { ...a, connected: !a.connected, handle: a.handle || "@tobioncam", note: a.connected ? "Required for this platform" : "Connection ready for demo" } : a));
+  };
   return <div className="dashboard-page creator-flow-page">
     <CreatorHeading title="Connected accounts" copy="Connect the accounts Clippit should use to verify views." action={<PrimaryLink href="/dashboard/campaigns/indomie-no-long-thing/submit">Continue to submission</PrimaryLink>} />
     <div className="creator-split creator-split--connect"><section className="connect-stage"><ArtTile src={art.connect} label="Connected accounts" tone="lime" large /><div className="connect-score"><span><AnimatedNumber value={connected} suffix="/3" duration={650} /></span><p><strong>connected accounts</strong><small>Connect YouTube to submit to YouTube campaigns.</small></p></div><div className="connect-meter"><i style={{ width: `${(connected / 3) * 100}%` }} /></div></section>

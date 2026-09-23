@@ -12,6 +12,7 @@ import { earningsApi, type LeaderRow } from "@/lib/api/earnings";
 import { creatorApi } from "@/lib/api/creator";
 import { creatorProfileApi } from "@/lib/api/social";
 import { bankDetailsApi, type BankAccountOut } from "@/lib/api/bankDetails";
+import { profileApi, type NotificationSettings } from "@/lib/api/profile";
 
 function campaignOutToLocal(c: CampaignOut): Campaign {
   return {
@@ -644,12 +645,28 @@ export function LeaderboardScreen() {
   );
 }
 
+const NOTIFICATION_KEYS: Array<{ key: keyof NotificationSettings; label: string; note: string }> = [
+  { key: "new_campaigns", label: "New campaigns in my lanes", note: "Matched campaigns only." },
+  { key: "submission_verdicts", label: "Submission verdicts", note: "Delivered by email and in your Clippit inbox." },
+  { key: "earnings_payable", label: "Earnings become payable", note: "Delivered by email and in your Clippit inbox." },
+  { key: "campaign_closing", label: "Campaign closing reminders", note: "Delivered by email and in your Clippit inbox." },
+];
+
 export function SettingsScreen() {
   const [saved, setSaved] = useState(false);
   const [activeSection, setActiveSection] = useState("profile");
   const storedProfile = useStoredProfile("creator", CREATOR_PROFILE_FALLBACK);
   const [profile, setProfile] = useState(CREATOR_PROFILE_FALLBACK);
   const [bankDetail, setBankDetail] = useState<BankAccountOut | null>(null);
+  const [notifPrefs, setNotifPrefs] = useState<NotificationSettings>({
+    new_campaigns: true,
+    submission_verdicts: true,
+    earnings_payable: true,
+    campaign_closing: false,
+    funding_alerts: false,
+    review_alerts: false,
+    weekly_report: false,
+  });
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => setProfile(storedProfile));
@@ -666,7 +683,18 @@ export function SettingsScreen() {
       }));
     }).catch(() => undefined);
     bankDetailsApi.get().then(setBankDetail).catch(() => undefined);
+    profileApi.getPreferences().then((data) => {
+      setNotifPrefs(data.notifications);
+    }).catch(() => undefined);
   }, []);
+
+  const toggleNotif = (key: keyof NotificationSettings) => {
+    setNotifPrefs((current) => {
+      const updated = { ...current, [key]: !current[key] };
+      profileApi.updatePreferences({ notifications: { [key]: updated[key] } }).catch(() => undefined);
+      return updated;
+    });
+  };
 
   useEffect(() => {
     const ids = ["profile", "accounts", "payouts", "notifications"];
@@ -745,8 +773,8 @@ export function SettingsScreen() {
 
           <section id="notifications" className="settings-sheet">
             <div className="settings-sheet__title"><div><h2>Notifications</h2><p>Choose which events send a notification.</p></div><ProductIcon name="bell" /></div>
-            {["New campaigns in my lanes", "Submission verdicts", "Earnings become payable", "Campaign closing reminders"].map((label, index) => (
-              <label className="toggle-row" key={label}><span><strong>{label}</strong><small>{index === 0 ? "Matched campaigns only." : "Delivered by email and in your Clippit inbox."}</small></span><input type="checkbox" defaultChecked={index !== 3} /><i /></label>
+            {NOTIFICATION_KEYS.map(({ key, label, note }) => (
+              <label className="toggle-row" key={key}><span><strong>{label}</strong><small>{note}</small></span><input type="checkbox" checked={notifPrefs[key]} onChange={() => toggleNotif(key)} /><i /></label>
             ))}
           </section>
           <section className="settings-sheet">

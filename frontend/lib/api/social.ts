@@ -34,6 +34,7 @@ export interface CreatorProfileUpdate {
 
 export const socialApi = {
   accounts: () => api.get<ConnectedAccountOut[]>("/social/accounts"),
+  disconnect: (platform: string) => api.delete<void>(`/social/${platform}`),
 };
 
 export const creatorProfileApi = {

@@ -52,6 +52,8 @@ export const brandApi = {
     return api.get<ReviewQueue>(`/brand/reviews${qs}`);
   },
 
+  getReview: (submissionId: string) => api.get<ReviewCard>(`/brand/reviews/${submissionId}`),
+
   approveReview: (submissionId: string, note?: string) =>
     api.post<void>(`/brand/reviews/${submissionId}/approve`, { note: note ?? null }),
 
