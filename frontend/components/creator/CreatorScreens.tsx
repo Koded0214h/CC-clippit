@@ -12,6 +12,7 @@ import { campaigns, money } from "@/lib/product";
 import { earningsApi, type EarningRow } from "@/lib/api/earnings";
 import { creatorApi } from "@/lib/api/creator";
 import { socialApi, type ConnectedAccountOut } from "@/lib/api/social";
+import { bankDetailsApi, type BankAccountOut } from "@/lib/api/bankDetails";
 
 const art = {
   appeal: "/assets/illustrations/clippit-icons/appeal-review.webp",
@@ -265,14 +266,30 @@ export function EarningsScreen() {
 
 export function WithdrawScreen() {
   const router = useRouter();
-  const balance = 18400;
+  const [balance, setBalance] = useState(18400);
+  const [bankDetail, setBankDetail] = useState<BankAccountOut | null>(null);
   const [amount, setAmount] = useState("18400");
+
+  useEffect(() => {
+    earningsApi.summary().then((data) => {
+      setBalance(data.payable);
+      setAmount(String(data.payable));
+    }).catch(() => undefined);
+    bankDetailsApi.get().then(setBankDetail).catch(() => undefined);
+  }, []);
+
   const number = Math.min(balance, Math.max(0, Number(amount) || 0));
   const fee = calculateFee(number, CREATOR_WITHDRAWAL_FEE_RATE);
   const amountToReceive = number - fee;
   const valid = number >= 1000;
+  const bankLabel = bankDetail
+    ? `${bankDetail.bank_name} · ${bankDetail.account_number_masked.slice(-4)}`
+    : "GTBank · 6789";
+  const bankHolder = bankDetail?.account_name ?? "Tobi Adeyemi";
+  const bankVerified = bankDetail ? (bankDetail.verified ? "Verified" : "Unverified") : "Verified";
+
   return <div className="dashboard-page creator-flow-page withdraw-page"><Link className="product-back" href="/dashboard/earnings"><ProductIcon name="chevron" /> Back to earnings</Link><CreatorHeading title="Withdraw money" copy="Choose an amount and confirm the bank account." />
-    <div className="creator-split"><form className="creator-sheet withdraw-form" onSubmit={(event) => { event.preventDefault(); if (valid) { window.localStorage.setItem("clippit:last-withdrawal", JSON.stringify({ requested: number, fee, received: amountToReceive })); router.push("/dashboard/payouts/receipt"); } }}><div className="withdraw-balance"><small>Available to withdraw</small><strong><AnimatedMoney value={balance} /></strong><StatusPill tone="lime">Cleared</StatusPill></div><label className="amount-field"><span>Amount</span><div><b>₦</b><input value={amount} onChange={(event) => setAmount(event.target.value.replace(/\D/g, "").slice(0, 8))} inputMode="numeric" aria-label="Withdrawal amount" /></div></label><div className="amount-chips">{[5000, 10000, balance].map((value) => <button type="button" className={number === value ? "is-selected" : ""} onClick={() => setAmount(String(value))} key={value}>{value === balance ? "All" : money(value)}</button>)}</div><div className="withdraw-bank"><span><ProductIcon name="bank" /></span><p><small>Destination</small><strong>GTBank · 6789</strong><em>Tobi Adeyemi · Verified</em></p><Link href="/dashboard/payout-account">Change</Link></div><dl className="withdraw-summary"><div><dt>Withdrawal amount</dt><dd><AnimatedMoney value={number} /></dd></div><div><dt>Clippit fee ({feePercentage(CREATOR_WITHDRAWAL_FEE_RATE)}%)</dt><dd>−<AnimatedMoney value={fee} /></dd></div><div><dt>You receive</dt><dd><AnimatedMoney value={amountToReceive} delay={80} /></dd></div></dl><button className="lime-button" type="submit" disabled={!valid}>Withdraw <AnimatedMoney value={number} /><ProductIcon name="arrow" /></button></form>
+    <div className="creator-split"><form className="creator-sheet withdraw-form" onSubmit={(event) => { event.preventDefault(); if (valid) { window.localStorage.setItem("clippit:last-withdrawal", JSON.stringify({ requested: number, fee, received: amountToReceive })); router.push("/dashboard/payouts/receipt"); } }}><div className="withdraw-balance"><small>Available to withdraw</small><strong><AnimatedMoney value={balance} /></strong><StatusPill tone="lime">Cleared</StatusPill></div><label className="amount-field"><span>Amount</span><div><b>₦</b><input value={amount} onChange={(event) => setAmount(event.target.value.replace(/\D/g, "").slice(0, 8))} inputMode="numeric" aria-label="Withdrawal amount" /></div></label><div className="amount-chips">{[5000, 10000, balance].map((value) => <button type="button" className={number === value ? "is-selected" : ""} onClick={() => setAmount(String(value))} key={value}>{value === balance ? "All" : money(value)}</button>)}</div><div className="withdraw-bank"><span><ProductIcon name="bank" /></span><p><small>Destination</small><strong>{bankLabel}</strong><em>{bankHolder} · {bankVerified}</em></p><Link href="/dashboard/payout-account">Change</Link></div><dl className="withdraw-summary"><div><dt>Withdrawal amount</dt><dd><AnimatedMoney value={number} /></dd></div><div><dt>Clippit fee ({feePercentage(CREATOR_WITHDRAWAL_FEE_RATE)}%)</dt><dd>−<AnimatedMoney value={fee} /></dd></div><div><dt>You receive</dt><dd><AnimatedMoney value={amountToReceive} delay={80} /></dd></div></dl><button className="lime-button" type="submit" disabled={!valid}>Withdraw <AnimatedMoney value={number} /><ProductIcon name="arrow" /></button></form>
       <aside className="withdraw-aside"><ArtTile src={art.withdraw} label="Money to bank" tone="gold" large /><h2>Transfer time</h2><p>Most transfers arrive within 24 hours. Rejected transfers return to your payable balance.</p><div><ProductIcon name="shield" />Encrypted bank destination</div></aside></div>
   </div>;
 }
