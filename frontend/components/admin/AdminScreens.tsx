@@ -2,10 +2,61 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
+import { money } from "@/lib/product";
+import { authApi, clearTokens, storeTokens } from "@/lib/api/auth";
+import {
+  adminApi,
+  type AdminCampaignDetail,
+  type AdminCampaignRow,
+  type AdminLedgerRow,
+  type AdminPayoutRow,
+  type AdminSubmissionDetail,
+  type AdminSubmissionRow,
+  type AdminUserDetail,
+  type AdminUserRow,
+  type AuditRow,
+  type BlockedAccountRow,
+  type DisputeAdminOut,
+  type DisputeOut,
+  type OperatorRow,
+  type ProviderHealth,
+  type TicketAdminOut,
+  type TicketOut,
+} from "@/lib/api/admin";
+
+function relativeTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "—";
+  const diffMs = Date.now() - then;
+  const minutes = Math.round(diffMs / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes} min ago`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `${hours} hr ago`;
+  const days = Math.round(hours / 24);
+  return `${days}d ago`;
+}
+
+function untilTime(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return "—";
+  const diffMs = then - Date.now();
+  if (diffMs <= 0) return "Overdue";
+  const days = Math.floor(diffMs / 86400000);
+  if (days >= 1) return `${days}d left`;
+  const hours = Math.round(diffMs / 3600000);
+  return `${hours}h left`;
+}
+
+function titleCase(value: string): string {
+  return value.replace(/[_-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 type Tone = "lime" | "gold" | "red" | "blue" | "ink" | "paper";
 type QueueKind = "users" | "creator-verifications" | "brand-verifications" | "campaigns" | "submissions" | "support" | "disputes" | "payouts" | "refunds" | "risk";

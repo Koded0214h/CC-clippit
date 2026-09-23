@@ -33,6 +33,7 @@ export const bankDetailsApi = {
   save: (payload: BankAccountIn) => api.put<BankAccountOut>("/creators/me/bank-details", payload),
   resolve: (bank_code: string, account_number: string) =>
     api.post<ResolvedOut>("/banks/resolve", { bank_code, account_number }),
+  verify: () => api.post<BankAccountOut>("/creators/me/bank-details/verify", {}),
 };
 
 export const banksApi = {

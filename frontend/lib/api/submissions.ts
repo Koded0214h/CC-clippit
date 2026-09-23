@@ -74,10 +74,105 @@ export interface SubmissionEarningsOut {
   payable_now: number;
 }
 
+export interface SubmissionCreateIn {
+  campaign_id: string;
+  platform: string;
+  url: string;
+  title?: string | null;
+  video_upload_id?: string | null;
+}
+
+export interface ResubmitIn {
+  platform: string;
+  url: string;
+  title?: string | null;
+  video_upload_id?: string | null;
+}
+
+export interface SubmissionListParams {
+  campaign_id?: string;
+  verification?: string;
+}
+
+// --- performance (thin proxy onto Intelligence's own contract) ---
+
+export interface ContentIdentityOut {
+  platform: string;
+  platform_content_id: string;
+  url: string;
+  author_username: string | null;
+  kind: string;
+  post_type: string;
+  published_at: string | null;
+}
+
+export interface MetricsBlockOut {
+  views: number | null;
+  likes: number | null;
+  comments: number | null;
+  shares: number | null;
+  saves: number | null;
+  reach: number | null;
+  impressions: number | null;
+}
+
+export interface PerformanceFeaturesOut {
+  incremental_views: number | null;
+  billable_views: number | null;
+  view_velocity_per_hour: number | null;
+  growth_rate: number | null;
+  like_view_ratio: number | null;
+  comment_view_ratio: number | null;
+  share_view_ratio: number | null;
+  observation_count: number;
+  first_observed_at: string | null;
+}
+
+export interface ProvenanceOut {
+  platform: string;
+  source: string;
+  snapshot_id: string | null;
+  observed_at: string;
+}
+
+export interface TrackingStateOut {
+  status: "active" | "stopped" | "failed";
+  reason_code: string | null;
+  message: string | null;
+  next_poll_at: string | null;
+  last_success_at: string | null;
+}
+
+export interface PerformanceResultOut {
+  submission_id: string;
+  content: ContentIdentityOut;
+  metrics: MetricsBlockOut;
+  features: PerformanceFeaturesOut;
+  provenance: ProvenanceOut;
+  tracking: TrackingStateOut | null;
+}
+
 export const submissionsApi = {
+  create: (payload: SubmissionCreateIn) => api.post<SubmissionOut>("/submissions", payload),
+
+  list: (params?: SubmissionListParams) => {
+    const query = new URLSearchParams();
+    if (params?.campaign_id) query.set("campaign_id", params.campaign_id);
+    if (params?.verification) query.set("verification", params.verification);
+    const qs = query.toString();
+    return api.get<SubmissionOut[]>(`/submissions${qs ? `?${qs}` : ""}`);
+  },
+
+  resubmit: (submissionId: string, payload: ResubmitIn) =>
+    api.post<SubmissionOut>(`/submissions/${submissionId}/resubmit`, payload),
+
   get: (submissionId: string) => api.get<SubmissionOut>(`/submissions/${submissionId}`),
   getEarnings: (submissionId: string) => api.get<SubmissionEarningsOut>(`/submissions/${submissionId}/earnings`),
   appeal: (submissionId: string, reason: string, evidenceUploadId?: string) =>
     api.post<void>(`/submissions/${submissionId}/appeal`, { reason, evidence_upload_id: evidenceUploadId ?? null }),
   withdraw: (submissionId: string) => api.post<void>(`/submissions/${submissionId}/withdraw`, {}),
+  getPerformance: (submissionId: string, sinceSnapshotId?: string) => {
+    const qs = sinceSnapshotId ? `?since_snapshot_id=${encodeURIComponent(sinceSnapshotId)}` : "";
+    return api.get<PerformanceResultOut>(`/submissions/${submissionId}/performance${qs}`);
+  },
 };

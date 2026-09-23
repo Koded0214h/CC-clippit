@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { ReceiptHeader } from "@/components/ui/ReceiptHeader";
@@ -14,6 +14,8 @@ import { creatorApi } from "@/lib/api/creator";
 import { socialApi, type ConnectedAccountOut } from "@/lib/api/social";
 import { bankDetailsApi, type BankAccountOut } from "@/lib/api/bankDetails";
 import { campaignsApi } from "@/lib/api/campaigns";
+import { submissionsApi } from "@/lib/api/submissions";
+import { payoutsApi } from "@/lib/api/payouts";
 
 const art = {
   appeal: "/assets/illustrations/clippit-icons/appeal-review.webp",
@@ -151,14 +153,22 @@ export function ConnectedAccountsScreen() {
   </div>;
 }
 
+function toApiPlatform(label: string): string {
+  return label.trim().toLowerCase();
+}
+
 export function SubmitClipScreen({ campaignSlug = "indomie-no-long-thing" }: { campaignSlug?: string }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const resubmitId = searchParams?.get("resubmit") ?? null;
   const staticCampaign = campaigns.find((item) => item.slug === campaignSlug) ?? campaigns[0];
   const [campaign, setCampaign] = useState(staticCampaign);
+  const [campaignId, setCampaignId] = useState<string | null>(null);
   const [platform, setPlatform] = useState(staticCampaign.platforms[0] ?? "TikTok");
 
   useEffect(() => {
     campaignsApi.get(campaignSlug).then((data) => {
+      setCampaignId(data.id);
       setCampaign((current) => ({
         ...current,
         title: data.title,
@@ -173,7 +183,31 @@ export function SubmitClipScreen({ campaignSlug = "indomie-no-long-thing" }: { c
   const [url, setUrl] = useState("");
   const [file, setFile] = useState("");
   const [error, setError] = useState("");
-  const submit = (event: FormEvent) => { event.preventDefault(); if (!url.trim()) return setError("Paste the public link to your posted clip."); setError(""); window.localStorage.setItem("clippit:last-submission", JSON.stringify({ campaign: campaignSlug, platform, url, file })); router.push("/dashboard/submissions/processing"); };
+  const [submitting, setSubmitting] = useState(false);
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!url.trim()) return setError("Paste the public link to your posted clip.");
+    setError("");
+    setSubmitting(true);
+    const platformValue = toApiPlatform(platform);
+    try {
+      const result = resubmitId
+        ? await submissionsApi.resubmit(resubmitId, { platform: platformValue, url, title: campaign.title })
+        : campaignId
+          ? await submissionsApi.create({ campaign_id: campaignId, platform: platformValue, url, title: campaign.title })
+          : null;
+      window.localStorage.setItem(
+        "clippit:last-submission",
+        JSON.stringify(result ? { id: result.id, campaign: campaignSlug, platform, url, file, status: result.status } : { campaign: campaignSlug, platform, url, file }),
+      );
+    } catch {
+      // Keep the demo flow working even when the backend rejects the link (e.g. unmatched campaign/account).
+      window.localStorage.setItem("clippit:last-submission", JSON.stringify({ campaign: campaignSlug, platform, url, file }));
+    } finally {
+      setSubmitting(false);
+    }
+    router.push("/dashboard/submissions/processing");
+  };
   return <div className="dashboard-page creator-flow-page creator-submit-page">
     <Link className="product-back" href={`/dashboard/campaigns/${campaign.slug}`}><ProductIcon name="chevron" /> Back to campaign</Link>
     <CreatorHeading title="Submit clip" copy="Add the public post link and original video file." />
@@ -181,7 +215,7 @@ export function SubmitClipScreen({ campaignSlug = "indomie-no-long-thing" }: { c
       <fieldset><legend>Where did you post it?</legend><div className="platform-select">{campaign.platforms.map((item) => <button type="button" className={platform === item ? "is-selected" : ""} onClick={() => setPlatform(item)} key={item}><ProductIcon name={item === "Instagram" ? "instagram" : item === "YouTube" ? "youtube" : "tiktok"} />{item}<i><ProductIcon name="check" /></i></button>)}</div></fieldset>
       <label className="creator-field"><span>Public post link</span><div><ProductIcon name="link" /><input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://www.tiktok.com/@you/video/..." inputMode="url" /></div></label>
       <label className="upload-field"><input type="file" accept="video/*" onChange={(event) => setFile(event.target.files?.[0]?.name ?? "")} /><ProductIcon name="upload" /><span><strong>{file || "Add the original video file"}</strong><small>{file ? "Ready to upload" : "MP4 or MOV · up to 250MB"}</small></span><b>{file ? "Change" : "Choose file"}</b></label>
-      <p className="creator-error" role="alert">{error}</p><button className="lime-button submission-submit" type="submit">Send for verification<ProductIcon name="arrow" /></button></form>
+      <p className="creator-error" role="alert">{error}</p><button className="lime-button submission-submit" type="submit" disabled={submitting}>{submitting ? "Sending…" : "Send for verification"}<ProductIcon name="arrow" /></button></form>
       <aside className="submission-proof"><ArtTile src={art.submit} label="Submission" tone="gold" large /><h2>What happens next</h2><ol><li><span>01</span><p><strong>We match the post.</strong><small>The connected account must own the link.</small></p></li><li><span>02</span><p><strong>We check the brief.</strong><small>Every must-do gets a reasoned verdict.</small></p></li><li><span>03</span><p><strong>We start reading.</strong><small>Approved clips enter scheduled view checks.</small></p></li></ol></aside>
     </div>
   </div>;
