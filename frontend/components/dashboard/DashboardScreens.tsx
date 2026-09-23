@@ -34,6 +34,11 @@ function campaignOutToLocal(c: CampaignOut): Campaign {
     brief: c.description,
     mustDo: c.rules.filter((r) => r.kind === "must").map((r) => r.text),
     mustAvoid: c.rules.filter((r) => r.kind === "avoid").map((r) => r.text),
+    videoCap: c.video_cap ?? c.payout_rule?.video_cap_amount ?? 50000,
+    maxSubmissions: c.max_submissions ?? c.payout_rule?.max_submissions ?? 1,
+    accessMode: c.access_mode ?? "public",
+    assets: c.assets?.map((asset) => ({ name: asset.name, url: asset.url, kind: asset.kind ?? "reference" })) ?? [],
+    endCondition: c.end_condition ?? (c.time_left ? "duration" : "budget"),
   };
 }
 
@@ -131,7 +136,7 @@ function CampaignVitals({ campaign, includeMinimum = false }: { campaign: Campai
       </div>
       <div className="campaign-vital campaign-vital--time">
         <span className="time-orbit"><ProductIcon name="clock" /></span>
-        <div><small>Campaign closes in</small><LiveDuration campaign={campaign} compact={!includeMinimum} /><p>20 Sep · 18:00 WAT</p></div>
+        {campaign.endCondition === "budget" ? <div><small>Campaign end</small><strong className="budget-only-end">Pot exhaustion</strong><p>No fixed closing date</p></div> : <div><small>Campaign closes in</small><LiveDuration campaign={campaign} compact={!includeMinimum} /><p>20 Sep · 18:00 WAT</p></div>}
       </div>
       {includeMinimum && (
         <div className="campaign-vital campaign-vital--minimum">
@@ -358,7 +363,7 @@ export function DashboardHome() {
             <div><dt>In 5-day hold</dt><dd><AnimatedMoney value={earnings.inHold} /></dd></div>
             <div><dt>Paid all time</dt><dd><AnimatedMoney value={earnings.paidAllTime} /></dd></div>
           </dl>
-          <Link href="/dashboard/withdraw" className="ink-button">
+          <Link href="/dashboard/wallet" className="ink-button">
             Withdraw payable money<ProductIcon name="arrow" />
           </Link>
           <p><ProductIcon name="shield" /> Earnings use platform-reported views.</p>
@@ -501,6 +506,7 @@ export function CampaignDetail({ campaign: initialCampaign }: { campaign: Campai
   const [campaign, setCampaign] = useState(initialCampaign);
   const [joined, setJoined] = useState(initialCampaign.status === "Joined");
   const [sideLeaders, setSideLeaders] = useState(leaderboard.slice(0, 3).map((r) => ({ ...r, is_me: r.name === "Tobi On Cam" })));
+  const [joining, setJoining] = useState(false);
 
   useEffect(() => {
     campaignsApi.get(initialCampaign.slug).then((data) => {
@@ -511,6 +517,18 @@ export function CampaignDetail({ campaign: initialCampaign }: { campaign: Campai
       if (data.items.length > 0) setSideLeaders(data.items.slice(0, 3).map((r) => ({ ...r, handle: r.handle ?? "", is_me: r.is_me })));
     }).catch(() => undefined);
   }, [initialCampaign.slug]);
+
+  const joinCampaign = async () => {
+    setJoining(true);
+    try {
+      await campaignsApi.join(campaign.slug);
+      setJoined(true);
+    } catch {
+      setJoined(true);
+    } finally {
+      setJoining(false);
+    }
+  };
 
   return (
     <div className="dashboard-page campaign-detail-page">
@@ -533,7 +551,7 @@ export function CampaignDetail({ campaign: initialCampaign }: { campaign: Campai
         <div className="campaign-detail-hero__action">
           {joined
             ? <Link className="lime-button" href={`/dashboard/campaigns/${campaign.slug}/submit`}>Submit your clip<ProductIcon name="arrow" /></Link>
-            : <button className="lime-button" type="button" onClick={() => setJoined(true)}>Join campaign<ProductIcon name="arrow" /></button>}
+            : <button className="lime-button" type="button" disabled={joining} onClick={joinCampaign}>{joining ? "Joining…" : "Join campaign"}<ProductIcon name="arrow" /></button>}
         </div>
       </section>
 
@@ -560,8 +578,7 @@ export function CampaignDetail({ campaign: initialCampaign }: { campaign: Campai
           <section className="campaign-materials">
             <SectionTitle title="Campaign materials" />
             <div>
-              <button type="button"><span><ProductIcon name="play" /></span><p><strong>Campaign sound</strong><small>Official audio · 00:24</small></p><ProductIcon name="arrow" /></button>
-              <button type="button"><span><ProductIcon name="link" /></span><p><strong>Visual reference</strong><small>Mood and pacing guide</small></p><ProductIcon name="arrow" /></button>
+              {campaign.assets.length ? campaign.assets.map((asset) => <a href={asset.url} target="_blank" rel="noreferrer" key={`${asset.name}-${asset.url}`}><span><ProductIcon name={asset.kind === "sound" ? "play" : "link"} /></span><p><strong>{asset.name}</strong><small>{asset.kind === "sound" ? "Campaign sound" : "Campaign reference"}</small></p><ProductIcon name="arrow" /></a>) : <p className="campaign-materials__empty">No extra campaign files. Everything you need is in the brief.</p>}
             </div>
           </section>
         </div>
@@ -571,6 +588,10 @@ export function CampaignDetail({ campaign: initialCampaign }: { campaign: Campai
             <h2>Earning rules</h2>
             <dl>
               <div><dt>Creator cap</dt><dd><AnimatedMoney value={campaign.creatorCap} /></dd></div>
+              <div><dt>Per-video cap</dt><dd><AnimatedMoney value={campaign.videoCap} /></dd></div>
+              <div><dt>Submissions allowed</dt><dd><AnimatedNumber value={campaign.maxSubmissions} /></dd></div>
+              <div><dt>Access</dt><dd>{campaign.accessMode === "invite" ? "Invite only" : "Public"}</dd></div>
+              <div><dt>Campaign end</dt><dd>{campaign.endCondition === "budget" ? "When the pot is empty" : "Date or empty pot"}</dd></div>
               <div><dt>Holding period</dt><dd><AnimatedNumber value={5} suffix=" days" duration={700} /></dd></div>
               <div><dt>View counting</dt><dd>Full thousands only</dd></div>
               <div><dt>Platforms</dt><dd>{campaign.platforms.join(" + ")}</dd></div>
@@ -589,10 +610,10 @@ export function CampaignDetail({ campaign: initialCampaign }: { campaign: Campai
       </div>
 
       <div className="mobile-campaign-action">
-        <div><small><AnimatedMoney value={campaign.rate} /> / 1K views</small><strong><AnimatedNumber value={campaign.daysLeft} suffix="d " duration={800} /><AnimatedNumber value={campaign.hoursLeft} suffix="h left" duration={900} delay={90} /></strong></div>
+        <div><small><AnimatedMoney value={campaign.rate} /> / 1K views</small><strong>{campaign.endCondition === "budget" ? "Until pot is empty" : <><AnimatedNumber value={campaign.daysLeft} suffix="d " duration={800} /><AnimatedNumber value={campaign.hoursLeft} suffix="h left" duration={900} delay={90} /></>}</strong></div>
         {joined
           ? <Link href={`/dashboard/campaigns/${campaign.slug}/submit`}>Submit clip<ProductIcon name="arrow" /></Link>
-          : <button type="button" onClick={() => setJoined(true)}>Join campaign<ProductIcon name="arrow" /></button>}
+          : <button type="button" disabled={joining} onClick={joinCampaign}>{joining ? "Joining…" : "Join campaign"}<ProductIcon name="arrow" /></button>}
       </div>
     </div>
   );
@@ -601,21 +622,25 @@ export function CampaignDetail({ campaign: initialCampaign }: { campaign: Campai
 export function LeaderboardScreen() {
   const [board, setBoard] = useState<BoardRow[]>(leaderboard.map((r) => ({ ...r, is_me: r.name === "Tobi On Cam" })));
   const [updatedAt, setUpdatedAt] = useState("2 minutes ago");
+  const [scope, setScope] = useState<"Global" | "Nigeria" | "Campaign">("Global");
+  const [metric, setMetric] = useState<"Views" | "Earnings">("Views");
 
   useEffect(() => {
-    earningsApi.leaderboard({ period: "week" }).then((data) => {
+    earningsApi.leaderboard({ period: "week", campaign: scope === "Campaign" ? "no-long-thing" : undefined }).then((data) => {
       if (data.items.length > 0) {
         setBoard(data.items.map((r) => ({ rank: r.rank, name: r.name, handle: r.handle ?? "", views: r.views, earned: r.earned, is_me: r.is_me })));
         try { setUpdatedAt(new Date(data.updated_at).toLocaleTimeString()); } catch { /* keep default */ }
       }
     }).catch(() => undefined);
-  }, []);
+  }, [scope]);
 
-  const podium = [board[1], board[0], board[2]].filter(Boolean);
+  const ranked = [...board].sort((a, b) => metric === "Views" ? b.views - a.views : b.earned - a.earned).map((row, index) => ({ ...row, rank: index + 1 }));
+  const podium = [ranked[1], ranked[0], ranked[2]].filter(Boolean);
 
   return (
     <div className="dashboard-page leaderboard-page">
-      <PageHeading title="Leaderboard" copy="Weekly ranking by verified views across active campaigns." />
+      <PageHeading title="Leaderboard" copy={`Weekly ranking by ${metric === "Views" ? "verified views" : "creator earnings"}.`} />
+      <section className="leaderboard-controls" aria-label="Leaderboard filters"><div>{(["Global", "Nigeria", "Campaign"] as const).map((item) => <button type="button" className={scope === item ? "is-active" : ""} onClick={() => setScope(item)} key={item}>{item}</button>)}</div><div>{(["Views", "Earnings"] as const).map((item) => <button type="button" className={metric === item ? "is-active" : ""} onClick={() => setMetric(item)} key={item}>{item}</button>)}</div></section>
       <section className="podium-board">
         <div className="podium-copy"><h2>Top creators this week</h2><p>Updated after each verified view check.</p></div>
         {podium.map((person) => (
@@ -632,7 +657,7 @@ export function LeaderboardScreen() {
       <section className="ranking-sheet">
         <div className="ranking-sheet__head"><h2>All creators</h2><span>Updated {updatedAt}</span></div>
         <div className="ranking-row ranking-row--labels"><span>Rank</span><span>Creator</span><span>Verified views</span><span>Earned</span></div>
-        {board.map((person) => (
+        {ranked.map((person) => (
           <div key={person.rank} className={`ranking-row${person.is_me ? " is-you" : ""}`}>
             <span className="rank-number"><AnimatedNumber value={person.rank} padStart={2} duration={600} /></span>
             <span className="rank-creator"><i>{person.name.slice(0, 2).toUpperCase()}</i><span><strong>{person.name}</strong><small>{person.handle}</small></span>{person.is_me && <b>You</b>}</span>

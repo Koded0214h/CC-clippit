@@ -18,11 +18,13 @@ export type ProductIconName =
   | "food"
   | "game"
   | "eye"
+  | "facebook"
   | "home"
   | "instagram"
   | "link"
   | "more"
   | "music"
+  | "pause"
   | "play"
   | "person"
   | "phone"
@@ -38,6 +40,7 @@ export type ProductIconName =
   | "users"
   | "wallet"
   | "travel"
+  | "x"
   | "youtube";
 
 export function ProductIcon({
@@ -110,6 +113,7 @@ export function ProductIcon({
         <circle cx="12" cy="12" r="2.7" />
       </>
     ),
+    facebook: <path d="M14 8h4V3h-4c-4 0-6 2.4-6 6v3H5v5h3v4h5v-4h4l1-5h-5V9c0-.7.3-1 1-1Z" />,
     game: (
       <>
         <path d="M8 8h8c3 0 5 2.3 5 5.2 0 3.8-2 6-4 6-1.8 0-2.5-2.2-5-2.2s-3.2 2.2-5 2.2c-2 0-4-2.2-4-6C3 10.3 5 8 8 8Z" />
@@ -150,6 +154,7 @@ export function ProductIcon({
         <path d="M9 9l10-2" />
       </>
     ),
+    pause: <path d="M7 5h3v14H7V5Zm7 0h3v14h-3V5Z" />,
     play: <path d="m9 7 8 5-8 5V7Z" />,
     person: (
       <>
@@ -214,6 +219,7 @@ export function ProductIcon({
         <path d="M3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3Z" />
       </>
     ),
+    x: <path d="M4 3h5.2l3.7 5.2L17.4 3H20l-5.9 7.1L20.5 21h-5.2l-4.1-5.8L6.3 21H3.7l6.2-7.7L4 3Zm3 2 9.4 14h1.2L8.2 5H7Z" />,
     youtube: (
       <>
         <path d="M21 12c0 3.2-.4 5-1.2 5.8S17.2 19 12 19s-7-.4-7.8-1.2S3 15.2 3 12s.4-5 1.2-5.8S6.8 5 12 5s7 .4 7.8 1.2S21 8.8 21 12Z" />

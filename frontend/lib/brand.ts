@@ -1,4 +1,4 @@
-export type BrandCampaignState = "Live" | "Draft" | "Completed" | "Funding";
+export type BrandCampaignState = "Live" | "Paused" | "Draft" | "Completed" | "Cancelled" | "Funding";
 
 export type BrandCampaign = {
   slug: string;
@@ -14,6 +14,7 @@ export type BrandCampaign = {
   approved: number;
   review: number;
   daysLeft: number;
+  endCondition: "duration" | "budget";
 };
 
 export const brandCampaigns: BrandCampaign[] = [
@@ -31,6 +32,7 @@ export const brandCampaigns: BrandCampaign[] = [
     approved: 61,
     review: 7,
     daysLeft: 4,
+    endCondition: "duration",
   },
   {
     slug: "late-night-bowl",
@@ -46,6 +48,7 @@ export const brandCampaigns: BrandCampaign[] = [
     approved: 0,
     review: 0,
     daysLeft: 14,
+    endCondition: "duration",
   },
   {
     slug: "campus-chop",
@@ -61,6 +64,7 @@ export const brandCampaigns: BrandCampaign[] = [
     approved: 93,
     review: 0,
     daysLeft: 0,
+    endCondition: "budget",
   },
 ];
 
@@ -69,7 +73,7 @@ export type BrandReview = {
   creator: string;
   handle: string;
   title: string;
-  platform: "TikTok" | "Instagram" | "YouTube";
+  platform: "TikTok" | "Instagram" | "Facebook" | "X" | "YouTube";
   image: string;
   confidence: number;
   issue: string;

@@ -10,9 +10,15 @@ export type BrandCampaignDraft = {
   sourceLink: string;
   coverImage: string;
   platforms: string[];
+  assets: string[];
+  niche: string;
+  accessMode: "public" | "invite";
+  inviteCode: string;
   rules: BriefRule[];
   minimumViews: number;
+  videoCap: number;
   creatorCap: number;
+  maxSubmissions: number;
   endCondition: "duration" | "budget";
   days: number;
   pot: number;
@@ -25,6 +31,10 @@ const initialDraft: BrandCampaignDraft = {
   sourceLink: "https://indomie.ng/brand-kit",
   coverImage: "",
   platforms: ["TikTok", "Instagram"],
+  assets: ["Official campaign sound", "Product pack reference"],
+  niche: "Comedy",
+  accessMode: "public",
+  inviteCode: "",
   rules: [
     { id: "rule-1", text: "Show the prepared noodles clearly on screen.", kind: "must" },
     { id: "rule-2", text: "Say or display: No long thing.", kind: "must" },
@@ -32,7 +42,9 @@ const initialDraft: BrandCampaignDraft = {
     { id: "rule-4", text: "Do not make health or nutrition claims.", kind: "avoid" },
   ],
   minimumViews: 1000,
+  videoCap: 50000,
   creatorCap: 75000,
+  maxSubmissions: 3,
   endCondition: "duration",
   days: 14,
   pot: 500000,

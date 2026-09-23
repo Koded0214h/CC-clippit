@@ -18,7 +18,7 @@ const navItems: Array<{ href: string; label: string; icon: ProductIconName }> = 
   { href: "/dashboard", label: "Overview", icon: "home" },
   { href: "/dashboard/campaigns", label: "Campaigns", icon: "campaigns" },
   { href: "/dashboard/clips", label: "My clips", icon: "play" },
-  { href: "/dashboard/earnings", label: "Earnings", icon: "wallet" },
+  { href: "/dashboard/wallet", label: "Wallet", icon: "wallet" },
   { href: "/dashboard/leaderboard", label: "Leaderboard", icon: "trophy" },
   { href: "/dashboard/settings", label: "Settings", icon: "settings" },
 ];
@@ -38,6 +38,7 @@ const creatorMoreItems: Array<{ href: string; label: string; copy: string; icon:
 
 function isCurrent(pathname: string, href: string) {
   if (href === "/dashboard") return pathname === href;
+  if (href === "/dashboard/wallet" && ["/dashboard/wallet", "/dashboard/earnings", "/dashboard/withdraw", "/dashboard/payouts/receipt"].some((route) => pathname.startsWith(route))) return true;
   if (href === "/dashboard/settings" && ["/dashboard/accounts", "/dashboard/payout-account", "/dashboard/security", "/dashboard/profile", "/dashboard/verification"].some((route) => pathname.startsWith(route))) return true;
   return pathname.startsWith(href);
 }
@@ -116,7 +117,7 @@ export function ProductShell({ children }: { children: ReactNode }) {
             Views last checked 2 min ago
           </div>
           <div className="topbar-actions">
-            <Link className="wallet-pill" href="/dashboard/earnings">
+            <Link className="wallet-pill" href="/dashboard/wallet">
               <ProductIcon name="wallet" />
               <span>Payable</span>
               <strong><AnimatedNumber value={payable} format="money" duration={1000} /></strong>

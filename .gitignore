@@ -13,6 +13,8 @@ coverage/
 /tmp/
 /frontend/tmp/
 /output/
+/.tmp-chrome-*/
+/.tmp-*.png
 
 # Environment files and local secrets
 .env

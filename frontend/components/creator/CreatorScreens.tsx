@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { ReceiptHeader } from "@/components/ui/ReceiptHeader";
-import { CREATOR_WITHDRAWAL_FEE_RATE, calculateFee, feePercentage } from "@/lib/fees";
+import { CREATOR_WITHDRAWAL_FEE_RATE, MINIMUM_WALLET_WITHDRAWAL, calculateFee, feePercentage } from "@/lib/fees";
 import { campaigns, money } from "@/lib/product";
 import { earningsApi, type EarningRow } from "@/lib/api/earnings";
 import { creatorApi } from "@/lib/api/creator";
@@ -102,11 +102,15 @@ type Social = { name: string; icon: ProductIconName; handle: string; connected: 
 const MOCK_SOCIAL_ACCOUNTS: Social[] = [
   { name: "TikTok", icon: "tiktok", handle: "@tobioncam", connected: true, note: "Views checked 2 min ago" },
   { name: "Instagram", icon: "instagram", handle: "@tobioncam", connected: true, note: "Views checked 4 min ago" },
+  { name: "Facebook", icon: "facebook", handle: "Tobi On Cam", connected: false, note: "Connect before a Facebook submission" },
+  { name: "X", icon: "x", handle: "@tobioncam", connected: false, note: "Connect before an X submission" },
   { name: "YouTube", icon: "youtube", handle: "", connected: false, note: "Required for YouTube briefs" },
 ];
 
 function socialIcon(platform: string): ProductIconName {
   if (platform.toLowerCase() === "instagram") return "instagram";
+  if (platform.toLowerCase() === "facebook") return "facebook";
+  if (platform.toLowerCase() === "x") return "x";
   if (platform.toLowerCase() === "youtube") return "youtube";
   return "tiktok";
 }
@@ -145,8 +149,8 @@ export function ConnectedAccountsScreen() {
     setAccounts((current) => current.map((a) => a.name === name ? { ...a, connected: !a.connected, handle: a.handle || "@tobioncam", note: a.connected ? "Required for this platform" : "Connection ready for demo" } : a));
   };
   return <div className="dashboard-page creator-flow-page">
-    <CreatorHeading title="Connected accounts" copy="Connect the accounts Clippit should use to verify views." action={<PrimaryLink href="/dashboard/campaigns/indomie-no-long-thing/submit">Continue to submission</PrimaryLink>} />
-    <div className="creator-split creator-split--connect"><section className="connect-stage"><ArtTile src={art.connect} label="Connected accounts" tone="lime" large /><div className="connect-score"><span><AnimatedNumber value={connected} suffix="/3" duration={650} /></span><p><strong>connected accounts</strong><small>Connect YouTube to submit to YouTube campaigns.</small></p></div><div className="connect-meter"><i style={{ width: `${(connected / 3) * 100}%` }} /></div></section>
+    <CreatorHeading title="Connected accounts" copy="Connect a platform when you are ready to submit there. It is not required to browse campaigns." action={<PrimaryLink href="/dashboard/campaigns/indomie-no-long-thing/submit">Continue to submission</PrimaryLink>} />
+    <div className="creator-split creator-split--connect"><section className="connect-stage"><ArtTile src={art.connect} label="Connected accounts" tone="lime" large /><div className="connect-score"><span><AnimatedNumber value={connected} suffix="/5" duration={650} /></span><p><strong>connected accounts</strong><small>Instagram, TikTok, Facebook, X and YouTube are supported.</small></p></div><div className="connect-meter"><i style={{ width: `${(connected / 5) * 100}%` }} /></div></section>
       <section className="creator-sheet account-stack"><div className="creator-sheet__head"><div><h2>Your platforms</h2><p>You can disconnect at any time.</p></div></div>{accounts.map((account) => <article className={`account-card${account.connected ? " is-connected" : ""}`} key={account.name}><span><ProductIcon name={account.icon} /></span><div><strong>{account.name}</strong><small>{account.connected ? account.handle : account.note}</small><em>{account.connected ? account.note : "Not connected"}</em></div>{account.connected && <StatusPill tone="lime">Connected</StatusPill>}<button type="button" onClick={() => toggle(account.name)}>{account.connected ? "Disconnect" : "Connect"}</button></article>)}</section>
     </div>
     <section className="permission-strip"><div><ProductIcon name="eye" /><span><strong>Clippit reads</strong><small>Post identity, public views, likes and comments.</small></span></div><div><ProductIcon name="shield" /><span><strong>Clippit never asks for</strong><small>Your password, DMs, drafts or private audience data.</small></span></div></section>
@@ -181,7 +185,6 @@ export function SubmitClipScreen({ campaignSlug = "indomie-no-long-thing" }: { c
     }).catch(() => undefined);
   }, [campaignSlug]);
   const [url, setUrl] = useState("");
-  const [file, setFile] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const submit = async (event: FormEvent) => {
@@ -198,11 +201,11 @@ export function SubmitClipScreen({ campaignSlug = "indomie-no-long-thing" }: { c
           : null;
       window.localStorage.setItem(
         "clippit:last-submission",
-        JSON.stringify(result ? { id: result.id, campaign: campaignSlug, platform, url, file, status: result.status } : { campaign: campaignSlug, platform, url, file }),
+        JSON.stringify(result ? { id: result.id, campaign: campaignSlug, platform, url, status: result.status } : { campaign: campaignSlug, platform, url }),
       );
     } catch {
       // Keep the demo flow working even when the backend rejects the link (e.g. unmatched campaign/account).
-      window.localStorage.setItem("clippit:last-submission", JSON.stringify({ campaign: campaignSlug, platform, url, file }));
+      window.localStorage.setItem("clippit:last-submission", JSON.stringify({ campaign: campaignSlug, platform, url }));
     } finally {
       setSubmitting(false);
     }
@@ -210,11 +213,11 @@ export function SubmitClipScreen({ campaignSlug = "indomie-no-long-thing" }: { c
   };
   return <div className="dashboard-page creator-flow-page creator-submit-page">
     <Link className="product-back" href={`/dashboard/campaigns/${campaign.slug}`}><ProductIcon name="chevron" /> Back to campaign</Link>
-    <CreatorHeading title="Submit clip" copy="Add the public post link and original video file." />
+    <CreatorHeading title="Submit clip" copy="Paste the link to your live social post. We will check it against the campaign requirements." />
     <div className="creator-split"><form className="submission-form creator-sheet" onSubmit={submit}><div className="locked-campaign"><span><Image src={campaign.image} alt="" fill sizes="80px" /></span><div><small>Submitting to</small><strong>{campaign.title}</strong><p>{campaign.brand} · <AnimatedMoney value={campaign.rate} /> per 1K verified views</p></div><ProductIcon name="shield" /></div>
-      <fieldset><legend>Where did you post it?</legend><div className="platform-select">{campaign.platforms.map((item) => <button type="button" className={platform === item ? "is-selected" : ""} onClick={() => setPlatform(item)} key={item}><ProductIcon name={item === "Instagram" ? "instagram" : item === "YouTube" ? "youtube" : "tiktok"} />{item}<i><ProductIcon name="check" /></i></button>)}</div></fieldset>
+      <fieldset><legend>Where did you post it?</legend><div className="platform-select">{campaign.platforms.map((item) => <button type="button" className={platform === item ? "is-selected" : ""} onClick={() => setPlatform(item)} key={item}><ProductIcon name={socialIcon(item)} />{item}<i><ProductIcon name="check" /></i></button>)}</div></fieldset>
       <label className="creator-field"><span>Public post link</span><div><ProductIcon name="link" /><input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://www.tiktok.com/@you/video/..." inputMode="url" /></div></label>
-      <label className="upload-field"><input type="file" accept="video/*" onChange={(event) => setFile(event.target.files?.[0]?.name ?? "")} /><ProductIcon name="upload" /><span><strong>{file || "Add the original video file"}</strong><small>{file ? "Ready to upload" : "MP4 or MOV · up to 250MB"}</small></span><b>{file ? "Change" : "Choose file"}</b></label>
+      <div className="url-retrieval-note"><ProductIcon name="play" /><span><strong>No video upload needed</strong><small>Keep the post public while Clippit checks it against the campaign requirements.</small></span></div>
       <p className="creator-error" role="alert">{error}</p><button className="lime-button submission-submit" type="submit" disabled={submitting}>{submitting ? "Sending…" : "Send for verification"}<ProductIcon name="arrow" /></button></form>
       <aside className="submission-proof"><ArtTile src={art.submit} label="Submission" tone="gold" large /><h2>What happens next</h2><ol><li><span>01</span><p><strong>We match the post.</strong><small>The connected account must own the link.</small></p></li><li><span>02</span><p><strong>We check the brief.</strong><small>Every must-do gets a reasoned verdict.</small></p></li><li><span>03</span><p><strong>We start reading.</strong><small>Approved clips enter scheduled view checks.</small></p></li></ol></aside>
     </div>
@@ -222,17 +225,17 @@ export function SubmitClipScreen({ campaignSlug = "indomie-no-long-thing" }: { c
 }
 
 const verificationSteps = [
-  { icon: "link" as ProductIconName, title: "Post ownership", copy: "Matched to @tobioncam", done: true },
-  { icon: "brief" as ProductIconName, title: "Brief requirements", copy: "Checking six requirements", done: true },
-  { icon: "shield" as ProductIconName, title: "Trust signals", copy: "Looking for unusual activity", done: true },
-  { icon: "eye" as ProductIconName, title: "First view reading", copy: "Queued after approval", done: false },
+  { icon: "link" as ProductIconName, title: "Validating URL", copy: "Confirming platform, campaign and connected account", done: true },
+  { icon: "play" as ProductIconName, title: "Opening your post", copy: "Preparing the public post for review", done: true },
+  { icon: "brief" as ProductIconName, title: "Checking campaign rules", copy: "Reviewing the video, audio and caption against every requirement", done: true },
+  { icon: "eye" as ProductIconName, title: "Preparing the result", copy: "Saving a clear result and evidence for every requirement", done: false },
 ];
 
 export function VerificationProgressScreen() {
   const [active, setActive] = useState(0);
   useEffect(() => { const timer = window.setInterval(() => setActive((value) => (value + 1) % 3), 1600); return () => window.clearInterval(timer); }, []);
-  return <div className="dashboard-page creator-flow-page verdict-page verdict-page--processing"><CreatorHeading title="Checking your clip" copy="You can leave this page. The result will appear in My clips." />
-    <section className="processing-stage"><div className="processing-orbit"><ArtTile src={art.proof} label="Verification in progress" tone="lime" large /></div><div className="processing-copy"><StatusPill tone="gold">Usually under 5 minutes</StatusPill><h2>Checks in progress</h2><p>We are confirming the post owner, brief requirements and starting view count.</p><div className="verification-list">{verificationSteps.map((step, index) => <div className={`${index === active ? "is-active" : ""}${step.done ? " is-done" : ""}`} key={step.title}><span><ProductIcon name={step.icon} /></span><p><strong>{step.title}</strong><small>{step.copy}</small></p><i>{step.done ? <ProductIcon name="check" /> : String(index + 1).padStart(2, "0")}</i></div>)}</div><div className="processing-actions"><PrimaryLink href="/dashboard/submissions/approved">Open sample verdict</PrimaryLink><Link href="/dashboard/clips">Return to My clips</Link></div></div></section>
+  return <div className="dashboard-page creator-flow-page verdict-page verdict-page--processing"><CreatorHeading title="Checking your clip" copy="You can leave this page. The result, evidence and any retry action will appear in My clips." />
+    <section className="processing-stage"><div className="processing-orbit"><ArtTile src={art.proof} label="Verification in progress" tone="lime" large /></div><div className="processing-copy"><StatusPill tone="gold">Verification in progress</StatusPill><h2>Checking every requirement</h2><p>If we cannot complete the check, you will get a retry option. An incomplete check never counts as a rejection.</p><div className="verification-list">{verificationSteps.map((step, index) => <div className={`${index === active ? "is-active" : ""}${step.done ? " is-done" : ""}`} key={step.title}><span><ProductIcon name={step.icon} /></span><p><strong>{step.title}</strong><small>{step.copy}</small></p><i>{step.done ? <ProductIcon name="check" /> : String(index + 1).padStart(2, "0")}</i></div>)}</div><div className="processing-actions"><PrimaryLink href="/dashboard/submissions/approved">Open sample verdict</PrimaryLink><Link href="/dashboard/clips">Return to My clips</Link></div></div></section>
   </div>;
 }
 
@@ -244,15 +247,15 @@ const requirementChecks = [
 ];
 
 export function ApprovedVerdictScreen() {
-  return <div className="dashboard-page creator-flow-page verdict-page"><CreatorHeading title="Clip approved" copy="This clip can now earn from verified views." action={<StatusPill tone="lime">Earning active</StatusPill>} />
-    <section className="verdict-hero verdict-hero--approved"><div className="verdict-seal"><ArtTile src={art.proof} label="Verified" tone="lime" large /><span><ProductIcon name="check" /></span></div><div className="verdict-summary"><small>Compliance verdict</small><strong><AnimatedNumber value={4} suffix="/4" duration={700} /></strong><h2>4 of 4 requirements passed</h2><p>Approved 20 Sep 2026 at 14:32 WAT. The first billable thousand begins after 1,000 verified views.</p><div className="verdict-money"><div><small>Current verified views</small><strong><AnimatedNumber value={12400} format="compact" /></strong></div><div><small>Accrued so far</small><strong><AnimatedMoney value={6000} delay={100} /></strong></div><div><small>Becomes payable</small><strong>25 Sep</strong></div></div><PrimaryLink href="/dashboard/earnings">View earnings</PrimaryLink></div></section>
+  return <div className="dashboard-page creator-flow-page verdict-page"><CreatorHeading title="Clip approved" copy="Official views are now tracked. Earnings remain held during the five-day Brand review window." action={<StatusPill tone="lime">Five-day hold</StatusPill>} />
+    <section className="verdict-hero verdict-hero--approved"><div className="verdict-seal"><ArtTile src={art.proof} label="Verified" tone="lime" large /><span><ProductIcon name="check" /></span></div><div className="verdict-summary"><small>Campaign check</small><strong><AnimatedNumber value={4} suffix="/4" duration={700} /></strong><h2>4 of 4 requirements passed</h2><p>Approved 20 Sep 2026 at 14:32 WAT. The Brand can review this decision until 25 Sep; official views and provisional earnings are tracked now.</p><div className="verdict-money"><div><small>Current verified views</small><strong><AnimatedNumber value={12400} format="compact" /></strong></div><div><small>Held earnings</small><strong><AnimatedMoney value={6000} delay={100} /></strong></div><div><small>Review ends</small><strong>25 Sep</strong></div></div><PrimaryLink href="/dashboard/earnings">View wallet</PrimaryLink></div></section>
     <section className="creator-sheet requirement-sheet"><div className="creator-sheet__head"><div><h2>Requirements passed</h2><p>Each requirement checked for this submission.</p></div></div><ol>{requirementChecks.map((item, index) => <li key={item}><span><ProductIcon name="check" /></span><p><strong>Requirement {String(index + 1).padStart(2, "0")}</strong>{item}</p></li>)}</ol></section>
   </div>;
 }
 
 export function RejectedVerdictScreen() {
-  return <div className="dashboard-page creator-flow-page verdict-page"><CreatorHeading title="Correction needed" copy="Requirement 03 failed. This clip is not earning." action={<StatusPill tone="danger">Not earning</StatusPill>} />
-    <section className="verdict-hero verdict-hero--rejected"><div className="verdict-seal"><ArtTile src={art.appeal} label="Correction needed" tone="danger" large /><span>!</span></div><div className="verdict-summary"><small>Compliance verdict</small><strong><AnimatedNumber value={3} suffix="/4" duration={700} /></strong><h2>The campaign tag is missing.</h2><p>We could not find <b>@palmpayappng</b> in the post caption. This matters because the brief requires the brand mention on the published post—not only inside the video.</p><div className="failed-proof"><span><ProductIcon name="brief" /></span><p><small>Requirement 03 failed</small><strong>Tag @palmpayappng and use #SendAmSharp.</strong><em>Checked against the public caption at 14:29 WAT.</em></p></div><div className="verdict-actions"><PrimaryLink href="/dashboard/submissions/appeal">Appeal this verdict</PrimaryLink><PrimaryLink href="/dashboard/campaigns/palmpay-send-am-sharp/submit" dark>Submit a corrected post</PrimaryLink></div></div></section>
+  return <div className="dashboard-page creator-flow-page verdict-page"><CreatorHeading title="Clip not approved" copy="Requirement 03 failed. Review the evidence or appeal the decision." action={<StatusPill tone="danger">Not earning</StatusPill>} />
+    <section className="verdict-hero verdict-hero--rejected"><div className="verdict-seal"><ArtTile src={art.appeal} label="Correction needed" tone="danger" large /><span>!</span></div><div className="verdict-summary"><small>Campaign check</small><strong><AnimatedNumber value={3} suffix="/4" duration={700} /></strong><h2>The campaign tag is missing.</h2><p>We could not find <b>@palmpayappng</b> in the public caption. Open the evidence below or ask for a human review if the result is wrong.</p><div className="failed-proof"><span><ProductIcon name="brief" /></span><p><small>Requirement 03 failed</small><strong>Tag @palmpayappng and use #SendAmSharp.</strong><em>Caption checked at 14:29 WAT</em></p></div><div className="verdict-actions"><PrimaryLink href="/dashboard/submissions/appeal">Appeal this verdict</PrimaryLink><PrimaryLink href="/dashboard/campaigns/palmpay-send-am-sharp/submit" dark>Submit a corrected post</PrimaryLink></div></div></section>
     <section className="creator-sheet mini-checks"><h2>What did pass</h2>{requirementChecks.slice(0, 3).map((item) => <p key={item}><ProductIcon name="check" />{item}</p>)}</section>
   </div>;
 }
@@ -295,7 +298,7 @@ function mapEarningRow(r: EarningRow) {
 }
 
 export function EarningsScreen() {
-  const [summary, setSummary] = useState({ payable: 18400, inHold: 6000, paidAllTime: 184450, completedPayouts: 8, lifetimeViews: 492800 });
+  const [summary, setSummary] = useState({ payable: 18400, inHold: 6000, processing: 0, paidAllTime: 184450, completedPayouts: 8, lifetimeViews: 492800 });
   const [rows, setRows] = useState(MOCK_EARNING_ROWS);
 
   useEffect(() => {
@@ -303,6 +306,7 @@ export function EarningsScreen() {
       setSummary({
         payable: data.payable,
         inHold: data.in_hold,
+        processing: data.processing,
         paidAllTime: data.paid_all_time,
         completedPayouts: data.completed_payouts,
         lifetimeViews: data.lifetime_views,
@@ -314,8 +318,8 @@ export function EarningsScreen() {
   }, []);
 
   return <div className="dashboard-page creator-flow-page earnings-page"><CreatorHeading title="Earnings" copy="See what is accrued, payable and already paid." action={<PrimaryLink href="/dashboard/withdraw">Withdraw money</PrimaryLink>} />
-    <section className="earnings-stage"><div className="earnings-total"><StatusPill tone="lime">Ready now</StatusPill><small>Payable balance</small><strong><AnimatedMoney value={summary.payable} /></strong><p>From <AnimatedNumber value={summary.lifetimeViews} /> verified, billable views.</p><div className="money-wave" aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /></div></div><ArtTile src={art.wallet} label="Payable balance" tone="gold" large /><div className="earnings-buckets"><article><span>Still in hold</span><strong><AnimatedMoney value={summary.inHold} /></strong><small>Clears soon</small></article><article><span>Paid all time</span><strong><AnimatedMoney value={summary.paidAllTime} delay={100} /></strong><small><AnimatedNumber value={summary.completedPayouts} /> completed payouts</small></article><article><span>Lifetime views</span><strong><AnimatedNumber value={summary.lifetimeViews} format="compact" delay={200} /></strong><small>Platform verified</small></article></div></section>
-    <section className="hold-strip"><div className="hold-strip__intro"><ProductIcon name="clock" /><span><strong>The five-day hold</strong><small>Views keep earning immediately. Withdrawal unlocks after the fraud-check window.</small></span></div><div className="hold-track"><span className="is-past">20<small>Earned</small></span><i className="is-past" /><span className="is-past">22<small>Checking</small></span><i /><span>25<small>Payable</small></span></div></section>
+    <section className="earnings-stage"><div className="earnings-total"><StatusPill tone="lime">Ready now</StatusPill><small>Available to withdraw</small><strong><AnimatedMoney value={summary.payable} /></strong><p>From <AnimatedNumber value={summary.lifetimeViews} /> verified, billable views.</p><div className="money-wave" aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /></div></div><ArtTile src={art.wallet} label="Available balance" tone="gold" large /><div className="earnings-buckets"><article><span>Held</span><strong><AnimatedMoney value={summary.inHold} /></strong><small>In the five-day review window</small></article><article><span>Processing</span><strong><AnimatedMoney value={summary.processing} delay={80} /></strong><small>Withdrawal on the way</small></article><article><span>Paid</span><strong><AnimatedMoney value={summary.paidAllTime} delay={140} /></strong><small><AnimatedNumber value={summary.completedPayouts} /> completed payouts</small></article><article><span>Lifetime views</span><strong><AnimatedNumber value={summary.lifetimeViews} format="compact" delay={200} /></strong><small>Official verified views</small></article></div></section>
+    <section className="hold-strip"><div className="hold-strip__intro"><ProductIcon name="clock" /><span><strong>The five-day review window</strong><small>Your approved clip starts tracking views immediately. Held earnings become available when the review window ends.</small></span></div><div className="hold-track"><span className="is-past">20<small>Earned</small></span><i className="is-past" /><span className="is-past">22<small>Held</small></span><i /><span>25<small>Available</small></span></div></section>
     <section className="creator-sheet earnings-ledger"><div className="creator-sheet__head"><div><h2>Earning history</h2><p>Each amount includes the clip and verified view count.</p></div></div><div className="earnings-ledger__labels"><span>Date</span><span>Clip</span><span>Billable views</span><span>Amount</span><span>Status</span></div>{rows.map((row, i) => <article key={row.clip + i}><span>{row.date}</span><p><strong>{row.clip}</strong><small>{row.campaign}</small></p><strong><AnimatedNumber value={row.views} format="compact" /></strong><strong><AnimatedMoney value={row.amount} /></strong><StatusPill tone={row.tone}>{row.state}</StatusPill></article>)}</section>
   </div>;
 }
@@ -337,14 +341,14 @@ export function WithdrawScreen() {
   const number = Math.min(balance, Math.max(0, Number(amount) || 0));
   const fee = calculateFee(number, CREATOR_WITHDRAWAL_FEE_RATE);
   const amountToReceive = number - fee;
-  const valid = number >= 1000;
   const bankLabel = bankDetail
     ? `${bankDetail.bank_name} · ${bankDetail.account_number_masked.slice(-4)}`
     : "GTBank · 6789";
   const bankHolder = bankDetail?.account_name ?? "Tobi Adeyemi";
   const bankVerified = bankDetail ? (bankDetail.verified ? "Verified" : "Unverified") : "Verified";
+  const valid = number >= MINIMUM_WALLET_WITHDRAWAL && bankVerified !== "Unverified";
 
-  return <div className="dashboard-page creator-flow-page withdraw-page"><Link className="product-back" href="/dashboard/earnings"><ProductIcon name="chevron" /> Back to earnings</Link><CreatorHeading title="Withdraw money" copy="Choose an amount and confirm the bank account." />
+  return <div className="dashboard-page creator-flow-page withdraw-page"><Link className="product-back" href="/dashboard/wallet"><ProductIcon name="chevron" /> Back to wallet</Link><CreatorHeading title="Withdraw from your wallet" copy="Complete identity verification and add one verified bank account. The minimum withdrawal is ₦5,000." />
     <div className="creator-split"><form className="creator-sheet withdraw-form" onSubmit={(event) => { event.preventDefault(); if (valid) { window.localStorage.setItem("clippit:last-withdrawal", JSON.stringify({ requested: number, fee, received: amountToReceive })); router.push("/dashboard/payouts/receipt"); } }}><div className="withdraw-balance"><small>Available to withdraw</small><strong><AnimatedMoney value={balance} /></strong><StatusPill tone="lime">Cleared</StatusPill></div><label className="amount-field"><span>Amount</span><div><b>₦</b><input value={amount} onChange={(event) => setAmount(event.target.value.replace(/\D/g, "").slice(0, 8))} inputMode="numeric" aria-label="Withdrawal amount" /></div></label><div className="amount-chips">{[5000, 10000, balance].map((value) => <button type="button" className={number === value ? "is-selected" : ""} onClick={() => setAmount(String(value))} key={value}>{value === balance ? "All" : money(value)}</button>)}</div><div className="withdraw-bank"><span><ProductIcon name="bank" /></span><p><small>Destination</small><strong>{bankLabel}</strong><em>{bankHolder} · {bankVerified}</em></p><Link href="/dashboard/payout-account">Change</Link></div><dl className="withdraw-summary"><div><dt>Withdrawal amount</dt><dd><AnimatedMoney value={number} /></dd></div><div><dt>Clippit fee ({feePercentage(CREATOR_WITHDRAWAL_FEE_RATE)}%)</dt><dd>−<AnimatedMoney value={fee} /></dd></div><div><dt>You receive</dt><dd><AnimatedMoney value={amountToReceive} delay={80} /></dd></div></dl><button className="lime-button" type="submit" disabled={!valid}>Withdraw <AnimatedMoney value={number} /><ProductIcon name="arrow" /></button></form>
       <aside className="withdraw-aside"><ArtTile src={art.withdraw} label="Money to bank" tone="gold" large /><h2>Transfer time</h2><p>Most transfers arrive within 24 hours. Rejected transfers return to your payable balance.</p><div><ProductIcon name="shield" />Encrypted bank destination</div></aside></div>
   </div>;
@@ -361,13 +365,13 @@ export function PayoutReceiptScreen() {
       try {
         const stored = JSON.parse(raw) as { requested?: number; fee?: number; received?: number } | number;
         const requested = typeof stored === "number" ? stored : Number(stored.requested);
-        if (requested < 1000) return;
+        if (requested < MINIMUM_WALLET_WITHDRAWAL) return;
         const fee = typeof stored === "number" ? calculateFee(requested, CREATOR_WITHDRAWAL_FEE_RATE) : Number(stored.fee) || calculateFee(requested, CREATOR_WITHDRAWAL_FEE_RATE);
         const received = typeof stored === "number" ? requested - fee : Number(stored.received) || requested - fee;
         setPayout({ requested, fee, received });
       } catch {
         const requested = Number(raw);
-        if (requested >= 1000) {
+        if (requested >= MINIMUM_WALLET_WITHDRAWAL) {
           const fee = calculateFee(requested, CREATOR_WITHDRAWAL_FEE_RATE);
           setPayout({ requested, fee, received: requested - fee });
         }
@@ -376,7 +380,7 @@ export function PayoutReceiptScreen() {
     return () => window.clearTimeout(timer);
   }, []);
   const reference = useMemo(() => "CLP-260920-1847", []);
-  return <div className="dashboard-page creator-flow-page receipt-page"><section className="receipt-hero"><div className="receipt-art"><ArtTile src={art.withdraw} label="Transfer sent" tone="gold" large /><span><ProductIcon name="check" /></span></div><div className="receipt-hero__details"><StatusPill tone="lime">Transfer successful</StatusPill><h1><AnimatedMoney value={payout.received} /></h1><p>Sent to GTBank ending 6789.</p><div className="receipt-actions"><PrimaryLink href="/dashboard/earnings">Back to earnings</PrimaryLink><button type="button" className="ink-button" onClick={() => window.print()}>Download receipt<ProductIcon name="brief" /></button></div></div></section>
-    <section className="creator-sheet payout-receipt"><ReceiptHeader title="Official payout receipt" reference={reference} /><div className="payout-receipt__summary"><Image src={art.wallet} alt="" width={92} height={92} /><p><small>Amount transferred</small><strong>{money(payout.received)}</strong><span><ProductIcon name="check" />Successful transaction</span><time>20 Sep 2026 · 15:07:13 WAT</time></p></div><div className="receipt-parties"><section><h2>Recipient</h2><p><strong>Tobi Adeyemi</strong><span>GTBank · 0123 456 789</span></p></section><section><h2>Sender</h2><p><strong>Clippit Payouts</strong><span>Payaza · 019***9028</span></p></section></div><section className="receipt-information"><h2>Transaction information</h2><dl><div><dt>Transaction type</dt><dd>Campaign earnings withdrawal</dd></div><div><dt>Transaction ID</dt><dd>{reference}</dd></div><div><dt>Session ID</dt><dd>100033260920115117010192295902</dd></div><div><dt>Settlement reference</dt><dd>PYA-7719028-CLP</dd></div><div><dt>Withdrawal amount</dt><dd>{money(payout.requested)}</dd></div><div><dt>Clippit fee (7%)</dt><dd>−{money(payout.fee)}</dd></div><div><dt>Amount transferred</dt><dd>{money(payout.received)}</dd></div></dl></section><div className="receipt-proof"><h2>Payment breakdown</h2><div><span><ProductIcon name="wallet" /></span><p><strong>{money(payout.requested)} withdrawn</strong><small>From payable earnings</small></p><i /><span><ProductIcon name="brief" /></span><p><strong>{money(payout.fee)} Clippit fee</strong><small>7% withdrawal charge</small></p><i /><span><ProductIcon name="bank" /></span><p><strong>{money(payout.received)} settled</strong><small>Sent to GTBank ending 6789</small></p></div></div><footer className="receipt-footer"><ProductIcon name="shield" /><span><strong>Verify this receipt</strong><small>clippit.ng/verify/{reference} · Authenticity code 9F2A-71C8</small></span></footer></section>
+  return <div className="dashboard-page creator-flow-page receipt-page"><section className="receipt-hero"><div className="receipt-art"><ArtTile src={art.withdraw} label="Transfer sent" tone="gold" large /><span><ProductIcon name="check" /></span></div><div className="receipt-hero__details"><StatusPill tone="lime">Transfer successful</StatusPill><h1><AnimatedMoney value={payout.received} /></h1><p>Sent to GTBank ending 6789.</p><div className="receipt-actions"><PrimaryLink href="/dashboard/wallet">Back to wallet</PrimaryLink><button type="button" className="ink-button" onClick={() => window.print()}>Download receipt<ProductIcon name="brief" /></button></div></div></section>
+    <section className="creator-sheet payout-receipt"><ReceiptHeader title="Official payout receipt" reference={reference} /><div className="payout-receipt__summary"><Image src={art.wallet} alt="" width={92} height={92} /><p><small>Amount transferred</small><strong>{money(payout.received)}</strong><span><ProductIcon name="check" />Successful transaction</span><time>20 Sep 2026 · 15:07:13 WAT</time></p></div><div className="receipt-parties"><section><h2>Recipient</h2><p><strong>Tobi Adeyemi</strong><span>GTBank · 0123 456 789</span></p></section><section><h2>Sender</h2><p><strong>Clippit Payouts</strong><span>Secure transfer</span></p></section></div><section className="receipt-information"><h2>Transaction information</h2><dl><div><dt>Transaction type</dt><dd>Campaign earnings withdrawal</dd></div><div><dt>Transaction ID</dt><dd>{reference}</dd></div><div><dt>Session ID</dt><dd>100033260920115117010192295902</dd></div><div><dt>Settlement reference</dt><dd>STL-7719028-CLP</dd></div><div><dt>Withdrawal amount</dt><dd>{money(payout.requested)}</dd></div><div><dt>Clippit fee (7%)</dt><dd>−{money(payout.fee)}</dd></div><div><dt>Amount transferred</dt><dd>{money(payout.received)}</dd></div></dl></section><div className="receipt-proof"><h2>Payment breakdown</h2><div><span><ProductIcon name="wallet" /></span><p><strong>{money(payout.requested)} withdrawn</strong><small>From payable earnings</small></p><i /><span><ProductIcon name="brief" /></span><p><strong>{money(payout.fee)} Clippit fee</strong><small>7% withdrawal charge</small></p><i /><span><ProductIcon name="bank" /></span><p><strong>{money(payout.received)} settled</strong><small>Sent to GTBank ending 6789</small></p></div></div><footer className="receipt-footer"><ProductIcon name="shield" /><span><strong>Verify this receipt</strong><small>clippit.ng/verify/{reference} · Authenticity code 9F2A-71C8</small></span></footer></section>
   </div>;
 }

@@ -16,6 +16,11 @@ export interface Campaign {
   status: CampaignStatus;
   minimumViews: number;
   creatorCap: number;
+  videoCap: number;
+  maxSubmissions: number;
+  accessMode: "public" | "invite";
+  assets: Array<{ name: string; url: string; kind: string }>;
+  endCondition: string;
   brief: string;
   mustDo: string[];
   mustAvoid: string[];
@@ -38,6 +43,11 @@ export const campaigns: Campaign[] = [
     status: "Closing soon",
     minimumViews: 1000,
     creatorCap: 75000,
+    videoCap: 50000,
+    maxSubmissions: 3,
+    accessMode: "public",
+    assets: [{ name: "Official campaign sound", url: "#campaign-sound", kind: "sound" }, { name: "Product pack reference", url: "#product-reference", kind: "reference" }],
+    endCondition: "Ends in 4 days or when the pot is empty",
     brief:
       "Make a short, funny skit about the moment hunger interrupts everything. Indomie should feel like the quick save, not a scripted advert.",
     mustDo: [
@@ -67,6 +77,11 @@ export const campaigns: Campaign[] = [
     status: "Open",
     minimumViews: 1000,
     creatorCap: 90000,
+    videoCap: 60000,
+    maxSubmissions: 2,
+    accessMode: "public",
+    assets: [{ name: "PalmPay product reference", url: "#product-reference", kind: "reference" }],
+    endCondition: "Ends in 9 days or when the pot is empty",
     brief:
       "Tell a recognisable Nigerian story where a quick transfer changes the mood. Keep it human, useful and rooted in your own style.",
     mustDo: [
@@ -96,6 +111,11 @@ export const campaigns: Campaign[] = [
     status: "Joined",
     minimumViews: 1000,
     creatorCap: 45000,
+    videoCap: 30000,
+    maxSubmissions: 3,
+    accessMode: "invite",
+    assets: [{ name: "Official campaign sound", url: "#campaign-sound", kind: "sound" }, { name: "Visual direction", url: "#visual-direction", kind: "reference" }],
+    endCondition: "Ends in 2 days or when the pot is empty",
     brief:
       "Use the official sound to build a transformation, entrance or reveal. The first two seconds need a clear visual hook.",
     mustDo: [
@@ -125,6 +145,11 @@ export const campaigns: Campaign[] = [
     status: "Open",
     minimumViews: 1500,
     creatorCap: 70000,
+    videoCap: 50000,
+    maxSubmissions: 2,
+    accessMode: "public",
+    assets: [{ name: "Product pack shots", url: "#product-reference", kind: "reference" }, { name: "Lighting reference", url: "#lighting-reference", kind: "reference" }],
+    endCondition: "Ends in 12 days or when the pot is empty",
     brief:
       "Create a before-and-after beauty story with a clear product moment and a finished look that still feels like you.",
     mustDo: [
@@ -158,4 +183,3 @@ export const money = (value: number) =>
 
 export const compactNumber = (value: number) =>
   new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 }).format(value);
-

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { Suspense } from "react";
 import { SubmitClipScreen } from "@/components/creator/CreatorScreens";
 import { campaigns } from "@/lib/product";
 
@@ -8,5 +9,9 @@ export function generateStaticParams() { return campaigns.map((campaign) => ({ s
 export default async function Page({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   if (!campaigns.some((campaign) => campaign.slug === slug)) notFound();
-  return <SubmitClipScreen campaignSlug={slug} />;
+  return (
+    <Suspense fallback={<div className="dashboard-page creator-flow-page" aria-busy="true" />}>
+      <SubmitClipScreen campaignSlug={slug} />
+    </Suspense>
+  );
 }

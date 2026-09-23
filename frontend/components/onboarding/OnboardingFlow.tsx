@@ -19,6 +19,8 @@ const interests: Option[] = [
 const platforms: Option[] = [
   { label: "TikTok", icon: "tiktok", copy: "Short-form, trends and skits" },
   { label: "Instagram", icon: "instagram", copy: "Reels, stories and feed" },
+  { label: "Facebook", icon: "facebook", copy: "Video and community posts" },
+  { label: "X", icon: "x", copy: "Video posts and conversations" },
   { label: "YouTube", icon: "youtube", copy: "Shorts and long-form video" },
 ];
 

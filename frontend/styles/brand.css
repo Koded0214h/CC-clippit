@@ -1131,9 +1131,184 @@
 .review-card__body > div:last-child strong .animated-number,
 .confidence-ticket strong .animated-number { font: inherit; letter-spacing: inherit; }
 
+/* PRD v1 campaign, wallet and confirmation surfaces */
+.brand-wallet-strip { display: grid; grid-template-columns: minmax(280px, 1.1fr) 2fr; gap: 1px; overflow: hidden; margin: 20px 0; border: 1px solid var(--brand-ink); border-radius: 20px; background: var(--brand-ink); box-shadow: 7px 8px 0 rgba(18, 20, 15, .12); }
+.brand-wallet-strip > div { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px 14px; align-items: center; padding: 18px 22px; background: var(--brand-lime); }
+.brand-wallet-strip > div > span { display: grid; width: 48px; height: 48px; place-items: center; border: 1px solid var(--brand-ink); border-radius: 50%; background: var(--brand-paper); }
+.brand-wallet-strip > div > span svg { width: 22px; }
+.brand-wallet-strip p { display: grid; gap: 3px; margin: 0; }
+.brand-wallet-strip p small, .brand-wallet-strip dt { font-size: 12px; color: rgba(18, 20, 15, .68); }
+.brand-wallet-strip p strong { font-size: clamp(25px, 3vw, 40px); letter-spacing: -.05em; }
+.brand-wallet-strip .brand-button { grid-column: 2; justify-self: start; min-height: 40px; padding: 0 14px; background: var(--brand-paper); box-shadow: 3px 4px 0 var(--brand-ink); }
+.brand-wallet-strip dl { display: grid; grid-template-columns: repeat(3, 1fr); margin: 0; background: var(--brand-paper); }
+.brand-wallet-strip dl > div { display: grid; align-content: center; gap: 6px; min-width: 0; padding: 22px; border-left: 1px solid rgba(18, 20, 15, .14); }
+.brand-wallet-strip dd { margin: 0; font-size: clamp(18px, 2vw, 28px); font-weight: 900; letter-spacing: -.04em; }
+.builder-inline-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.builder-inline-fields fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
+.builder-inline-fields legend { margin-bottom: 8px; font-size: 12px; font-weight: 800; }
+.builder-choice-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.builder-choice-row button { min-height: 50px; border: 1px solid var(--brand-ink); border-radius: 12px; background: var(--brand-paper); font: inherit; font-weight: 800; }
+.builder-choice-row button.is-selected { background: var(--brand-lime); box-shadow: 3px 3px 0 var(--brand-ink); }
+.builder-asset-upload input[type="file"] { padding: 15px; border: 1px dashed var(--brand-ink); background: rgba(174, 255, 35, .11); }
+.rules-console--complete { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.campaign-proof-meta { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; margin: 0 0 18px; border: 1px solid var(--brand-ink); border-radius: 14px; overflow: hidden; background: var(--brand-ink); }
+.campaign-proof-meta > span { display: grid; gap: 5px; padding: 16px; background: var(--brand-paper); }
+.campaign-proof-meta b { font-size: 13px; }
+.campaign-proof-meta small { font-size: 11px; color: rgba(18, 20, 15, .62); }
+.brand-wallet-balance { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; padding: 16px; border: 1px solid var(--brand-ink); border-radius: 15px; background: var(--brand-lime); }
+.brand-wallet-balance > span { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 50%; background: var(--brand-ink); color: var(--brand-lime); }
+.brand-wallet-balance p { display: grid; gap: 3px; margin: 0; }
+.brand-wallet-balance p small { font-size: 11px; }
+.brand-wallet-balance p strong { font-size: 25px; letter-spacing: -.04em; }
+.campaign-lock-backdrop { position: fixed; z-index: 80; inset: 0; display: grid; place-items: center; padding: 22px; background: rgba(18, 20, 15, .72); backdrop-filter: blur(10px); }
+.campaign-lock-modal { width: min(560px, 100%); padding: clamp(24px, 5vw, 42px); border: 1px solid var(--brand-ink); border-radius: 24px; background: var(--brand-paper); box-shadow: 10px 12px 0 var(--brand-lime); }
+.campaign-lock-modal > span { display: grid; width: 58px; height: 58px; place-items: center; border-radius: 50%; background: var(--brand-lime); }
+.campaign-lock-modal > span svg { width: 26px; }
+.campaign-lock-modal h2 { margin: 20px 0 10px; font-size: clamp(25px, 4vw, 38px); line-height: .98; letter-spacing: -.05em; }
+.campaign-lock-modal p { margin: 0; font-size: 14px; line-height: 1.6; }
+.campaign-lock-modal label { display: grid; grid-template-columns: auto auto 1fr; gap: 10px; align-items: center; margin: 22px 0; padding: 14px; border: 1px solid var(--brand-ink); border-radius: 13px; cursor: pointer; }
+.campaign-lock-modal label input { position: absolute; opacity: 0; pointer-events: none; }
+.campaign-lock-modal label i { display: grid; width: 24px; height: 24px; place-items: center; border: 1px solid var(--brand-ink); border-radius: 6px; }
+.campaign-lock-modal label input:checked + i { background: var(--brand-lime); }
+.campaign-lock-modal label i svg { width: 14px; opacity: 0; }
+.campaign-lock-modal label input:checked + i svg { opacity: 1; }
+.campaign-lock-modal > div { display: flex; justify-content: flex-end; gap: 10px; }
+.campaign-lock-modal > div > button:not(.brand-button) { border: 0; background: transparent; font: inherit; font-weight: 800; }
+.live-campaign-head > div:last-child { flex-wrap: wrap; }
+.live-campaign-head > div:last-child > a { display: inline-flex; align-items: center; min-height: 42px; padding: 0 14px; border: 1px solid var(--brand-ink); border-radius: 999px; color: var(--brand-ink); font-size: 11px; font-weight: 850; text-decoration: none; }
+.campaign-pause-banner { display: grid; grid-template-columns: auto 1fr auto; gap: 14px; align-items: center; margin: 0 0 18px; padding: 14px 16px; border: 1px solid var(--brand-ink); border-radius: 15px; background: var(--brand-gold); }
+.campaign-pause-banner > svg { width: 24px; }
+.campaign-pause-banner p { display: grid; gap: 3px; margin: 0; }
+.campaign-pause-banner strong { font-size: 13px; }
+.campaign-pause-banner small { font-size: 11px; line-height: 1.4; }
+.campaign-pause-banner button { min-height: 38px; padding: 0 16px; border: 1px solid var(--brand-ink); border-radius: 999px; background: var(--brand-paper); font: inherit; font-size: 11px; font-weight: 850; }
+.campaign-control-modal > p { margin-bottom: 18px; }
+.pause-mode-grid { display: grid !important; grid-template-columns: 1fr 1fr; gap: 9px !important; margin-bottom: 22px; }
+.pause-mode-grid > button { display: grid; gap: 7px; min-height: 120px; padding: 16px; border: 1px solid var(--brand-ink) !important; border-radius: 14px; background: var(--brand-paper) !important; text-align: left; }
+.pause-mode-grid > button.is-selected { background: var(--brand-lime) !important; box-shadow: 4px 4px 0 var(--brand-ink); }
+.pause-mode-grid strong { font-size: 14px; }
+.pause-mode-grid small { font-size: 11px; font-weight: 600; line-height: 1.45; }
+.campaign-lock-modal label.topup-field { display: grid; grid-template-columns: 1fr; gap: 8px; cursor: default; }
+.topup-field > span { font-size: 11px; font-weight: 850; }
+.topup-field > div { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 8px; }
+.campaign-lock-modal .topup-field input { position: static; width: 100%; min-width: 0; padding: 0; border: 0; outline: 0; opacity: 1; pointer-events: auto; background: transparent; font: inherit; font-size: 28px; font-weight: 900; }
+.topup-summary { display: grid; gap: 0; margin: 0 0 22px; border-block: 1px solid rgba(18, 20, 15, .16); }
+.topup-summary > div { display: flex; justify-content: space-between; gap: 20px; padding: 11px 0; }
+.topup-summary dt { font-size: 11px; color: rgba(18, 20, 15, .65); }
+.topup-summary dd { margin: 0; font-size: 12px; font-weight: 850; }
+.brand-transaction-actions { display: flex; gap: 9px; flex-wrap: wrap; }
+.brand-withdraw-modal > div:last-child:only-child { justify-content: flex-end; }
+@media (max-width: 760px) {
+  .brand-wallet-strip { grid-template-columns: 1fr; border-radius: 16px; }
+  .brand-wallet-strip > div { grid-template-columns: auto 1fr; padding: 16px; }
+  .brand-wallet-strip > div .brand-button { grid-column: 1 / -1; width: 100%; }
+  .brand-wallet-strip dl { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .brand-wallet-strip dl > div { padding: 14px 10px; border-left: 0; border-right: 1px solid rgba(18, 20, 15, .14); }
+  .brand-wallet-strip dt { font-size: 10px; line-height: 1.25; }
+  .brand-wallet-strip dd { font-size: 16px; }
+  .builder-inline-fields, .rules-console--complete, .campaign-proof-meta { grid-template-columns: 1fr; }
+  .campaign-proof-meta > span { padding: 13px; }
+  .brand-wallet-balance { grid-template-columns: auto 1fr; }
+  .brand-wallet-balance .brand-status { grid-column: 1 / -1; justify-self: start; }
+  .campaign-lock-backdrop { align-items: end; padding: 10px; }
+  .campaign-lock-modal { max-height: calc(100dvh - 20px); overflow-y: auto; border-radius: 20px; box-shadow: 0 -6px 0 var(--brand-lime); }
+  .campaign-lock-modal > div { display: grid; }
+  .live-campaign-head > div:last-child { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+  .live-campaign-head > div:last-child > button, .live-campaign-head > div:last-child > a { justify-content: center; width: 100%; }
+  .live-campaign-head > div:last-child > a { grid-column: 1 / -1; }
+  .campaign-pause-banner { grid-template-columns: auto 1fr; }
+  .campaign-pause-banner button { grid-column: 1 / -1; width: 100%; }
+  .pause-mode-grid { grid-template-columns: 1fr; }
+  .brand-transaction-actions { display: grid; grid-template-columns: 1fr 1fr; width: 100%; }
+  .brand-transaction-actions .brand-button { justify-content: center; width: 100%; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .brand-page, .brand-builder-page, .brand-command__image img, .brand-pot-bar__track > i, .brand-topbar__proof i, .signal-ripples i, .brand-sparkline i { animation: none; }
   .brand-campaign-card, .brand-button, .brand-rail nav a { transition: none; }
+}
+
+/* Builder and rail QA pass: designed controls, readable labels, fluid nested grids. */
+.brand-rail .rail-signout {
+  width: 100%;
+  min-height: 43px;
+  padding: 0 14px;
+  color: rgba(247, 248, 242, .72);
+  background: transparent;
+  border: 1px solid rgba(247, 248, 242, .2);
+  border-radius: 10px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 780;
+  text-align: left;
+}
+.brand-rail .rail-signout:hover,
+.brand-rail .rail-signout:focus-visible { color: var(--brand-ink); background: var(--brand-lime); border-color: var(--brand-lime); outline: 0; }
+
+.builder-inline-fields > label { position: relative; display: grid; gap: 8px; min-width: 0; }
+.builder-inline-fields > label > span,
+.builder-inline-fields legend,
+.brand-builder-form label > span,
+.budget-inputs label > span { font-size: 12px; line-height: 1.3; }
+.builder-inline-fields select {
+  width: 100%;
+  min-height: 52px;
+  padding: 0 46px 0 15px;
+  color: var(--brand-ink);
+  appearance: none;
+  background: #fff;
+  border: 1px solid var(--brand-ink);
+  border-radius: 12px;
+  outline: 0;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 720;
+  cursor: pointer;
+}
+.builder-inline-fields > label:has(select)::after { position: absolute; right: 15px; bottom: 17px; width: 9px; height: 9px; border-right: 2px solid var(--brand-ink); border-bottom: 2px solid var(--brand-ink); content: ""; pointer-events: none; transform: rotate(45deg); }
+.builder-inline-fields select:focus-visible { box-shadow: 4px 4px 0 var(--brand-gold); transform: translate(-1px, -1px); }
+.brand-builder-form label > small,
+.rules-console label > small,
+.campaign-end-control button small,
+.campaign-end-control > label small,
+.campaign-end-control > aside small { font-size: 11px; }
+
+.rules-console--complete > label { grid-template-columns: minmax(0, 1fr); align-content: start; gap: 12px; min-width: 0; }
+.rules-console--complete > label > div { width: 100%; min-width: 0; }
+.rules-console--complete input { width: 100%; min-width: 0; font-size: clamp(22px, 2.2vw, 32px); }
+.rules-console--complete label > div b { flex: 0 0 auto; font-size: 11px; }
+.rules-console--complete label > span { font-size: 12px; line-height: 1.35; }
+.rules-console--complete label > small { grid-column: auto; line-height: 1.45; }
+
+@media (max-width: 1380px) {
+  .builder-layout { grid-template-columns: minmax(0, 1.35fr) minmax(260px, .65fr); gap: 24px; }
+  .builder-preview > .brand-art, .builder-cover-preview { min-height: 230px; }
+  .builder-title h1 { font-size: clamp(45px, 5.1vw, 64px); }
+}
+
+@media (max-width: 1120px) {
+  .builder-layout { display: flex; flex-direction: column; }
+  .builder-work, .builder-preview { width: 100%; }
+  .builder-preview { position: static; display: grid; grid-template-columns: minmax(150px, .55fr) minmax(260px, 1.45fr); gap: 14px; }
+  .builder-preview > .brand-art, .builder-cover-preview { width: 100%; min-height: 180px; }
+  .builder-preview > :nth-child(n+3) { grid-column: 1 / -1; }
+}
+
+@media (max-width: 760px) {
+  .builder-inline-fields { grid-template-columns: 1fr; }
+  .builder-choice-row button { min-height: 58px; font-size: 14px; }
+  .builder-inline-fields select { min-height: 56px; font-size: 15px; }
+  .rules-console--complete { grid-template-columns: 1fr; }
+  .rules-console--complete > label { padding: 17px; }
+  .rules-console--complete input { font-size: 25px; }
+}
+
+@media (max-width: 520px) {
+  .builder-preview { grid-template-columns: 96px minmax(0, 1fr); }
+  .builder-preview > .brand-art, .builder-cover-preview { min-height: 108px; }
+  .builder-live-card { padding: 14px; }
+  .builder-live-card h2 { font-size: 18px; }
+  .builder-live-card p { font-size: 10px; }
 }
 
 /* Brand identity photo --------------------------------------------------- */

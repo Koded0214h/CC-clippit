@@ -11,6 +11,8 @@ export interface PayoutRuleOut {
   rate_per_1000_views: number;
   cap_amount: number | null;
   min_views_threshold: number;
+  video_cap_amount?: number | null;
+  max_submissions?: number | null;
 }
 
 export interface RuleOut {
@@ -46,6 +48,11 @@ export interface CampaignOut {
   category: string | null;
   cover_image_url: string | null;
   platforms: string[];
+  access_mode?: "public" | "invite";
+  assets?: Array<{ id?: string; name: string; url: string; kind?: string }>;
+  end_condition?: "duration" | "budget";
+  video_cap?: number | null;
+  max_submissions?: number | null;
   status: string;
   phase: string;
   accepting_entries: boolean;

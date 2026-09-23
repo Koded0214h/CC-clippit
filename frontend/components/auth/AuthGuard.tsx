@@ -16,7 +16,7 @@ export function AuthGuard({ children }: { children: ReactNode }) {
     }
   }, [router]);
 
-  // Render nothing while checking — avoids a flash of protected content.
+  // Keep protected content hidden while the local session is checked.
   if (!allowed) return null;
   return <>{children}</>;
 }
