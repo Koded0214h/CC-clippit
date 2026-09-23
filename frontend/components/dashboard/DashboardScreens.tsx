@@ -292,6 +292,7 @@ function MiniLeaderboard() {
 export function DashboardHome() {
   const [feature, setFeature] = useState<Campaign>(campaigns[0]);
   const [earnings, setEarnings] = useState({ total: 42850, payable: 18400, inHold: 24450, paidAllTime: 126700, addedThisWeek: 6200, activeClips: 3 });
+  const [tapeCampaigns, setTapeCampaigns] = useState<Campaign[]>(campaigns.slice(1));
 
   useEffect(() => {
     creatorApi.overview().then((data) => {
@@ -304,6 +305,9 @@ export function DashboardHome() {
         addedThisWeek: data.earnings.added_this_week,
         activeClips: data.earnings.active_clips,
       });
+    }).catch(() => undefined);
+    campaignsApi.list({ feed: "all", page_size: 6 }).then((data) => {
+      if (data.items.length > 0) setTapeCampaigns(data.items.map(campaignOutToLocal));
     }).catch(() => undefined);
   }, []);
 
@@ -363,7 +367,7 @@ export function DashboardHome() {
       <section className="dashboard-section">
         <SectionTitle title="New campaigns" href="/dashboard/campaigns" />
         <div className="campaign-tape">
-          {campaigns.slice(1).map((campaign) => (
+          {tapeCampaigns.map((campaign) => (
             <Link key={campaign.slug} href={`/dashboard/campaigns/${campaign.slug}`} className="campaign-tape__item">
               <div className="campaign-tape__image">
                 <Image src={campaign.image} alt="" fill sizes="160px" />

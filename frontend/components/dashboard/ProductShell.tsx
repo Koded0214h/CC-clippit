@@ -3,12 +3,14 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { ProfileAvatar, useStoredProfile, type StoredProfile } from "@/components/ui/ProfilePhotoPicker";
 import { useAutoHideDock } from "@/components/ui/useAutoHideDock";
 import { useUser } from "@/lib/user-context";
+import { earningsApi } from "@/lib/api/earnings";
+import { notificationsApi } from "@/lib/api/notifications";
 
 const CREATOR_PROFILE_FALLBACK: StoredProfile = { name: "Tobi On Cam", bio: "", photo: "" };
 
@@ -45,10 +47,17 @@ export function ProductShell({ children }: { children: ReactNode }) {
   const profile = useStoredProfile("creator", CREATOR_PROFILE_FALLBACK);
   const dockHidden = useAutoHideDock();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [payable, setPayable] = useState(18400);
+  const [notifCount, setNotifCount] = useState(0);
   const { user, logout } = useUser();
   const displayName = user?.full_name ?? profile.name;
   const initials = displayName.trim().split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase() || "U";
   const moreIsCurrent = creatorMoreItems.some((item) => pathname.startsWith(item.href));
+
+  useEffect(() => {
+    earningsApi.summary().then((data) => setPayable(data.payable)).catch(() => undefined);
+    notificationsApi.unreadCount().then((data) => setNotifCount(data.unread_count)).catch(() => undefined);
+  }, []);
 
   return (
     <div className="product-shell">
@@ -110,11 +119,11 @@ export function ProductShell({ children }: { children: ReactNode }) {
             <Link className="wallet-pill" href="/dashboard/earnings">
               <ProductIcon name="wallet" />
               <span>Payable</span>
-              <strong><AnimatedNumber value={18400} format="money" duration={1000} /></strong>
+              <strong><AnimatedNumber value={payable} format="money" duration={1000} /></strong>
             </Link>
             <Link className="icon-button" href="/dashboard/notifications" aria-label="Notifications">
               <ProductIcon name="bell" />
-              <i />
+              {notifCount > 0 && <b>{notifCount}</b>}
             </Link>
             <Link className="topbar-avatar" href="/dashboard/settings" aria-label="Open profile settings">
               {profile.photo ? <Image src={profile.photo} alt="" fill unoptimized sizes="48px" /> : initials}

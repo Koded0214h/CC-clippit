@@ -77,13 +77,14 @@ export interface MyCampaignRow {
 }
 
 export const campaignsApi = {
-  list: (params?: { feed?: string; category?: string; platform?: string; search?: string; cursor?: string }) => {
+  list: (params?: { feed?: string; category?: string; platform?: string; search?: string; cursor?: string; page_size?: number }) => {
     const query = new URLSearchParams();
     if (params?.feed) query.set("feed", params.feed);
     if (params?.category) query.set("category", params.category);
     if (params?.platform) query.set("platform", params.platform);
     if (params?.search) query.set("search", params.search);
     if (params?.cursor) query.set("cursor", params.cursor);
+    if (params?.page_size) query.set("page_size", String(params.page_size));
     const qs = query.toString();
     return api.get<CampaignListOut>(`/campaigns${qs ? `?${qs}` : ""}`);
   },
