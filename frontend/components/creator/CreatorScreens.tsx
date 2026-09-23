@@ -9,6 +9,8 @@ import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { ReceiptHeader } from "@/components/ui/ReceiptHeader";
 import { CREATOR_WITHDRAWAL_FEE_RATE, calculateFee, feePercentage } from "@/lib/fees";
 import { campaigns, money } from "@/lib/product";
+import { earningsApi, type EarningRow } from "@/lib/api/earnings";
+import { creatorApi } from "@/lib/api/creator";
 
 const art = {
   appeal: "/assets/illustrations/clippit-icons/appeal-review.webp",
@@ -41,23 +43,51 @@ function PrimaryLink({ href, children, dark = false }: { href: string; children:
   return <Link className={dark ? "ink-button" : "lime-button"} href={href}>{children}<ProductIcon name="arrow" /></Link>;
 }
 
-const creatorClips = [
+const MOCK_CREATOR_CLIPS = [
   { id: "indomie-hunger", title: "Hunger interrupted the group chat", campaign: "Indomie · No long thing", status: "Approved", tone: "lime" as Tone, views: 156800, earned: 38200, link: "/dashboard/submissions/approved" },
   { id: "gbedu-entry", title: "The main-character entrance", campaign: "Gbedu Records · Main character sound", status: "Checking", tone: "gold" as Tone, views: 0, earned: 0, link: "/dashboard/submissions/processing" },
   { id: "palmpay-save", title: "Who paid for the ride?", campaign: "PalmPay · Send am sharp", status: "Needs attention", tone: "danger" as Tone, views: 12400, earned: 0, link: "/dashboard/submissions/rejected" },
 ];
 
+function clipStatusTone(status: string): Tone {
+  if (status === "approved") return "lime";
+  if (status === "checking") return "gold";
+  if (status === "needs_attention") return "danger";
+  return "muted";
+}
+
 export function MyClipsScreen() {
+  const [clips, setClips] = useState(MOCK_CREATOR_CLIPS);
+  const [totals, setTotals] = useState({ active: 3, views: 312600, earned: 42850 });
+
+  useEffect(() => {
+    creatorApi.clips().then((data) => {
+      setTotals({ active: data.active_clips, views: data.verified_views, earned: data.total_earned });
+      if (data.items.length > 0) {
+        setClips(data.items.map((c) => ({
+          id: c.id,
+          title: c.title ?? c.campaign_title,
+          campaign: `${c.brand ?? c.campaign_title} · ${c.campaign_title}`,
+          status: c.label,
+          tone: clipStatusTone(c.status),
+          views: c.verified_views,
+          earned: c.earned,
+          link: c.link,
+        })));
+      }
+    }).catch(() => undefined);
+  }, []);
+
   return <div className="dashboard-page creator-flow-page">
     <CreatorHeading title="My clips" copy="Check submission status, verified views and earnings." action={<PrimaryLink href="/dashboard/campaigns/indomie-no-long-thing/submit">Submit a clip</PrimaryLink>} />
     <section className="clip-command" aria-label="Creator clip totals">
-      <div className="clip-command__copy"><StatusPill tone="lime">3 active clips</StatusPill><h2>Clip activity</h2><p>Views and earnings update from your connected accounts.</p></div>
+      <div className="clip-command__copy"><StatusPill tone="lime">{totals.active} active clips</StatusPill><h2>Clip activity</h2><p>Views and earnings update from your connected accounts.</p></div>
       <div className="clip-command__trail" aria-hidden="true"><span><ProductIcon name="play" /><b>Posted</b></span><i /><span><ProductIcon name="shield" /><b>Verified</b></span><i /><span><ProductIcon name="wallet" /><b>Earned</b></span></div>
       <ArtTile src={art.submit} label="Submission status" tone="lime" large />
-      <div className="clip-command__numbers"><div><small>Active clips</small><strong><AnimatedNumber value={3} padStart={2} duration={700} /></strong></div><div><small>Verified views</small><strong><AnimatedNumber value={312600} format="compact" delay={100} /></strong></div><div><small>Total earned</small><strong><AnimatedMoney value={42850} delay={200} /></strong></div></div>
+      <div className="clip-command__numbers"><div><small>Active clips</small><strong><AnimatedNumber value={totals.active} padStart={2} duration={700} /></strong></div><div><small>Verified views</small><strong><AnimatedNumber value={totals.views} format="compact" delay={100} /></strong></div><div><small>Total earned</small><strong><AnimatedMoney value={totals.earned} delay={200} /></strong></div></div>
     </section>
     <section className="creator-sheet"><div className="creator-sheet__head"><div><h2>All submissions</h2><p>Open a clip to view its checks, views and earnings.</p></div><Link href="/dashboard/accounts">Manage accounts<ProductIcon name="arrow" /></Link></div>
-      <div className="clip-ledger"><div className="clip-ledger__labels"><span>Clip</span><span>Status</span><span>Verified views</span><span>Earned</span><span /></div>{creatorClips.map((clip, index) => <Link key={clip.id} href={clip.link} className="clip-ledger__row"><span className="clip-ledger__title"><i><AnimatedNumber value={index + 1} padStart={2} duration={600} /></i><span><strong>{clip.title}</strong><small>{clip.campaign}</small></span></span><StatusPill tone={clip.tone}>{clip.status}</StatusPill><strong>{clip.views ? <AnimatedNumber value={clip.views} format="compact" /> : "Waiting"}</strong><strong className="money-ink">{clip.earned ? <AnimatedMoney value={clip.earned} /> : "—"}</strong><ProductIcon name="chevron" /></Link>)}</div>
+      <div className="clip-ledger"><div className="clip-ledger__labels"><span>Clip</span><span>Status</span><span>Verified views</span><span>Earned</span><span /></div>{clips.map((clip, index) => <Link key={clip.id} href={clip.link} className="clip-ledger__row"><span className="clip-ledger__title"><i><AnimatedNumber value={index + 1} padStart={2} duration={600} /></i><span><strong>{clip.title}</strong><small>{clip.campaign}</small></span></span><StatusPill tone={clip.tone}>{clip.status}</StatusPill><strong>{clip.views ? <AnimatedNumber value={clip.views} format="compact" /> : "Waiting"}</strong><strong className="money-ink">{clip.earned ? <AnimatedMoney value={clip.earned} /> : "—"}</strong><ProductIcon name="chevron" /></Link>)}</div>
     </section>
   </div>;
 }
@@ -150,17 +180,54 @@ export function AppealScreen() {
   </div>;
 }
 
-const earningRows = [
+const MOCK_EARNING_ROWS = [
   { date: "20 Sep", clip: "Hunger interrupted the group chat", campaign: "Indomie", views: 12400, amount: 6000, state: "Accrued", tone: "gold" as Tone },
   { date: "19 Sep", clip: "The main-character entrance", campaign: "Gbedu Records", views: 52000, amount: 20800, state: "Payable", tone: "lime" as Tone },
   { date: "14 Sep", clip: "Face card, still outside", campaign: "House of Tara", views: 20600, amount: 16000, state: "Paid", tone: "ink" as Tone },
 ];
 
+function earningStateTone(state: string): Tone {
+  if (state === "Payable") return "lime";
+  if (state === "Accrued") return "gold";
+  if (state === "Processing") return "muted";
+  return "ink";
+}
+
+function mapEarningRow(r: EarningRow) {
+  return {
+    date: new Date(r.date).toLocaleDateString("en-NG", { day: "numeric", month: "short" }),
+    clip: r.clip,
+    campaign: r.brand ?? r.campaign_title,
+    views: r.billable_views,
+    amount: r.amount,
+    state: r.state,
+    tone: earningStateTone(r.state),
+  };
+}
+
 export function EarningsScreen() {
+  const [summary, setSummary] = useState({ payable: 18400, inHold: 6000, paidAllTime: 184450, completedPayouts: 8, lifetimeViews: 492800 });
+  const [rows, setRows] = useState(MOCK_EARNING_ROWS);
+
+  useEffect(() => {
+    earningsApi.summary().then((data) => {
+      setSummary({
+        payable: data.payable,
+        inHold: data.in_hold,
+        paidAllTime: data.paid_all_time,
+        completedPayouts: data.completed_payouts,
+        lifetimeViews: data.lifetime_views,
+      });
+    }).catch(() => undefined);
+    earningsApi.history().then((data) => {
+      if (data.items.length > 0) setRows(data.items.map(mapEarningRow));
+    }).catch(() => undefined);
+  }, []);
+
   return <div className="dashboard-page creator-flow-page earnings-page"><CreatorHeading title="Earnings" copy="See what is accrued, payable and already paid." action={<PrimaryLink href="/dashboard/withdraw">Withdraw money</PrimaryLink>} />
-    <section className="earnings-stage"><div className="earnings-total"><StatusPill tone="lime">Ready now</StatusPill><small>Payable balance</small><strong><AnimatedMoney value={18400} /></strong><p>From <AnimatedNumber value={36800} /> verified, billable views.</p><div className="money-wave" aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /></div></div><ArtTile src={art.wallet} label="Payable balance" tone="gold" large /><div className="earnings-buckets"><article><span>Still in hold</span><strong><AnimatedMoney value={6000} /></strong><small>Clears 25 Sep</small></article><article><span>Paid all time</span><strong><AnimatedMoney value={184450} delay={100} /></strong><small><AnimatedNumber value={8} /> completed payouts</small></article><article><span>Lifetime views</span><strong><AnimatedNumber value={492800} format="compact" delay={200} /></strong><small>Platform verified</small></article></div></section>
+    <section className="earnings-stage"><div className="earnings-total"><StatusPill tone="lime">Ready now</StatusPill><small>Payable balance</small><strong><AnimatedMoney value={summary.payable} /></strong><p>From <AnimatedNumber value={summary.lifetimeViews} /> verified, billable views.</p><div className="money-wave" aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /></div></div><ArtTile src={art.wallet} label="Payable balance" tone="gold" large /><div className="earnings-buckets"><article><span>Still in hold</span><strong><AnimatedMoney value={summary.inHold} /></strong><small>Clears soon</small></article><article><span>Paid all time</span><strong><AnimatedMoney value={summary.paidAllTime} delay={100} /></strong><small><AnimatedNumber value={summary.completedPayouts} /> completed payouts</small></article><article><span>Lifetime views</span><strong><AnimatedNumber value={summary.lifetimeViews} format="compact" delay={200} /></strong><small>Platform verified</small></article></div></section>
     <section className="hold-strip"><div className="hold-strip__intro"><ProductIcon name="clock" /><span><strong>The five-day hold</strong><small>Views keep earning immediately. Withdrawal unlocks after the fraud-check window.</small></span></div><div className="hold-track"><span className="is-past">20<small>Earned</small></span><i className="is-past" /><span className="is-past">22<small>Checking</small></span><i /><span>25<small>Payable</small></span></div></section>
-    <section className="creator-sheet earnings-ledger"><div className="creator-sheet__head"><div><h2>Earning history</h2><p>Each amount includes the clip and verified view count.</p></div></div><div className="earnings-ledger__labels"><span>Date</span><span>Clip</span><span>Billable views</span><span>Amount</span><span>Status</span></div>{earningRows.map((row) => <article key={row.clip}><span>{row.date}</span><p><strong>{row.clip}</strong><small>{row.campaign}</small></p><strong><AnimatedNumber value={row.views} format="compact" /></strong><strong><AnimatedMoney value={row.amount} /></strong><StatusPill tone={row.tone}>{row.state}</StatusPill></article>)}</section>
+    <section className="creator-sheet earnings-ledger"><div className="creator-sheet__head"><div><h2>Earning history</h2><p>Each amount includes the clip and verified view count.</p></div></div><div className="earnings-ledger__labels"><span>Date</span><span>Clip</span><span>Billable views</span><span>Amount</span><span>Status</span></div>{rows.map((row, i) => <article key={row.clip + i}><span>{row.date}</span><p><strong>{row.clip}</strong><small>{row.campaign}</small></p><strong><AnimatedNumber value={row.views} format="compact" /></strong><strong><AnimatedMoney value={row.amount} /></strong><StatusPill tone={row.tone}>{row.state}</StatusPill></article>)}</section>
   </div>;
 }
 

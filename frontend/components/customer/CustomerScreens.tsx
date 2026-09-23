@@ -142,15 +142,40 @@ function saveBrandRead(notices: Notice[]) {
 export function BrandNotificationsScreen() {
   const [filter, setFilter] = useState("All");
   const [notices, setNotices] = useState(initialBrandNotices);
+
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      try {
-        const read = JSON.parse(window.localStorage.getItem("clippit:brand-notifications-read") || "[]") as number[];
-        setNotices((current) => current.map((notice) => read.includes(notice.id) ? { ...notice, unread: false } : notice));
-      } catch { /* Keep the default unread state when stored data is unavailable. */ }
-    }, 0);
-    return () => window.clearTimeout(timer);
+    notificationsApi.list().then((data) => {
+      if (data.items.length > 0) {
+        setNotices(data.items.map((n, i) => ({
+          id: i + 1,
+          kind: mapApiKind(n.kind),
+          icon: mapApiIcon(n.kind),
+          title: n.title,
+          copy: n.body,
+          time: relativeTimeFromDate(n.created_at),
+          href: n.link ?? "#",
+          unread: !n.read,
+        })));
+        return;
+      }
+      const timer = window.setTimeout(() => {
+        try {
+          const read = JSON.parse(window.localStorage.getItem("clippit:brand-notifications-read") || "[]") as number[];
+          setNotices((current) => current.map((notice) => read.includes(notice.id) ? { ...notice, unread: false } : notice));
+        } catch { /* keep default */ }
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }).catch(() => {
+      const timer = window.setTimeout(() => {
+        try {
+          const read = JSON.parse(window.localStorage.getItem("clippit:brand-notifications-read") || "[]") as number[];
+          setNotices((current) => current.map((notice) => read.includes(notice.id) ? { ...notice, unread: false } : notice));
+        } catch { /* keep default */ }
+      }, 0);
+      return () => window.clearTimeout(timer);
+    });
   }, []);
+
   const visible = notices.filter((notice) => filter === "All" || notice.kind === filter);
   const unread = notices.filter((notice) => notice.unread).length;
   const updateNotices = (next: Notice[]) => { setNotices(next); saveBrandRead(next); };
