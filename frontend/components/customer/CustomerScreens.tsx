@@ -13,6 +13,7 @@ import { money } from "@/lib/product";
 import { authApi } from "@/lib/api/auth";
 import type { SessionOut } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
+import { notificationsApi } from "@/lib/api/notifications";
 
 const CREATOR_PROFILE: StoredProfile = {
   name: "Tobi On Cam",
@@ -56,17 +57,76 @@ const initialBrandNotices: Notice[] = [
   { id: 106, kind: "Account", icon: "shield", title: "Brand account verification is complete", copy: "Gbedu Records can fund campaigns and receive returned balances.", time: "18 Sep", href: "/brand/settings", unread: false },
 ];
 
+function mapApiKind(kind: string): Notice["kind"] {
+  const k = kind.toLowerCase();
+  if (k.includes("money") || k.includes("earning") || k.includes("payout") || k.includes("withdrawal") || k.includes("wallet")) return "Money";
+  if (k.includes("review") || k.includes("submission") || k.includes("appeal")) return "Review";
+  if (k.includes("account") || k.includes("security") || k.includes("social")) return "Account";
+  return "Campaigns";
+}
+
+function mapApiIcon(kind: string): ProductIconName {
+  const k = kind.toLowerCase();
+  if (k.includes("money") || k.includes("earning") || k.includes("payout")) return "wallet";
+  if (k.includes("bank") || k.includes("withdrawal")) return "bank";
+  if (k.includes("review") || k.includes("submission")) return "eye";
+  if (k.includes("campaign") || k.includes("brief") || k.includes("match")) return "brief";
+  if (k.includes("clock") || k.includes("closing")) return "clock";
+  if (k.includes("security") || k.includes("shield")) return "shield";
+  return "bell";
+}
+
+function relativeTimeFromDate(dateStr: string): string {
+  try {
+    const diff = Date.now() - new Date(dateStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "Just now";
+    if (mins < 60) return `${mins} min`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs} hr`;
+    const days = Math.floor(hrs / 24);
+    if (days === 1) return "Yesterday";
+    return `${days} days ago`;
+  } catch { return ""; }
+}
+
 export function NotificationsScreen() {
   const [filter, setFilter] = useState("All");
   const [notices, setNotices] = useState(initialNotices);
   const visible = notices.filter((notice) => filter === "All" || notice.kind === filter);
   const unread = notices.filter((notice) => notice.unread).length;
 
+  useEffect(() => {
+    notificationsApi.list().then((data) => {
+      if (data.items.length > 0) {
+        setNotices(data.items.map((n, i) => ({
+          id: i + 1,
+          kind: mapApiKind(n.kind),
+          icon: mapApiIcon(n.kind),
+          title: n.title,
+          copy: n.body,
+          time: relativeTimeFromDate(n.created_at),
+          href: n.link ?? "#",
+          unread: !n.read,
+        })));
+      }
+    }).catch(() => undefined);
+  }, []);
+
+  const markAllRead = () => {
+    setNotices((current) => current.map((notice) => ({ ...notice, unread: false })));
+    notificationsApi.markAllRead().catch(() => undefined);
+  };
+
+  const markOneRead = (id: number) => {
+    setNotices((current) => current.map((item) => item.id === id ? { ...item, unread: false } : item));
+  };
+
   return <div className="dashboard-page customer-page notifications-page">
-    <ScreenHead title="Notifications" copy="Campaign decisions, money movement and account checks." action={<button className="customer-text-button" type="button" onClick={() => setNotices((current) => current.map((notice) => ({ ...notice, unread: false })))} disabled={!unread}>Mark all as read</button>} />
+    <ScreenHead title="Notifications" copy="Campaign decisions, money movement and account checks." action={<button className="customer-text-button" type="button" onClick={markAllRead} disabled={!unread}>Mark all as read</button>} />
     <section className="notification-console">
       <aside className="notification-tally"><span><ProductIcon name="bell" /><i>{unread}</i></span><strong>{unread ? `${unread} new` : "All read"}</strong><small>Latest account activity</small><div>{["All", "Campaigns", "Money", "Account"].map((item) => <button type="button" className={filter === item ? "is-active" : ""} onClick={() => setFilter(item)} key={item}>{item}</button>)}</div></aside>
-      <div className="notification-tape">{visible.map((notice) => <Link href={notice.href} className={notice.unread ? "is-unread" : ""} onClick={() => setNotices((current) => current.map((item) => item.id === notice.id ? { ...item, unread: false } : item))} key={notice.id}><span className={`notice-icon notice-icon--${notice.kind.toLowerCase()}`}><ProductIcon name={notice.icon} /></span><p><small>{notice.kind}</small><strong>{notice.title}</strong><span>{notice.copy}</span></p><time>{notice.time}</time><ProductIcon name="arrow" /></Link>)}</div>
+      <div className="notification-tape">{visible.map((notice) => <Link href={notice.href} className={notice.unread ? "is-unread" : ""} onClick={() => markOneRead(notice.id)} key={notice.id}><span className={`notice-icon notice-icon--${notice.kind.toLowerCase()}`}><ProductIcon name={notice.icon} /></span><p><small>{notice.kind}</small><strong>{notice.title}</strong><span>{notice.copy}</span></p><time>{notice.time}</time><ProductIcon name="arrow" /></Link>)}</div>
     </section>
   </div>;
 }

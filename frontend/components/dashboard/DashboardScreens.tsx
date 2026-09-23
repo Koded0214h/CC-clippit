@@ -7,6 +7,32 @@ import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { ProfileAvatar, ProfilePhotoPicker, saveStoredProfile, useStoredProfile, type StoredProfile } from "@/components/ui/ProfilePhotoPicker";
 import { campaigns, leaderboard, type Campaign } from "@/lib/product";
+import { campaignsApi, type CampaignOut } from "@/lib/api/campaigns";
+import { earningsApi, type LeaderRow } from "@/lib/api/earnings";
+import { creatorApi } from "@/lib/api/creator";
+
+function campaignOutToLocal(c: CampaignOut): Campaign {
+  return {
+    slug: c.slug,
+    brand: c.brand?.name ?? "Brand",
+    title: c.title,
+    line: c.tagline ?? c.description.slice(0, 120),
+    image: c.cover_image_url ?? "/assets/video/creator-reaction-poster.jpg",
+    rate: c.payout_rule?.rate_per_1000_views ?? 0,
+    pot: c.pot,
+    remaining: c.remaining,
+    daysLeft: c.time_left?.days ?? 0,
+    hoursLeft: c.time_left?.hours ?? 0,
+    platforms: c.platforms,
+    category: c.category ?? "General",
+    status: (c.feed_status as Campaign["status"]) ?? "Open",
+    minimumViews: c.payout_rule?.min_views_threshold ?? 1000,
+    creatorCap: c.payout_rule?.cap_amount ?? 0,
+    brief: c.description,
+    mustDo: c.rules.filter((r) => r.kind === "must").map((r) => r.text),
+    mustAvoid: c.rules.filter((r) => r.kind === "avoid").map((r) => r.text),
+  };
+}
 
 const CREATOR_PROFILE_FALLBACK: StoredProfile = {
   name: "Tobi On Cam",
@@ -228,8 +254,57 @@ function CreatorFieldNotes() {
   );
 }
 
+type BoardRow = { rank: number; name: string; handle: string; views: number; earned: number; is_me?: boolean };
+
+function MiniLeaderboard() {
+  const [board, setBoard] = useState<BoardRow[]>(leaderboard.slice(0, 4).map((r) => ({ ...r, is_me: r.name === "Tobi On Cam" })));
+  useEffect(() => {
+    earningsApi.leaderboard({ period: "week" }).then((data) => {
+      if (data.items.length > 0) {
+        setBoard(data.items.slice(0, 4).map((r) => ({
+          rank: r.rank,
+          name: r.name,
+          handle: r.handle ?? "",
+          views: r.views,
+          earned: r.earned,
+          is_me: r.is_me,
+        })));
+      }
+    }).catch(() => undefined);
+  }, []);
+  return (
+    <aside className="mini-leaderboard">
+      <SectionTitle title="Weekly leaderboard" href="/dashboard/leaderboard" linkLabel="Full board" />
+      {board.map((person) => (
+        <div key={person.rank} className={person.is_me ? "is-you" : ""}>
+          <span><AnimatedNumber value={person.rank} padStart={2} duration={600} /></span>
+          <i>{person.name.slice(0, 2).toUpperCase()}</i>
+          <p><strong>{person.name}</strong><small>{person.handle}</small></p>
+          <b><AnimatedNumber value={person.views} format="compact" /></b>
+        </div>
+      ))}
+    </aside>
+  );
+}
+
 export function DashboardHome() {
-  const feature = campaigns[0];
+  const [feature, setFeature] = useState<Campaign>(campaigns[0]);
+  const [earnings, setEarnings] = useState({ total: 42850, payable: 18400, inHold: 24450, paidAllTime: 126700, addedThisWeek: 6200, activeClips: 3 });
+
+  useEffect(() => {
+    creatorApi.overview().then((data) => {
+      if (data.closing_soon) setFeature(campaignOutToLocal(data.closing_soon));
+      setEarnings({
+        total: data.earnings.total_accrued,
+        payable: data.earnings.payable,
+        inHold: data.earnings.in_hold,
+        paidAllTime: data.earnings.paid_all_time,
+        addedThisWeek: data.earnings.added_this_week,
+        activeClips: data.earnings.active_clips,
+      });
+    }).catch(() => undefined);
+  }, []);
+
   return (
     <div className="dashboard-page dashboard-home">
       <PageHeading
@@ -268,13 +343,13 @@ export function DashboardHome() {
           </div>
           <div className="money-total">
             <span>Total accrued</span>
-            <strong><AnimatedMoney value={42850} /></strong>
-            <small><b>Across 3 clips</b><i /><span><AnimatedMoney value={6200} /> added this week</span></small>
+            <strong><AnimatedMoney value={earnings.total} /></strong>
+            <small><b>Across {earnings.activeClips} clips</b><i /><span><AnimatedMoney value={earnings.addedThisWeek} /> added this week</span></small>
           </div>
           <dl>
-            <div><dt>Payable now</dt><dd><AnimatedMoney value={18400} /></dd></div>
-            <div><dt>In 5-day hold</dt><dd><AnimatedMoney value={24450} /></dd></div>
-            <div><dt>Paid all time</dt><dd><AnimatedMoney value={126700} /></dd></div>
+            <div><dt>Payable now</dt><dd><AnimatedMoney value={earnings.payable} /></dd></div>
+            <div><dt>In 5-day hold</dt><dd><AnimatedMoney value={earnings.inHold} /></dd></div>
+            <div><dt>Paid all time</dt><dd><AnimatedMoney value={earnings.paidAllTime} /></dd></div>
           </dl>
           <Link href="/dashboard/withdraw" className="ink-button">
             Withdraw payable money<ProductIcon name="arrow" />
@@ -337,38 +412,35 @@ export function DashboardHome() {
           </article>
         </div>
 
-        <aside className="mini-leaderboard">
-          <SectionTitle title="Weekly leaderboard" href="/dashboard/leaderboard" linkLabel="Full board" />
-          {leaderboard.slice(0, 4).map((person) => (
-            <div key={person.rank} className={person.name === "Tobi On Cam" ? "is-you" : ""}>
-              <span><AnimatedNumber value={person.rank} padStart={2} duration={600} /></span>
-              <i>{person.name.slice(0, 2).toUpperCase()}</i>
-              <p><strong>{person.name}</strong><small>{person.handle}</small></p>
-              <b><AnimatedNumber value={person.views} format="compact" /></b>
-            </div>
-          ))}
-        </aside>
+        <MiniLeaderboard />
+
       </section>
     </div>
   );
 }
 
 const campaignFilters = ["All", "For you", "Closing soon", "Joined"];
+const feedMap: Record<string, string> = { "All": "all", "For you": "for_you", "Closing soon": "closing_soon", "Joined": "joined" };
 
 export function CampaignDirectory() {
   const [filter, setFilter] = useState("All");
   const [query, setQuery] = useState("");
+  const [allCampaigns, setAllCampaigns] = useState<Campaign[]>(campaigns);
+
+  useEffect(() => {
+    const feed = feedMap[filter] ?? "all";
+    campaignsApi.list({ feed }).then((data) => {
+      if (data.items.length > 0) setAllCampaigns(data.items.map(campaignOutToLocal));
+    }).catch(() => undefined);
+  }, [filter]);
+
   const visible = useMemo(() => {
     const normalized = query.toLowerCase().trim();
-    return campaigns.filter((campaign) => {
-      const matchesFilter =
-        filter === "All" ||
-        filter === "For you" ||
-        campaign.status === filter;
+    return allCampaigns.filter((campaign) => {
       const matchesQuery = !normalized || [campaign.brand, campaign.title, campaign.category].join(" ").toLowerCase().includes(normalized);
-      return matchesFilter && matchesQuery;
+      return matchesQuery;
     });
-  }, [filter, query]);
+  }, [allCampaigns, query]);
 
   return (
     <div className="dashboard-page campaigns-page">
@@ -508,12 +580,26 @@ export function CampaignDetail({ campaign }: { campaign: Campaign }) {
 }
 
 export function LeaderboardScreen() {
+  const [board, setBoard] = useState<BoardRow[]>(leaderboard.map((r) => ({ ...r, is_me: r.name === "Tobi On Cam" })));
+  const [updatedAt, setUpdatedAt] = useState("2 minutes ago");
+
+  useEffect(() => {
+    earningsApi.leaderboard({ period: "week" }).then((data) => {
+      if (data.items.length > 0) {
+        setBoard(data.items.map((r) => ({ rank: r.rank, name: r.name, handle: r.handle ?? "", views: r.views, earned: r.earned, is_me: r.is_me })));
+        try { setUpdatedAt(new Date(data.updated_at).toLocaleTimeString()); } catch { /* keep default */ }
+      }
+    }).catch(() => undefined);
+  }, []);
+
+  const podium = [board[1], board[0], board[2]].filter(Boolean);
+
   return (
     <div className="dashboard-page leaderboard-page">
-      <PageHeading  title="Leaderboard" copy="Weekly ranking by verified views across active campaigns." />
+      <PageHeading title="Leaderboard" copy="Weekly ranking by verified views across active campaigns." />
       <section className="podium-board">
         <div className="podium-copy"><h2>Top creators this week</h2><p>Updated after each verified view check.</p></div>
-        {[leaderboard[1], leaderboard[0], leaderboard[2]].map((person) => (
+        {podium.map((person) => (
           <article key={person.rank} className={`podium-person podium-person--${person.rank}`}>
             <span><AnimatedNumber value={person.rank} duration={600} /></span>
             <i>{person.name.slice(0, 2).toUpperCase()}</i>
@@ -525,12 +611,12 @@ export function LeaderboardScreen() {
       </section>
 
       <section className="ranking-sheet">
-        <div className="ranking-sheet__head"><h2>All creators</h2><span>Updated 2 minutes ago</span></div>
+        <div className="ranking-sheet__head"><h2>All creators</h2><span>Updated {updatedAt}</span></div>
         <div className="ranking-row ranking-row--labels"><span>Rank</span><span>Creator</span><span>Verified views</span><span>Earned</span></div>
-        {leaderboard.map((person) => (
-          <div key={person.rank} className={`ranking-row${person.name === "Tobi On Cam" ? " is-you" : ""}`}>
+        {board.map((person) => (
+          <div key={person.rank} className={`ranking-row${person.is_me ? " is-you" : ""}`}>
             <span className="rank-number"><AnimatedNumber value={person.rank} padStart={2} duration={600} /></span>
-            <span className="rank-creator"><i>{person.name.slice(0, 2).toUpperCase()}</i><span><strong>{person.name}</strong><small>{person.handle}</small></span>{person.name === "Tobi On Cam" && <b>You</b>}</span>
+            <span className="rank-creator"><i>{person.name.slice(0, 2).toUpperCase()}</i><span><strong>{person.name}</strong><small>{person.handle}</small></span>{person.is_me && <b>You</b>}</span>
             <strong><AnimatedNumber value={person.views} format="compact" /></strong>
             <strong className="rank-money"><AnimatedMoney value={person.earned} /></strong>
           </div>

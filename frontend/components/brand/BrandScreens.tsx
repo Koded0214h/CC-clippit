@@ -8,7 +8,9 @@ import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
 import { ProfileAvatar, ProfilePhotoPicker, saveStoredProfile, useStoredProfile, type StoredProfile } from "@/components/ui/ProfilePhotoPicker";
 import { ReceiptHeader } from "@/components/ui/ReceiptHeader";
-import { brandCampaigns, brandReviews, type BrandCampaign, type BrandReview } from "@/lib/brand";
+import { brandCampaigns, brandReviews, type BrandCampaign, type BrandCampaignState, type BrandReview } from "@/lib/brand";
+import { brandApi, type BrandOverviewOut, type ReviewCard as ApiReviewCard } from "@/lib/api/brand";
+import { campaignsApi, type CampaignOut } from "@/lib/api/campaigns";
 import { BRAND_CAMPAIGN_FEE_RATE, calculateFee, feePercentage } from "@/lib/fees";
 import { useBrandCampaign, type BriefRule } from "./BrandCampaignProvider";
 import { CampaignCoverPicker } from "./CampaignCoverPicker";
@@ -76,12 +78,40 @@ function PotBar({ campaign }: { campaign: BrandCampaign }) {
 }
 
 export function BrandOverviewScreen() {
+  const [overview, setOverview] = useState<BrandOverviewOut | null>(null);
   const live = brandCampaigns[0];
-  const pendingReviews = live.review;
+
+  useEffect(() => {
+    brandApi.overview().then((data) => setOverview(data)).catch(() => undefined);
+  }, []);
+
+  const pendingReviews = overview?.pending_reviews ?? live.review;
+  const orgName = overview?.organisation_name ?? "Gbedu Records";
+  const featuredImage = overview?.featured?.cover_image_url ?? live.image;
+  const featuredTitle = overview?.featured?.title ?? live.title;
+  const featuredLine = overview?.featured?.tagline ?? live.line;
+  const featuredSlug = overview?.featured?.slug ?? "no-long-thing";
+  const featuredPot: BrandCampaign = overview?.featured
+    ? {
+        ...live,
+        title: overview.featured.title,
+        line: overview.featured.tagline ?? live.line,
+        image: overview.featured.cover_image_url ?? live.image,
+        slug: overview.featured.slug,
+        pot: overview.featured.pot,
+        remaining: overview.featured.remaining,
+        rate: overview.featured.payout_rule?.rate_per_1000_views ?? live.rate,
+        verifiedViews: overview.featured.metrics?.verified_views ?? live.verifiedViews,
+        approved: overview.featured.metrics?.approved ?? live.approved,
+        review: overview.featured.metrics?.review ?? live.review,
+        submissions: overview.featured.metrics?.submissions ?? live.submissions,
+      }
+    : live;
+
   return <div className="brand-page brand-overview-page">
-    <section className="brand-command"><div className="brand-command__copy"><Status tone={pendingReviews ? "gold" : "lime"}>{pendingReviews ? `${pendingReviews} need review` : "Campaign live"}</Status><h1>{pendingReviews ? <>{pendingReviews} clips need<br />your review.</> : <>What are we posting today,<br />Gbedu Records?</>}</h1><p>{pendingReviews ? "These submissions are waiting for a decision before they can earn." : "Create a campaign or check the campaigns already running."}</p><div className="brand-command__actions"><ActionLink href={pendingReviews ? "/brand/reviews" : "/brand/campaigns/new"}>{pendingReviews ? "Review submissions" : "Create a campaign"}</ActionLink><ActionLink href="/brand/campaigns/new" dark>Create campaign</ActionLink></div></div><div className="brand-command__visual"><div className="brand-command__image"><Image src={live.image} alt="Creator from the No long thing campaign" fill sizes="(max-width: 900px) 100vw, 44vw" priority /></div><BrandArt src={art.funding} label="Campaign pot" tone="gold" compact /><span className="brand-command__stamp"><b><AnimatedNumber value={84} /></b> submissions</span></div></section>
-    <section className="brand-live-board"><div className="brand-live-board__head"><div><Status tone="gold">Closing in 4 days</Status><h2>{live.title}</h2><p>{live.line}</p></div><Link href="/brand/campaigns/no-long-thing">View campaign<ProductIcon name="arrow" /></Link></div><div className="brand-live-board__grid"><PotBar campaign={live} /><article><small>Verified views</small><strong><AnimatedNumber value={live.verifiedViews} format="compact" /></strong><p>read from connected creator accounts</p><span className="signal-ripples"><i /><i /><i /></span></article><article><small>Approved clips</small><strong><AnimatedNumber value={live.approved} padStart={2} /></strong><p>clips currently earning</p><div className="creator-token-stack"><i>KM</i><i>TO</i><i>NA</i><i>+58</i></div></article><article className="review-callout"><BrandArt src={art.review} label="Review queue" tone="lime" compact /><div><small>Needs review</small><strong><AnimatedNumber value={live.review} padStart={2} /></strong><p>These clips do not earn until you decide.</p><Link href="/brand/reviews">Review now<ProductIcon name="arrow" /></Link></div></article></div></section>
-    <section className="brand-proof-ribbon"><div><ProductIcon name="eye" /><span><small>Views verified today</small><strong><AnimatedNumber value={72800} /></strong></span></div><i /><div><ProductIcon name="wallet" /><span><small>Creator earnings today</small><strong><Money value={36400} /></strong></span></div><i /><div><ProductIcon name="shield" /><span><small>Unmatched spend</small><strong><Money value={0} /></strong></span></div></section>
+    <section className="brand-command"><div className="brand-command__copy"><Status tone={pendingReviews ? "gold" : "lime"}>{pendingReviews ? `${pendingReviews} need review` : "Campaign live"}</Status><h1>{pendingReviews ? <>{pendingReviews} clips need<br />your review.</> : <>What are we posting today,<br />{orgName}?</>}</h1><p>{pendingReviews ? "These submissions are waiting for a decision before they can earn." : "Create a campaign or check the campaigns already running."}</p><div className="brand-command__actions"><ActionLink href={pendingReviews ? "/brand/reviews" : "/brand/campaigns/new"}>{pendingReviews ? "Review submissions" : "Create a campaign"}</ActionLink><ActionLink href="/brand/campaigns/new" dark>Create campaign</ActionLink></div></div><div className="brand-command__visual"><div className="brand-command__image"><Image src={featuredImage} alt="Creator from the featured campaign" fill sizes="(max-width: 900px) 100vw, 44vw" priority /></div><BrandArt src={art.funding} label="Campaign pot" tone="gold" compact /><span className="brand-command__stamp"><b><AnimatedNumber value={featuredPot.submissions} /></b> submissions</span></div></section>
+    <section className="brand-live-board"><div className="brand-live-board__head"><div><Status tone="gold">Closing in 4 days</Status><h2>{featuredTitle}</h2><p>{featuredLine}</p></div><Link href={`/brand/campaigns/${featuredSlug}`}>View campaign<ProductIcon name="arrow" /></Link></div><div className="brand-live-board__grid"><PotBar campaign={featuredPot} /><article><small>Verified views</small><strong><AnimatedNumber value={overview?.featured?.metrics?.verified_views ?? live.verifiedViews} format="compact" /></strong><p>read from connected creator accounts</p><span className="signal-ripples"><i /><i /><i /></span></article><article><small>Approved clips</small><strong><AnimatedNumber value={overview?.featured?.metrics?.approved ?? live.approved} padStart={2} /></strong><p>clips currently earning</p><div className="creator-token-stack"><i>KM</i><i>TO</i><i>NA</i><i>+58</i></div></article><article className="review-callout"><BrandArt src={art.review} label="Review queue" tone="lime" compact /><div><small>Needs review</small><strong><AnimatedNumber value={pendingReviews} padStart={2} /></strong><p>These clips do not earn until you decide.</p><Link href="/brand/reviews">Review now<ProductIcon name="arrow" /></Link></div></article></div></section>
+    <section className="brand-proof-ribbon"><div><ProductIcon name="eye" /><span><small>Views verified today</small><strong><AnimatedNumber value={overview?.views_last_24h ?? 72800} /></strong></span></div><i /><div><ProductIcon name="wallet" /><span><small>Creator earnings today</small><strong><Money value={overview?.earnings_last_24h ?? 36400} /></strong></span></div><i /><div><ProductIcon name="shield" /><span><small>Unmatched spend</small><strong><Money value={overview?.unmatched_spend ?? 0} /></strong></span></div></section>
   </div>;
 }
 
@@ -90,9 +120,36 @@ function CampaignCard({ campaign }: { campaign: BrandCampaign }) {
   return <Link href={href} className={`brand-campaign-card brand-campaign-card--${campaign.state.toLowerCase()}`}><div className="brand-campaign-card__image"><Image src={campaign.image} alt="" fill sizes="(max-width: 700px) 100vw, 320px" /><Status tone={campaign.state === "Live" ? "lime" : campaign.state === "Draft" ? "gold" : "paper"}>{campaign.state}</Status></div><div className="brand-campaign-card__body"><div><small>Gbedu Records</small><h2>{campaign.title}</h2><p>{campaign.line}</p></div><dl><div><dt>Rate</dt><dd><Money value={campaign.rate} /> / 1K</dd></div><div><dt>{campaign.state === "Completed" ? "Delivered" : "Pot left"}</dt><dd>{campaign.state === "Completed" ? <AnimatedNumber value={campaign.verifiedViews} format="compact" suffix=" views" /> : <Money value={campaign.remaining} />}</dd></div><div><dt>Clips</dt><dd><AnimatedNumber value={campaign.submissions} padStart={2} /></dd></div></dl><span>{campaign.state === "Completed" ? "Open closeout" : "Open campaign"}<ProductIcon name="arrow" /></span></div></Link>;
 }
 
+function campaignOutToBrand(c: CampaignOut): BrandCampaign {
+  const phase = c.phase as BrandCampaignState;
+  return {
+    slug: c.slug,
+    title: c.title,
+    line: c.tagline ?? c.description.slice(0, 100),
+    state: phase === "Funding" ? "Funding" : phase === "Draft" ? "Draft" : phase === "Completed" ? "Completed" : "Live",
+    image: c.cover_image_url ?? "/assets/video/creator-reaction-poster.jpg",
+    pot: c.pot,
+    remaining: c.remaining,
+    rate: c.payout_rule?.rate_per_1000_views ?? 0,
+    verifiedViews: c.metrics?.verified_views ?? 0,
+    submissions: c.metrics?.submissions ?? 0,
+    approved: c.metrics?.approved ?? 0,
+    review: c.metrics?.review ?? 0,
+    daysLeft: c.time_left?.days ?? 0,
+  };
+}
+
 export function BrandCampaignsScreen() {
   const [filter, setFilter] = useState<"All" | BrandCampaign["state"]>("All");
-  const visible = brandCampaigns.filter((campaign) => filter === "All" || campaign.state === filter);
+  const [allCampaigns, setAllCampaigns] = useState<BrandCampaign[]>(brandCampaigns);
+
+  useEffect(() => {
+    campaignsApi.list().then((data) => {
+      if (data.items.length > 0) setAllCampaigns(data.items.map(campaignOutToBrand));
+    }).catch(() => undefined);
+  }, []);
+
+  const visible = allCampaigns.filter((campaign) => filter === "All" || campaign.state === filter);
   return <div className="brand-page"><PageHeading title="Campaigns" copy="Create a campaign or open one that is already running." action={<ActionLink href="/brand/campaigns/new">Create campaign</ActionLink>} /><div className="brand-filter-row">{["All", "Live", "Draft", "Completed"].map((item) => <button type="button" key={item} className={filter === item ? "is-active" : ""} onClick={() => setFilter(item as typeof filter)}>{item}{item === "Live" && <i />}</button>)}</div><section className="brand-campaign-grid">{visible.map((campaign) => <CampaignCard campaign={campaign} key={campaign.slug} />)}</section></div>;
 }
 
@@ -173,9 +230,49 @@ function ReviewCard({ review }: { review: BrandReview }) {
   return <Link href={`/brand/reviews/${review.id}`} className="review-card"><div className="review-card__image"><Image src={review.image} alt="" fill sizes="(max-width: 700px) 100vw, 280px" /><span><ProductIcon name="play" /></span><b>{review.platform}</b></div><div className="review-card__body"><div><Status tone="gold">Needs review</Status><small>{review.submitted}</small></div><h2>{review.title}</h2><p>{review.creator} <span>{review.handle}</span></p><blockquote>{review.issue}</blockquote><div><span>Checker confidence</span><strong><AnimatedNumber value={review.confidence} suffix="%" /></strong><i><b style={{ width: `${review.confidence}%` }} /></i></div></div><ProductIcon name="arrow" /></Link>;
 }
 
+const tabMap: Record<string, "needs_review" | "appeals" | "resolved"> = {
+  "Needs review": "needs_review",
+  "Appeals": "appeals",
+  "Resolved": "resolved",
+};
+
+function apiReviewToBrand(r: ApiReviewCard): BrandReview {
+  const validPlatforms = ["TikTok", "Instagram", "YouTube"] as const;
+  const platform = validPlatforms.find((p) => p.toLowerCase() === r.platform.toLowerCase()) ?? "TikTok";
+  return {
+    id: r.id,
+    title: r.title ?? r.campaign_title,
+    creator: r.creator_name,
+    handle: r.creator_handle ? `@${r.creator_handle.replace(/^@/, "")}` : "",
+    platform,
+    image: r.video_url ?? "/assets/video/creator-reaction-poster.jpg",
+    submitted: new Date(r.submitted_at).toLocaleDateString("en-NG", { day: "numeric", month: "short" }),
+    issue: r.issue ?? "Please review this submission.",
+    confidence: Math.round((r.confidence ?? 0.75) * 100),
+  };
+}
+
 export function BrandReviewQueueScreen() {
   const [filter, setFilter] = useState("Needs review");
-  return <div className="brand-page review-queue-page"><PageHeading title="7 submissions need review." copy="Approve a submission or request a correction. These clips are not earning yet." action={<div className="review-count"><AnimatedNumber value={7} padStart={2} /><span>waiting<br />for review</span></div>} /><div className="brand-filter-row">{["Needs review", "Appeals", "Resolved"].map((item) => <button type="button" key={item} onClick={() => setFilter(item)} className={filter === item ? "is-active" : ""}>{item}{item === "Needs review" && <b>7</b>}</button>)}</div>{filter === "Needs review" ? <section className="review-list">{brandReviews.map((review) => <ReviewCard review={review} key={review.id} />)}</section> : <section className="review-empty"><BrandArt src={filter === "Appeals" ? art.review : art.proof} label={filter === "Appeals" ? "No appeals waiting" : "Queue cleared"} tone="lime" compact /><h2>{filter === "Appeals" ? "Nothing has been appealed." : "No resolved submissions yet."}</h2><p>{filter === "Appeals" ? "Creator appeals will arrive here with the original verdict and supporting evidence." : "Resolved submissions will appear here with the decision and evidence."}</p></section>}</div>;
+  const [reviews, setReviews] = useState<BrandReview[]>(brandReviews);
+  const [counts, setCounts] = useState({ needs_review: 7, appeals: 0, resolved: 0 });
+
+  useEffect(() => {
+    const tab = tabMap[filter] ?? "needs_review";
+    brandApi.reviews(tab).then((data) => {
+      setCounts(data.counts);
+      if (tab === "needs_review") {
+        setReviews(data.items.length > 0 ? data.items.map(apiReviewToBrand) : brandReviews);
+      }
+    }).catch(() => undefined);
+  }, [filter]);
+
+  const needsCount = counts.needs_review;
+  return <div className="brand-page review-queue-page">
+    <PageHeading title={`${needsCount} submission${needsCount !== 1 ? "s" : ""} need review.`} copy="Approve a submission or request a correction. These clips are not earning yet." action={<div className="review-count"><AnimatedNumber value={needsCount} padStart={2} /><span>waiting<br />for review</span></div>} />
+    <div className="brand-filter-row">{["Needs review", "Appeals", "Resolved"].map((item) => <button type="button" key={item} onClick={() => setFilter(item)} className={filter === item ? "is-active" : ""}>{item}{item === "Needs review" && <b>{needsCount}</b>}</button>)}</div>
+    {filter === "Needs review" ? <section className="review-list">{reviews.map((review) => <ReviewCard review={review} key={review.id} />)}</section> : <section className="review-empty"><BrandArt src={filter === "Appeals" ? art.review : art.proof} label={filter === "Appeals" ? "No appeals waiting" : "Queue cleared"} tone="lime" compact /><h2>{filter === "Appeals" ? "Nothing has been appealed." : "No resolved submissions yet."}</h2><p>{filter === "Appeals" ? "Creator appeals will arrive here with the original verdict and supporting evidence." : "Resolved submissions will appear here with the decision and evidence."}</p></section>}
+  </div>;
 }
 
 export function BrandReviewDetailScreen({ id = "submission-1042" }: { id?: string }) {
