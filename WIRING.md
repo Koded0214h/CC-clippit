@@ -1,204 +1,99 @@
-# Clippit — API Wiring Status
+# Clippit API Wiring Audit
 
-Tick `- [x]` once you've visually confirmed a feature end-to-end.
-Auth was tested in a prior session and is pre-checked. Everything else is wired but not yet visually confirmed.
+Audit date: 23 September 2026. Source of truth: the live FastAPI OpenAPI
+document at `http://localhost:8000/openapi.json` and a static inspection of
+the frontend. The live document has **203 operations**.
 
----
+## Status definitions
 
-## Legend
+| Status | Meaning |
+|---|---|
+| Fully connected | Typed frontend client, consumed by a real screen/action, and the existing mock stays as its empty/error fallback. |
+| Partial | A client/screen exists but a write failure is hidden, a route is not data-driven end-to-end, or only part of the experience is connected. |
+| Client only | A typed function exists but no frontend screen invokes it. |
+| No client | No typed frontend function or real frontend usage exists. |
+| Internal | Service-to-service endpoint; intentionally not exposed to the browser. |
 
-| Badge | Meaning |
-|-------|---------|
-| ✅ Tested | Confirmed working in a real session |
-| 🟡 Wired | Code connected — not yet visually confirmed |
-| 🔵 Partial | Wired but endpoint has a dependency caveat |
-| 🔴 Blocked | Endpoint missing or dependency not ready |
+## Fully connected operations
 
----
-
-## Authentication
-
-| # | Feature | Endpoint | Status |
-|---|---------|----------|--------|
-| - [x] | Creator & brand login | `POST /auth/login` | ✅ Tested |
-| - [x] | Creator & brand registration | `POST /auth/register` | ✅ Tested |
-| - [x] | Auto token refresh on 401 (client interceptor) | `POST /auth/refresh` | ✅ Tested |
-| - [x] | Logout | `POST /auth/logout` | ✅ Tested |
-
----
-
-## Shell — Badges & Counters
-
-> `ProductShell` (dashboard) + `BrandShell` (brand)
-
-| # | Feature | Endpoint | Status |
-|---|---------|----------|--------|
-| - [ ] | Dashboard wallet pill — payable balance | `GET /earnings/summary` | 🟡 Wired |
-| - [ ] | Dashboard notification bell — unread count | `GET /notifications/unread-count` | 🟡 Wired |
-| - [ ] | Brand shell notification bell — unread count | `GET /notifications/unread-count` | 🟡 Wired |
-| - [ ] | Brand nav — pending-reviews badge on Review queue link | `GET /brand/overview` | 🟡 Wired |
-| - [ ] | Brand topbar — live pot value (`total_pot − total_spent`) | `GET /brand/overview` | 🟡 Wired |
-
----
-
-## Dashboard Home
-
-> `/dashboard`
-
-| # | Feature | Endpoint | Status |
-|---|---------|----------|--------|
-| - [ ] | Featured campaign card (closing-soon campaign) | `GET /creators/me/overview` | 🟡 Wired |
-| - [ ] | Earnings receipt — total, payable, in-hold, paid all time, active clips | `GET /creators/me/overview` | 🟡 Wired |
-| - [ ] | Campaign tape row (up to 6 new campaigns) | `GET /campaigns?feed=all&page_size=6` | 🟡 Wired |
-| - [ ] | Mini leaderboard (top 4, weekly) | `GET /earnings/leaderboard?period=week` | 🟡 Wired |
-
----
-
-## Campaign Directory & Detail
-
-> `/dashboard/campaigns`
-
-| # | Feature | Endpoint | Status |
-|---|---------|----------|--------|
-| - [ ] | Campaign directory — list with feed filter tabs (All / For you / Closing soon / Joined) | `GET /campaigns?feed={filter}` | 🟡 Wired |
-| - [ ] | Campaign detail — brief, rules, payout vitals | `GET /campaigns/{slug}` | 🟡 Wired |
-| - [ ] | Campaign detail — sidebar leaderboard (top 3 for this campaign) | `GET /earnings/leaderboard?campaign={slug}` | 🟡 Wired |
-| - [ ] | Full leaderboard screen | `GET /earnings/leaderboard?period=week` | 🟡 Wired |
-
----
-
-## Creator Flows
-
-> `/dashboard/withdraw` · `/dashboard/campaigns/*/submit`
-
-| # | Feature | Endpoint | Status |
-|---|---------|----------|--------|
-| - [ ] | Withdraw screen — payable balance | `GET /earnings/summary` | 🟡 Wired |
-| - [ ] | Withdraw screen — bank account display (name, masked number, verified state) | `GET /creators/me/bank-details` | 🟡 Wired |
-| - [ ] | Submit clip — campaign title, brand, rate, platform list | `GET /campaigns/{slug}` | 🟡 Wired |
-
----
-
-## Payout Account Setup
-
-> `/dashboard/payout-account`
-
-| # | Feature | Endpoint | Status | Notes |
-|---|---------|----------|--------|-------|
-| - [ ] | Bank selector dropdown | `GET /banks` | 🔵 Partial | Dependency-pending in production — 7-bank hardcoded fallback used as default |
-| - [ ] | Account name resolution (fires on 10-digit account number) | `POST /banks/resolve` | 🔵 Partial | Dependency-pending: production bank provider not connected. Fails gracefully — submit is blocked until resolved |
-| - [ ] | Save bank details on confirm | `PUT /creators/me/bank-details` | 🟡 Wired | |
-
----
-
-## Connected Accounts
-
-> `/dashboard/accounts`
-
-| # | Feature | Endpoint | Status |
-|---|---------|----------|--------|
-| - [ ] | Load platform accounts (handle, connectable status, last-checked time) | `GET /social/accounts` | 🟡 Wired |
-| - [ ] | Disconnect a platform | `DELETE /social/{platform}` | 🟡 Wired |
-
----
-
-## Creator Settings
-
-> `/dashboard/settings`
-
-| # | Feature | Endpoint | Status |
-|---|---------|----------|--------|
-| - [ ] | Profile — load display name, bio, photo URL | `GET /creators/me/profile` | 🟡 Wired |
-| - [ ] | Profile — save changes | `PUT /creators/me/profile` | 🟡 Wired |
-| - [ ] | Payout account — display saved bank detail or Add account CTA | `GET /creators/me/bank-details` | 🟡 Wired |
-| - [ ] | Notifications — load 4 toggle states | `GET /profile/preferences` | 🟡 Wired |
-| - [ ] | Notifications — PATCH on each toggle change | `PATCH /profile/preferences` | 🟡 Wired |
-
----
-
-## Brand Live Campaign
-
-> `/brand/campaigns/{slug}`
-
-| # | Feature | Endpoint | Status |
-|---|---------|----------|--------|
-| - [ ] | Campaign header — title, brand name, status | `GET /campaigns/{slug}` | 🟡 Wired |
-| - [ ] | Campaign stats — verified views, approvals, review/checking/rejected breakdown | `GET /campaigns/{slug}/stats` | 🟡 Wired |
-| - [ ] | Submissions table — creator, platform, verified views, earned, state | `GET /campaigns/{slug}/submissions` | 🟡 Wired |
-
----
-
-## Brand Review Queue & Detail
-
-> `/brand/reviews`
-
-| # | Feature | Endpoint | Status |
-|---|---------|----------|--------|
-| - [ ] | Review queue — list + needs-review / appeals / resolved tab counts | `GET /brand/reviews?tab={tab}` | 🟡 Wired |
-| - [ ] | Review detail — load creator name, confidence score, flagged issue | `GET /brand/reviews/{id}` | 🟡 Wired |
-| - [ ] | Approve submission | `POST /brand/reviews/{id}/approve` | 🟡 Wired |
-| - [ ] | Request a correction | `POST /brand/reviews/{id}/correction` | 🟡 Wired |
-
----
-
-## Brand Settings
-
-> `/brand/settings`
-
-| # | Feature | Endpoint | Status |
-|---|---------|----------|--------|
-| - [ ] | Organisation identity — load name, bio, website, legal name, verified state | `GET /organisations/me/profile` | 🟡 Wired |
-| - [ ] | Organisation identity — save changes | `PATCH /organisations/me/profile` | 🟡 Wired |
-| - [ ] | Campaign alerts — load 3 toggle states (funding, reviews, weekly report) | `GET /profile/preferences` | 🟡 Wired |
-| - [ ] | Campaign alerts — PATCH on each toggle change | `PATCH /profile/preferences` | 🟡 Wired |
-
----
-
-## 🔴 Blocked — Not Wirable
-
-These cannot be tested because the endpoint is missing or a dependency is not ready.
-
-| Feature | Endpoint | Reason |
-|---------|----------|--------|
-| Submit a clip to a campaign | `POST /submissions` | Automated brief verifier not ready (dependency pending) |
-| Initiate a withdrawal / payout | `POST /payouts` | Live money rehearsal not ready (dependency pending) |
-| Campaign join / leave | `POST\|DELETE /campaigns/{ref}/join` | Missing P0 — endpoints not yet built |
-| Brand transaction history | `GET /organisations/me/transactions` | Missing P0 — endpoint not yet built |
-| Submit an appeal | `POST /submissions/{id}/appeal` | Static route `/dashboard/submissions/appeal` has no submission ID in the URL |
-
----
-
-## Admin Operations
-
-The original admin fixtures are retained as the intentional empty/error state.
-The following screens replace their fixtures only after a successful,
-non-empty response:
-
-| Feature | Endpoint | Status |
+| Experience | Live operations | Frontend owner |
 |---|---|---|
-| Operator login | `POST /auth/login` | Wired |
-| Command-centre pulse | `GET /admin/overview` | Wired |
-| Customer queue | `GET /admin/users` | Wired |
-| Campaign queue | `GET /admin/campaigns` | Wired |
-| Submission queue | `GET /admin/submissions` | Wired |
-| Support queue | `GET /admin/support/tickets` | Wired |
-| Dispute queue | `GET /admin/disputes` | Wired |
-| Payout queue | `GET /admin/payouts` | Wired |
-| Typed admin API client | All 52 `/admin/*` operations | Client complete; UI consumption partial |
+| Account registration and recovery | `POST /auth/signup`, `/auth/login`, `/auth/logout`, `/auth/refresh`, `/auth/verify-email`, `/auth/verify-email/resend`, `/auth/forgot-password`, `/auth/recovery-code/verify`, `/auth/reset-password` | `AuthPages.tsx`, `user-context.tsx` |
+| Account security and deletion | `POST /auth/change-password`, `GET /auth/sessions`, `DELETE /auth/sessions/{session_id}`, `DELETE /auth/sessions/others`, `POST /auth/step-up/request`, `/auth/step-up/verify`, `DELETE /auth/account` | Customer security/account screens |
+| Creator home and discovery | `GET /creators/me/overview`, `/creators/me/clips`, `/campaigns`, `/campaigns/{campaign_ref}`, `/campaigns/{campaign_ref}/stats`, `/campaigns/{campaign_ref}/submissions`, `/leaderboard` | Dashboard and brand campaign screens |
+| Creator earnings | `GET /earnings/summary`, `/earnings/history` | Creator earnings and withdrawal screens |
+| Creator profile and preferences | `GET|PUT /creators/me/profile`, `GET|PATCH /profile/preferences` | Dashboard settings |
+| Connected accounts | `GET /social/accounts`, `DELETE /social/{platform}` | Creator connected-accounts screen |
+| Bank account setup | `GET /banks`, `POST /banks/resolve`, `GET|PUT /creators/me/bank-details` | Payout-account screen |
+| Brand overview and reviews | `GET /brand/overview`, `GET /brand/reviews`, `GET /brand/reviews/{submission_id}`, `POST /brand/reviews/{submission_id}/approve`, `POST /brand/reviews/{submission_id}/request-correction` | Brand screens |
+| Brand identity and alerts | `GET|PUT /organisations/me/profile`, `GET|PATCH /profile/preferences` | Brand settings |
+| Notifications | `GET /notifications`, `GET /notifications/unread-count`, `POST /notifications/read-all` | Customer notifications and shell badges |
+| Admin command centre and queues | `POST /auth/login`, `GET /admin/overview`, `/admin/users`, `/admin/campaigns`, `/admin/submissions`, `/admin/support/tickets`, `/admin/disputes`, `/admin/payouts` | `AdminScreens.tsx` |
 
-KYC/KYB, refunds, risk, ledger, audit, provider health, operator management,
-and admin detail/action views still display their mock UI because they either
-lack a matching backend screen contract or have not yet been connected. They
-are explicitly not visually verified.
+The fully connected screens retain their original fixture data. Real data is
+used only after a successful non-empty response; empty/error responses keep
+the designed fallback state.
 
----
+## Partial operations
 
-## Summary
+| Operation | Why it is partial |
+|---|---|
+| `POST /submissions`, `POST /submissions/{submission_id}/resubmit` | Submit-clip screen invokes the API, but currently advances through the mock success flow if the API rejects the request. |
+| `GET /campaigns/{campaign_ref}` on submit-clip | Campaign metadata is live, but video upload is not sent to `POST /uploads/videos` before submission. |
+| `POST /creators/me/bank-details/verify` | Typed client exists; the payout-account experience does not invoke verification. |
 
-| Status | Count |
-|--------|-------|
-| ✅ Tested | 4 |
-| 🟡 Wired (not yet confirmed) | 38 |
-| 🔵 Partial (dependency caveat) | 2 |
-| 🔴 Blocked | 5 |
-| **Total wired** | **44** |
+## Typed client exists, but no screen consumes it
+
+| Area | Operations not currently consumed by a frontend experience |
+|---|---|
+| Admin finance and moderation | `GET /admin/payouts` detail/actions, funding list/confirm, blocked earnings, settle, sweep, business verification, audit, user detail/suspend/restore, submission detail/trust actions/flagged/random audits, campaign detail/pause/close, earnings list/detail/hold/release, ledger list/detail, operators/invite/update/suspend/restore, trust rules, provider health, all admin ticket detail/update/reply/note actions, all admin dispute detail/update/resolve/reopen actions, and all admin reports operations. |
+| Payouts | `POST /payouts`, `GET /payouts`, `GET /payouts/{payout_id}`. The withdrawal and receipt UI still use local state/mock receipt data. |
+| Submissions | `GET /submissions`, `/submissions/{submission_id}`, `/earnings`, `/performance`; `POST /appeal`, `/withdraw`. |
+| Notifications | `POST /notifications/{notification_id}/read` and `/archive`. |
+| Campaign membership | `POST|DELETE /campaigns/{campaign_ref}/join`. |
+
+## No typed frontend client or real screen wiring
+
+| Backend area | Operations |
+|---|---|
+| Auth / identity | `GET /auth/me`, `/auth/permissions`, `/auth/providers`, Google login/link/callback/unlink, first-password, and admin-invitation status/acceptance. |
+| Campaign authoring and lifecycle | All `GET|POST|PATCH|DELETE /campaign-drafts*`; `POST /campaigns`; `PATCH /campaigns/{campaign_ref}`; activate, close, pause, resume; payout-rule; pool; rules; report. |
+| Campaign funding and refunds | All `/campaigns/{campaign_ref}/funding*` and `/campaigns/{campaign_ref}/refunds*` operations. |
+| Creator and organisation onboarding | All `/creators/me/onboarding*` and `/organisations/me/onboarding*` operations; `GET /creators/me/accounts`; `GET /creators/{creator_id}/bank-details`; organisation transaction list/detail. |
+| Customer support | All `GET|POST /support/tickets*` operations. Current support pages are fixture/local-storage experiences. |
+| Customer disputes | All `GET|POST /disputes*` operations. Current dispute pages are fixture/local-storage experiences. |
+| Legal, reports, receipts and public product | All `/legal/*`, `/reports*`, `/receipts/{reference}/verify`, `/product-config`, `/handles/{handle}/availability`, `/profiles/creators/*`, and `/profiles/organisations/*` operations. |
+| Uploads and push | `POST /uploads/evidence`, `/uploads/images`, `/uploads/videos`; `POST|DELETE /push-subscriptions*`. |
+| Social OAuth | `GET /social/{platform}/login` and `/callback`. The account screen can list/disconnect but cannot start a real connection. |
+
+## Intentionally browser-unwired internal operations
+
+`GET /health`; every `/internal/*` endpoint (social tokens, internal users,
+performance/tracking/trust, and trust rules). These are service or deployment
+contracts and must not be called directly by the browser.
+
+## Frontend experiences with no matching usable endpoint
+
+| Experience | Finding |
+|---|---|
+| Admin KYC / creator verification | No admin KYC queue, detail, or decision operation exists in the live specification. |
+| Admin KYB / business verification queue | Business verification write exists, but no admin organisation/KYB queue or detail read contract exists. |
+| Admin refunds queue/detail | No global admin refund queue/detail/action contract exists; only campaign-scoped refund operations exist. |
+| Admin risk cases | No admin risk-case queue, detail, or action contract exists. |
+| Admin webhooks and delivery monitor | No webhook/delivery monitoring endpoint exists. |
+| Admin roles and runtime controls | No role-matrix or system-maintenance configuration endpoint exists. |
+| Support/help content | No help-centre/article API exists. |
+
+## Known contract defect fixed during this audit
+
+`frontend/lib/api/brand.ts` now calls the live correction endpoint:
+`POST /brand/reviews/{submission_id}/request-correction`.
+
+## Verification
+
+- `npm run typecheck` passes.
+- Backend `compileall` passes.
+- `GET /health` returns `{"status":"ok"}`.
+- Swagger UI responds at `http://localhost:8000/docs`.
+- A production frontend build did not complete in this environment, so it is
+  not marked as verified.

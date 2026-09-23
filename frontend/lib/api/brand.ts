@@ -58,7 +58,7 @@ export const brandApi = {
     api.post<void>(`/brand/reviews/${submissionId}/approve`, { note: note ?? null }),
 
   requestCorrection: (submissionId: string, reason: string, requirementId?: string) =>
-    api.post<void>(`/brand/reviews/${submissionId}/correction`, {
+    api.post<void>(`/brand/reviews/${submissionId}/request-correction`, {
       reason,
       requirement_id: requirementId ?? null,
     }),
