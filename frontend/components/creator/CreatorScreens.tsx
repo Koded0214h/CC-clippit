@@ -13,6 +13,7 @@ import { earningsApi, type EarningRow } from "@/lib/api/earnings";
 import { creatorApi } from "@/lib/api/creator";
 import { socialApi, type ConnectedAccountOut } from "@/lib/api/social";
 import { bankDetailsApi, type BankAccountOut } from "@/lib/api/bankDetails";
+import { campaignsApi } from "@/lib/api/campaigns";
 
 const art = {
   appeal: "/assets/illustrations/clippit-icons/appeal-review.webp",
@@ -146,12 +147,27 @@ export function ConnectedAccountsScreen() {
 
 export function SubmitClipScreen({ campaignSlug = "indomie-no-long-thing" }: { campaignSlug?: string }) {
   const router = useRouter();
-  const campaign = campaigns.find((item) => item.slug === campaignSlug) ?? campaigns[0];
-  const [platform, setPlatform] = useState("TikTok");
+  const staticCampaign = campaigns.find((item) => item.slug === campaignSlug) ?? campaigns[0];
+  const [campaign, setCampaign] = useState(staticCampaign);
+  const [platform, setPlatform] = useState(staticCampaign.platforms[0] ?? "TikTok");
+
+  useEffect(() => {
+    campaignsApi.get(campaignSlug).then((data) => {
+      setCampaign((current) => ({
+        ...current,
+        title: data.title,
+        brand: data.brand?.name ?? current.brand,
+        rate: data.payout_rule?.rate_per_1000_views ?? current.rate,
+        image: data.cover_image_url ?? current.image,
+        platforms: data.platforms.length > 0 ? data.platforms : current.platforms,
+      }));
+      if (data.platforms.length > 0) setPlatform(data.platforms[0]);
+    }).catch(() => undefined);
+  }, [campaignSlug]);
   const [url, setUrl] = useState("");
   const [file, setFile] = useState("");
   const [error, setError] = useState("");
-  const submit = (event: FormEvent) => { event.preventDefault(); if (!url.trim()) return setError("Paste the public link to your posted clip."); setError(""); window.localStorage.setItem("clippit:last-submission", JSON.stringify({ campaign: campaign.slug, platform, url, file })); router.push("/dashboard/submissions/processing"); };
+  const submit = (event: FormEvent) => { event.preventDefault(); if (!url.trim()) return setError("Paste the public link to your posted clip."); setError(""); window.localStorage.setItem("clippit:last-submission", JSON.stringify({ campaign: campaignSlug, platform, url, file })); router.push("/dashboard/submissions/processing"); };
   return <div className="dashboard-page creator-flow-page creator-submit-page">
     <Link className="product-back" href={`/dashboard/campaigns/${campaign.slug}`}><ProductIcon name="chevron" /> Back to campaign</Link>
     <CreatorHeading title="Submit clip" copy="Add the public post link and original video file." />

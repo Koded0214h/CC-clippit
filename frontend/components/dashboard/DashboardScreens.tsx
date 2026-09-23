@@ -496,8 +496,20 @@ export function CampaignDirectory() {
   );
 }
 
-export function CampaignDetail({ campaign }: { campaign: Campaign }) {
-  const [joined, setJoined] = useState(campaign.status === "Joined");
+export function CampaignDetail({ campaign: initialCampaign }: { campaign: Campaign }) {
+  const [campaign, setCampaign] = useState(initialCampaign);
+  const [joined, setJoined] = useState(initialCampaign.status === "Joined");
+  const [sideLeaders, setSideLeaders] = useState(leaderboard.slice(0, 3).map((r) => ({ ...r, is_me: r.name === "Tobi On Cam" })));
+
+  useEffect(() => {
+    campaignsApi.get(initialCampaign.slug).then((data) => {
+      setCampaign(campaignOutToLocal(data));
+      if (data.joined !== null) setJoined(!!data.joined);
+    }).catch(() => undefined);
+    earningsApi.leaderboard({ campaign: initialCampaign.slug }).then((data) => {
+      if (data.items.length > 0) setSideLeaders(data.items.slice(0, 3).map((r) => ({ ...r, handle: r.handle ?? "", is_me: r.is_me })));
+    }).catch(() => undefined);
+  }, [initialCampaign.slug]);
 
   return (
     <div className="dashboard-page campaign-detail-page">
@@ -568,7 +580,7 @@ export function CampaignDetail({ campaign }: { campaign: Campaign }) {
 
           <section className="campaign-leaders">
             <SectionTitle title="Campaign leaderboard" href="/dashboard/leaderboard" linkLabel="View board" />
-            {leaderboard.slice(0, 3).map((person) => (
+            {sideLeaders.map((person) => (
               <div key={person.rank}><span><AnimatedNumber value={person.rank} duration={600} /></span><i>{person.name.slice(0, 2).toUpperCase()}</i><p><strong>{person.name}</strong><small><AnimatedNumber value={person.views} format="compact" /> views</small></p><b><AnimatedMoney value={person.earned} /></b></div>
             ))}
           </section>
