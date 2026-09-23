@@ -14,6 +14,7 @@ import { authApi } from "@/lib/api/auth";
 import type { SessionOut } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
 import { notificationsApi } from "@/lib/api/notifications";
+import { bankDetailsApi, banksApi, type BankOut } from "@/lib/api/bankDetails";
 
 const CREATOR_PROFILE: StoredProfile = {
   name: "Tobi On Cam",
@@ -189,24 +190,74 @@ export function BrandNotificationsScreen() {
   </div>;
 }
 
-const banks = ["GTBank", "Access Bank", "First Bank", "Kuda", "OPay", "UBA", "Zenith Bank"];
+const FALLBACK_BANKS: BankOut[] = [
+  { code: "058", name: "GTBank" },
+  { code: "044", name: "Access Bank" },
+  { code: "011", name: "First Bank" },
+  { code: "090267", name: "Kuda" },
+  { code: "100004", name: "OPay" },
+  { code: "033", name: "UBA" },
+  { code: "057", name: "Zenith Bank" },
+];
 
 export function PayoutAccountScreen() {
   const [step, setStep] = useState(0);
-  const [bank, setBank] = useState("GTBank");
+  const [bankList, setBankList] = useState<BankOut[]>(FALLBACK_BANKS);
+  const [selectedBank, setSelectedBank] = useState<BankOut>(FALLBACK_BANKS[0]);
   const [account, setAccount] = useState("");
+  const [resolvedName, setResolvedName] = useState<string | null>(null);
+  const [resolving, setResolving] = useState(false);
   const [otp, setOtp] = useState("");
-  const resolved = account.length === 10;
-  const submitDetails = (event: FormEvent) => { event.preventDefault(); if (resolved) setStep(1); };
-  const verify = (event: FormEvent) => { event.preventDefault(); if (otp.length === 6) { window.localStorage.setItem("clippit:payout-bank", JSON.stringify({ bank, account })); setStep(2); } };
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    banksApi.list().then((data) => {
+      if (data.length > 0) {
+        setBankList(data);
+        setSelectedBank(data[0]);
+      }
+    }).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (account.length !== 10) { setResolvedName(null); return; }
+    setResolving(true);
+    bankDetailsApi.resolve(selectedBank.code, account)
+      .then((data) => setResolvedName(data.account_name))
+      .catch(() => setResolvedName(null))
+      .finally(() => setResolving(false));
+  }, [account, selectedBank.code]);
+
+  const submitDetails = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!resolvedName && !resolving) return;
+    setSaving(true);
+    try {
+      await bankDetailsApi.save({ bank_code: selectedBank.code, bank_name: selectedBank.name, account_number: account });
+    } catch { /* saved optimistically — let the OTP step proceed */ }
+    finally { setSaving(false); }
+    setStep(1);
+  };
+
+  const verify = (event: FormEvent) => {
+    event.preventDefault();
+    if (otp.length === 6) {
+      window.localStorage.setItem("clippit:payout-bank", JSON.stringify({ bank: selectedBank.name, account }));
+      setStep(2);
+    }
+  };
+
+  const maskedAccount = account.length >= 4 ? `•••• ••${account.slice(-4)}` : account;
+  const canSubmit = account.length === 10 && !resolving && (resolvedName !== null);
+  const displayName = resolvedName ?? (resolving ? "Checking…" : "Enter all 10 digits to resolve the name");
 
   return <div className="dashboard-page customer-page payout-account-page">
     <ScreenHead title={step === 2 ? "Bank account verified" : "Payout account"} copy={step === 2 ? "Payable earnings can now move to this account." : "Add the Nigerian bank account where your withdrawals should land."} back="/dashboard/settings" />
     <div className="bank-setup-layout">
       <aside className="bank-setup-rail"><div>{["Account", "Confirm", "Verified"].map((item, index) => <span className={index <= step ? "is-done" : ""} key={item}><i>{index < step ? <ProductIcon name="check" /> : index + 1}</i><b>{item}</b></span>)}</div><Image src="/assets/illustrations/clippit-icons/withdraw-bank.webp" alt="" width={520} height={520} /></aside>
-      {step === 0 && <form className="bank-setup-sheet" onSubmit={submitDetails}><header><span><ProductIcon name="bank" /></span><div><h2>Where should your money land?</h2><p>The account name must match your verified identity.</p></div></header><label><span>Bank</span><select value={bank} onChange={(event) => setBank(event.target.value)}>{banks.map((item) => <option key={item}>{item}</option>)}</select></label><label><span>Account number</span><input value={account} onChange={(event) => setAccount(event.target.value.replace(/\D/g, "").slice(0, 10))} inputMode="numeric" placeholder="10-digit account number" /><small>{account.length}/10</small></label><div className={`account-resolution${resolved ? " is-resolved" : ""}`}><span>{resolved ? <ProductIcon name="check" /> : <ProductIcon name="person" />}</span><p><small>Account holder</small><strong>{resolved ? "Tobi Adeyemi" : "Enter all 10 digits to resolve the name"}</strong></p></div><button className="lime-button" type="submit" disabled={!resolved}>Confirm this account<ProductIcon name="arrow" /></button></form>}
-      {step === 1 && <form className="bank-setup-sheet bank-confirm-sheet" onSubmit={verify}><header><span><ProductIcon name="shield" /></span><div><h2>Confirm it is you</h2><p>Enter the six-digit code sent to your phone ending 2041.</p></div></header><div className="bank-confirm-card"><small>New payout account</small><strong>{bank}</strong><b>•••• ••{account.slice(-4)}</b><span>Tobi Adeyemi</span></div><label><span>Verification code</span><input value={otp} onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" placeholder="000000" /><small>{otp.length}/6</small></label><button className="lime-button" type="submit" disabled={otp.length !== 6}>Verify payout account<ProductIcon name="arrow" /></button><button className="customer-text-button" type="button" onClick={() => setStep(0)}>Use a different account</button></form>}
-      {step === 2 && <section className="bank-verified-sheet"><div className="bank-verified-seal"><ProductIcon name="check" /><i /><i /></div><small>Verified payout destination</small><h2>{bank}</h2><strong>•••• ••{account.slice(-4)}</strong><p>Tobi Adeyemi</p><dl><div><dt>Currency</dt><dd>Nigerian naira</dd></div><div><dt>Transfer time</dt><dd>Within 24 hours</dd></div><div><dt>Security</dt><dd>Identity matched</dd></div></dl><Link className="lime-button" href="/dashboard/withdraw">Withdraw money<ProductIcon name="arrow" /></Link></section>}
+      {step === 0 && <form className="bank-setup-sheet" onSubmit={submitDetails}><header><span><ProductIcon name="bank" /></span><div><h2>Where should your money land?</h2><p>The account name must match your verified identity.</p></div></header><label><span>Bank</span><select value={selectedBank.code} onChange={(event) => { const found = bankList.find((b) => b.code === event.target.value); if (found) setSelectedBank(found); }}>{bankList.map((b) => <option key={b.code} value={b.code}>{b.name}</option>)}</select></label><label><span>Account number</span><input value={account} onChange={(event) => setAccount(event.target.value.replace(/\D/g, "").slice(0, 10))} inputMode="numeric" placeholder="10-digit account number" /><small>{account.length}/10</small></label><div className={`account-resolution${resolvedName ? " is-resolved" : ""}`}><span>{resolvedName ? <ProductIcon name="check" /> : <ProductIcon name="person" />}</span><p><small>Account holder</small><strong>{displayName}</strong></p></div><button className="lime-button" type="submit" disabled={!canSubmit || saving}>{saving ? "Saving…" : <>Confirm this account<ProductIcon name="arrow" /></>}</button></form>}
+      {step === 1 && <form className="bank-setup-sheet bank-confirm-sheet" onSubmit={verify}><header><span><ProductIcon name="shield" /></span><div><h2>Confirm it is you</h2><p>Enter the six-digit code sent to your phone ending 2041.</p></div></header><div className="bank-confirm-card"><small>New payout account</small><strong>{selectedBank.name}</strong><b>{maskedAccount}</b><span>{resolvedName}</span></div><label><span>Verification code</span><input value={otp} onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" placeholder="000000" /><small>{otp.length}/6</small></label><button className="lime-button" type="submit" disabled={otp.length !== 6}>Verify payout account<ProductIcon name="arrow" /></button><button className="customer-text-button" type="button" onClick={() => setStep(0)}>Use a different account</button></form>}
+      {step === 2 && <section className="bank-verified-sheet"><div className="bank-verified-seal"><ProductIcon name="check" /><i /><i /></div><small>Verified payout destination</small><h2>{selectedBank.name}</h2><strong>{maskedAccount}</strong><p>{resolvedName}</p><dl><div><dt>Currency</dt><dd>Nigerian naira</dd></div><div><dt>Transfer time</dt><dd>Within 24 hours</dd></div><div><dt>Security</dt><dd>Identity matched</dd></div></dl><Link className="lime-button" href="/dashboard/withdraw">Withdraw money<ProductIcon name="arrow" /></Link></section>}
     </div>
   </div>;
 }

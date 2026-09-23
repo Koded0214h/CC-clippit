@@ -11,6 +11,7 @@ import { campaignsApi, type CampaignOut } from "@/lib/api/campaigns";
 import { earningsApi, type LeaderRow } from "@/lib/api/earnings";
 import { creatorApi } from "@/lib/api/creator";
 import { creatorProfileApi } from "@/lib/api/social";
+import { bankDetailsApi, type BankAccountOut } from "@/lib/api/bankDetails";
 
 function campaignOutToLocal(c: CampaignOut): Campaign {
   return {
@@ -632,6 +633,7 @@ export function SettingsScreen() {
   const [activeSection, setActiveSection] = useState("profile");
   const storedProfile = useStoredProfile("creator", CREATOR_PROFILE_FALLBACK);
   const [profile, setProfile] = useState(CREATOR_PROFILE_FALLBACK);
+  const [bankDetail, setBankDetail] = useState<BankAccountOut | null>(null);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => setProfile(storedProfile));
@@ -647,6 +649,7 @@ export function SettingsScreen() {
         photo: data.photo_url || current.photo,
       }));
     }).catch(() => undefined);
+    bankDetailsApi.get().then(setBankDetail).catch(() => undefined);
   }, []);
 
   useEffect(() => {
@@ -716,7 +719,11 @@ export function SettingsScreen() {
 
           <section id="payouts" className="settings-sheet payout-sheet">
             <div className="settings-sheet__title"><div><h2>Payout account</h2><p>Payable money lands here.</p></div><ProductIcon name="bank" /></div>
-            <div className="bank-account"><span><ProductIcon name="bank" /></span><p><small>GTBank</small><strong>0123 456 789</strong><b>Tobi Adeyemi</b></p><i>Verified</i><Link className="bank-edit-link" href="/dashboard/payout-account">Change<ProductIcon name="arrow" /></Link></div>
+            {bankDetail ? (
+              <div className="bank-account"><span><ProductIcon name="bank" /></span><p><small>{bankDetail.bank_name}</small><strong>{bankDetail.account_number_masked}</strong>{bankDetail.account_name && <b>{bankDetail.account_name}</b>}</p><i>{bankDetail.verified ? "Verified" : "Unverified"}</i><Link className="bank-edit-link" href="/dashboard/payout-account">Change<ProductIcon name="arrow" /></Link></div>
+            ) : (
+              <div className="bank-account bank-account--empty"><span><ProductIcon name="bank" /></span><p><small>No payout account</small><strong>Add a bank account to withdraw earnings</strong></p><Link className="lime-button" href="/dashboard/payout-account">Add account<ProductIcon name="arrow" /></Link></div>
+            )}
             <p className="security-note"><ProductIcon name="shield" /> Account changes trigger a security review before the next withdrawal.</p>
           </section>
 
