@@ -168,6 +168,31 @@ These cannot be tested because the endpoint is missing or a dependency is not re
 
 ---
 
+## Admin Operations
+
+The original admin fixtures are retained as the intentional empty/error state.
+The following screens replace their fixtures only after a successful,
+non-empty response:
+
+| Feature | Endpoint | Status |
+|---|---|---|
+| Operator login | `POST /auth/login` | Wired |
+| Command-centre pulse | `GET /admin/overview` | Wired |
+| Customer queue | `GET /admin/users` | Wired |
+| Campaign queue | `GET /admin/campaigns` | Wired |
+| Submission queue | `GET /admin/submissions` | Wired |
+| Support queue | `GET /admin/support/tickets` | Wired |
+| Dispute queue | `GET /admin/disputes` | Wired |
+| Payout queue | `GET /admin/payouts` | Wired |
+| Typed admin API client | All 52 `/admin/*` operations | Client complete; UI consumption partial |
+
+KYC/KYB, refunds, risk, ledger, audit, provider health, operator management,
+and admin detail/action views still display their mock UI because they either
+lack a matching backend screen contract or have not yet been connected. They
+are explicitly not visually verified.
+
+---
+
 ## Summary
 
 | Status | Count |
