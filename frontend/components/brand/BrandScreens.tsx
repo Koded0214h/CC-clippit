@@ -10,7 +10,7 @@ import { ProfileAvatar, ProfilePhotoPicker, saveStoredProfile, useStoredProfile,
 import { ReceiptHeader } from "@/components/ui/ReceiptHeader";
 import { brandCampaigns, brandReviews, type BrandCampaign, type BrandCampaignState, type BrandReview } from "@/lib/brand";
 import { brandApi, type BrandOverviewOut, type ReviewCard as ApiReviewCard } from "@/lib/api/brand";
-import { campaignsApi, type CampaignOut } from "@/lib/api/campaigns";
+import { campaignsApi, type CampaignOut, type CampaignStats, type CampaignSubmissionRow } from "@/lib/api/campaigns";
 import { organisationsApi } from "@/lib/api/organisations";
 import { BRAND_CAMPAIGN_FEE_RATE, calculateFee, feePercentage } from "@/lib/fees";
 import { useBrandCampaign, type BriefRule } from "./BrandCampaignProvider";
@@ -216,15 +216,53 @@ export function CampaignFundedScreen() {
   return <div className="brand-page funded-page"><section className="funded-hero"><div className="funded-art">{draft.coverImage ? <div className="funded-cover"><Image src={draft.coverImage} alt={`${draft.title} campaign cover`} fill unoptimized sizes="420px" /></div> : <BrandArt src={art.funding} label="Pot received" tone="lime" />}<span><ProductIcon name="check" /></span></div><Status>Funds confirmed</Status><h1>Campaign funded.</h1><p>{draft.title} is live. Creators can now join and submit clips.</p><div><ActionLink href="/brand/campaigns/no-long-thing">View campaign</ActionLink><ActionLink href="/brand/campaigns" dark>Back to campaigns</ActionLink></div></section><aside className="funded-ticket"><ReceiptHeader title="Campaign funding certificate" reference="CLP-LIVE-041" /><div className="funded-ticket__campaign"><span>{draft.coverImage ? <Image src={draft.coverImage} alt="" fill unoptimized sizes="84px" /> : <Image src={art.funding} alt="" fill sizes="84px" />}</span><p><small>Funded campaign</small><strong>{draft.title}</strong><em>Gbedu Records</em></p><i><ProductIcon name="check" />Live</i></div><div className="funded-ticket__amount"><small>Total paid</small><h2><Money value={draft.pot + fee} /></h2><time>20 Sep 2026 · 15:07:13 WAT</time></div><div className="funded-ticket__parties"><section><h2>Recipient</h2><p><strong>Clippit Campaign Escrow</strong><span>Payaza · 019***9028</span></p></section><section><h2>Sender</h2><p><strong>Gbedu Records Ltd.</strong><span>Wema Bank · 012***0193</span></p></section></div><section className="funded-ticket__information"><h2>Transaction information</h2><dl><div><dt>Funding transaction ID</dt><dd>CLP-LIVE-041</dd></div><div><dt>Session ID</dt><dd>100033260920115117010192295902</dd></div><div><dt>Creator pot</dt><dd><Money value={draft.pot} /></dd></div><div><dt>Clippit campaign fee (15%)</dt><dd><Money value={fee} /></dd></div><div><dt>Rate</dt><dd><Money value={draft.rate} /> / 1K views</dd></div><div><dt>Campaign end</dt><dd>{draft.endCondition === "budget" ? "When the pot is empty" : `${draft.days} days or an empty pot`}</dd></div></dl></section><footer><ProductIcon name="shield" /><span><strong>Verify this certificate</strong><small>clippit.ng/verify/CLP-LIVE-041 · Code C04A-7719</small></span></footer></aside></div>;
 }
 
-export function LiveCampaignScreen() {
-  const campaign = brandCampaigns[0];
+const MOCK_LIVE_SUBMISSIONS: CampaignSubmissionRow[] = [
+  { id: "s1", creator_id: "c1", creator_name: "Kemi Frames", creator_handle: "kemiframes", title: "Group call hunger", platform: "TikTok", url: "", verified_views: 98200, earned: 49000, state: "Earning", submitted_at: new Date().toISOString() },
+  { id: "s2", creator_id: "c2", creator_name: "Tobi On Cam", creator_handle: "tobioncam", title: "Roommate took the last pack", platform: "Instagram", url: "", verified_views: 76400, earned: 38000, state: "Earning", submitted_at: new Date().toISOString() },
+  { id: "s3", creator_id: "c3", creator_name: "Nana Edits", creator_handle: "nanaedits", title: "No light, no long thing", platform: "TikTok", url: "", verified_views: 51600, earned: 25500, state: "Review", submitted_at: new Date().toISOString() },
+  { id: "s4", creator_id: "c4", creator_name: "Deji Does It", creator_handle: "dejidoesit", title: "Fastest flatmate alive", platform: "YouTube", url: "", verified_views: 34900, earned: 17000, state: "Checking", submitted_at: new Date().toISOString() },
+];
+
+export function LiveCampaignScreen({ slug }: { slug?: string }) {
+  const fallback = brandCampaigns[0];
+  const [campaign, setCampaign] = useState(fallback);
+  const [brandName, setBrandName] = useState("Gbedu Records");
+  const [stats, setStats] = useState<CampaignStats | null>(null);
+  const [submissions, setSubmissions] = useState<CampaignSubmissionRow[]>(MOCK_LIVE_SUBMISSIONS);
   const [paused, setPaused] = useState(false);
-  return <div className="brand-page live-campaign-page"><header className="live-campaign-head"><div><Status>{paused ? "Paused" : "Live now"}</Status><p>Gbedu Records</p><h1>{campaign.title}</h1><span>{campaign.line}</span></div><div><button type="button" onClick={() => setPaused((value) => !value)}>{paused ? "Resume entries" : "Pause new entries"}</button><button type="button"><ProductIcon name="more" /></button></div></header><section className="live-money-room"><div className="live-money-room__visual"><Image src={campaign.image} alt="" fill sizes="(max-width: 900px) 100vw, 48vw" priority /><div><span>Live rate</span><strong><Money value={campaign.rate} /></strong><small>per 1K verified views</small></div></div><div className="live-money-room__pot"><BrandArt src={art.funding} label="Campaign pot" tone="gold" compact /><p>Money still in the pot</p><strong><Money value={campaign.remaining} /></strong><PotBar campaign={campaign} /><dl><div><dt>Started with</dt><dd><Money value={campaign.pot} /></dd></div><div><dt>Earned by creators</dt><dd><Money value={campaign.pot - campaign.remaining} /></dd></div><div><dt>Campaign closes</dt><dd><AnimatedNumber value={campaign.daysLeft} suffix="d 18h" /></dd></div></dl></div></section><section className="live-signal-grid"><article><small>Verified views</small><strong><AnimatedNumber value={campaign.verifiedViews} format="compact" /></strong><div className="brand-sparkline"><i /><i /><i /><i /><i /><i /><i /><i /></div><p><b>+72.8K</b> since yesterday</p></article><article><small>Submission flow</small><strong><AnimatedNumber value={campaign.submissions} /></strong><div className="submission-pipeline"><span><b>{campaign.approved}</b> earning</span><i /><span><b>{campaign.review}</b> need review</span><i /><span><b>16</b> checking</span></div><Link href="/brand/reviews">Open review queue<ProductIcon name="arrow" /></Link></article><article className="live-proof-card"><BrandArt src={art.proof} label="Views proven" tone="lime" compact /><p><small>Last platform reading</small><strong>2 minutes ago</strong><span>TikTok, Instagram and YouTube responded normally.</span></p></article></section><section className="brand-activity-sheet"><header><div><h2>Recent submissions</h2><p>Latest view and earning status for each submission.</p></div><button type="button">Export report<ProductIcon name="arrow" /></button></header><div className="brand-activity-sheet__labels"><span>Creator</span><span>Clip</span><span>Verified views</span><span>Earned</span><span>State</span></div>{[
-    ["KM", "Kemi Frames", "Group call hunger", 98200, 49000, "Earning"],
-    ["TO", "Tobi On Cam", "Roommate took the last pack", 76400, 38000, "Earning"],
-    ["NA", "Nana Edits", "No light, no long thing", 51600, 25500, "Review"],
-    ["DD", "Deji Does It", "Fastest flatmate alive", 34900, 17000, "Checking"],
-  ].map((row) => <article key={String(row[1])}><span className="brand-activity-creator"><i>{row[0]}</i><p><strong>{row[1]}</strong><small>Connected account</small></p></span><strong>{row[2]}</strong><b><AnimatedNumber value={Number(row[3])} format="compact" /></b><b><Money value={Number(row[4])} /></b><Status tone={row[5] === "Earning" ? "lime" : row[5] === "Review" ? "gold" : "paper"}>{row[5]}</Status></article>)}</section></div>;
+
+  useEffect(() => {
+    if (!slug) return;
+    campaignsApi.get(slug).then((data) => {
+      setBrandName(data.brand?.name ?? "Brand");
+      setCampaign({
+        ...fallback,
+        title: data.title,
+        line: data.tagline ?? data.description.slice(0, 120),
+        image: data.cover_image_url ?? fallback.image,
+        rate: data.payout_rule?.rate_per_1000_views ?? fallback.rate,
+        pot: data.pot,
+        remaining: data.remaining,
+        daysLeft: data.time_left?.days ?? fallback.daysLeft,
+      });
+    }).catch(() => undefined);
+    campaignsApi.getStats(slug).then(setStats).catch(() => undefined);
+    campaignsApi.getSubmissions(slug).then((data) => {
+      if (data.items.length > 0) setSubmissions(data.items);
+    }).catch(() => undefined);
+  }, [slug]);
+
+  const verifiedViews = stats?.verified_views ?? campaign.verifiedViews;
+  const viewsLast24h = stats?.views_last_24h ?? 0;
+  const submissionCount = stats?.submissions ?? campaign.submissions;
+  const approvedCount = stats?.approved ?? campaign.approved;
+  const reviewCount = stats?.review ?? campaign.review;
+  const checkingCount = stats?.checking ?? 16;
+  const lastReading = stats?.last_reading_at ? new Date(stats.last_reading_at).toLocaleTimeString("en-NG", { hour: "2-digit", minute: "2-digit" }) : "2 minutes ago";
+
+  const submissionStateTone = (state: string) => state === "Earning" ? "lime" : state === "Review" ? "gold" : "paper";
+
+  return <div className="brand-page live-campaign-page"><header className="live-campaign-head"><div><Status>{paused ? "Paused" : "Live now"}</Status><p>{brandName}</p><h1>{campaign.title}</h1><span>{campaign.line}</span></div><div><button type="button" onClick={() => setPaused((value) => !value)}>{paused ? "Resume entries" : "Pause new entries"}</button><button type="button"><ProductIcon name="more" /></button></div></header><section className="live-money-room"><div className="live-money-room__visual"><Image src={campaign.image} alt="" fill sizes="(max-width: 900px) 100vw, 48vw" priority /><div><span>Live rate</span><strong><Money value={campaign.rate} /></strong><small>per 1K verified views</small></div></div><div className="live-money-room__pot"><BrandArt src={art.funding} label="Campaign pot" tone="gold" compact /><p>Money still in the pot</p><strong><Money value={campaign.remaining} /></strong><PotBar campaign={campaign} /><dl><div><dt>Started with</dt><dd><Money value={campaign.pot} /></dd></div><div><dt>Earned by creators</dt><dd><Money value={campaign.pot - campaign.remaining} /></dd></div><div><dt>Campaign closes</dt><dd><AnimatedNumber value={campaign.daysLeft} suffix="d" /></dd></div></dl></div></section><section className="live-signal-grid"><article><small>Verified views</small><strong><AnimatedNumber value={verifiedViews} format="compact" /></strong><div className="brand-sparkline"><i /><i /><i /><i /><i /><i /><i /><i /></div><p><b>+{viewsLast24h >= 1000 ? `${(viewsLast24h / 1000).toFixed(1)}K` : viewsLast24h}</b> since yesterday</p></article><article><small>Submission flow</small><strong><AnimatedNumber value={submissionCount} /></strong><div className="submission-pipeline"><span><b>{approvedCount}</b> earning</span><i /><span><b>{reviewCount}</b> need review</span><i /><span><b>{checkingCount}</b> checking</span></div><Link href="/brand/reviews">Open review queue<ProductIcon name="arrow" /></Link></article><article className="live-proof-card"><BrandArt src={art.proof} label="Views proven" tone="lime" compact /><p><small>Last platform reading</small><strong>{lastReading}</strong><span>TikTok, Instagram and YouTube responded normally.</span></p></article></section><section className="brand-activity-sheet"><header><div><h2>Recent submissions</h2><p>Latest view and earning status for each submission.</p></div><Link href={`/brand/campaigns/${slug ?? "live"}/report`} className="brand-button brand-button--small">Export report<ProductIcon name="arrow" /></Link></header><div className="brand-activity-sheet__labels"><span>Creator</span><span>Clip</span><span>Verified views</span><span>Earned</span><span>State</span></div>{submissions.map((row) => <article key={row.id}><span className="brand-activity-creator"><i>{(row.creator_handle ?? row.creator_name).slice(0, 2).toUpperCase()}</i><p><strong>{row.creator_name}</strong><small>@{row.creator_handle ?? row.creator_name}</small></p></span><strong>{row.title ?? "Untitled clip"}</strong><b><AnimatedNumber value={row.verified_views} format="compact" /></b><b><Money value={row.earned} /></b><Status tone={submissionStateTone(row.state)}>{row.state}</Status></article>)}</section></div>;
 }
 
 function ReviewCard({ review }: { review: BrandReview }) {

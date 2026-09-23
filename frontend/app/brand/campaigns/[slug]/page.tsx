@@ -1,4 +1,6 @@
 import { LiveCampaignScreen } from "@/components/brand/BrandScreens";
 
-export default function BrandLiveCampaignPage() { return <LiveCampaignScreen />; }
-
+export default async function BrandLiveCampaignPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  return <LiveCampaignScreen slug={slug} />;
+}

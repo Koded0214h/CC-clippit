@@ -68,6 +68,45 @@ export interface CampaignListOut {
   next_cursor: string | null;
 }
 
+export interface CampaignStats {
+  campaign_id: string;
+  phase: string;
+  accepting_entries: boolean;
+  pot: number;
+  spent: number;
+  remaining: number;
+  percent_remaining: number;
+  verified_views: number;
+  views_last_24h: number;
+  submissions: number;
+  approved: number;
+  review: number;
+  checking: number;
+  rejected: number;
+  time_left: TimeLeft | null;
+  last_reading_at: string | null;
+}
+
+export interface CampaignSubmissionRow {
+  id: string;
+  creator_id: string;
+  creator_name: string;
+  creator_handle: string | null;
+  title: string | null;
+  platform: string;
+  url: string;
+  verified_views: number;
+  earned: number;
+  state: string;
+  submitted_at: string;
+}
+
+export interface CampaignSubmissionsOut {
+  items: CampaignSubmissionRow[];
+  total: number;
+  next_cursor: string | null;
+}
+
 export interface MyCampaignRow {
   campaign: CampaignOut;
   membership_status: string;
@@ -90,6 +129,13 @@ export const campaignsApi = {
   },
 
   get: (ref: string) => api.get<CampaignOut>(`/campaigns/${ref}`),
+
+  getStats: (ref: string) => api.get<CampaignStats>(`/campaigns/${ref}/stats`),
+
+  getSubmissions: (ref: string, cursor?: string) => {
+    const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+    return api.get<CampaignSubmissionsOut>(`/campaigns/${ref}/submissions${qs}`);
+  },
 
   join: (ref: string) => api.post<void>(`/campaigns/${ref}/join`, {}),
 
