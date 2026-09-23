@@ -11,6 +11,7 @@ import { ReceiptHeader } from "@/components/ui/ReceiptHeader";
 import { brandCampaigns, brandReviews, type BrandCampaign, type BrandCampaignState, type BrandReview } from "@/lib/brand";
 import { brandApi, type BrandOverviewOut, type ReviewCard as ApiReviewCard } from "@/lib/api/brand";
 import { campaignsApi, type CampaignOut } from "@/lib/api/campaigns";
+import { organisationsApi } from "@/lib/api/organisations";
 import { BRAND_CAMPAIGN_FEE_RATE, calculateFee, feePercentage } from "@/lib/fees";
 import { useBrandCampaign, type BriefRule } from "./BrandCampaignProvider";
 import { CampaignCoverPicker } from "./CampaignCoverPicker";
@@ -287,11 +288,38 @@ export function BrandSettingsScreen() {
   const [notices, setNotices] = useState({ funding: true, reviews: true, reports: false });
   const storedProfile = useStoredProfile("brand", BRAND_PROFILE_FALLBACK);
   const [profile, setProfile] = useState(BRAND_PROFILE_FALLBACK);
+  const [website, setWebsite] = useState("gbedurecords.com");
+  const [financeEmail, setFinanceEmail] = useState("finance@gbedurecords.com");
+  const [verified, setVerified] = useState(false);
+  const [orgName, setOrgName] = useState("Gbedu Records Ltd.");
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => setProfile(storedProfile));
     return () => window.cancelAnimationFrame(frame);
   }, [storedProfile]);
 
-  return <div className="brand-page brand-settings-page"><PageHeading title="Settings" copy="Manage organisation details, funding contact and campaign alerts." /><div className="brand-settings-layout"><nav><a href="#identity">Organisation identity</a><a href="#funding">Funding contact</a><a href="#alerts">Campaign alerts</a></nav><div><section id="identity" className="brand-settings-sheet"><header><div><h2>Organisation identity</h2><p>Shown to creators on your campaigns.</p></div><ProfileAvatar profile={profile} fallback="GR" className="brand-settings-avatar" /></header><div className="brand-profile-editor"><ProfilePhotoPicker value={profile.photo} name={profile.name} onChange={(photo) => setProfile((current) => ({ ...current, photo }))} tone="gold" compact /><div className="brand-profile-fields"><label><span>Public organisation name</span><input value={profile.name} onChange={(event) => setProfile((current) => ({ ...current, name: event.target.value.slice(0, 60) }))} /></label><label><span>Short description</span><textarea value={profile.bio} onChange={(event) => setProfile((current) => ({ ...current, bio: event.target.value.slice(0, 240) }))} /></label><label><span>Website</span><input defaultValue="gbedurecords.com" /></label></div></div><button type="button" className="brand-button" disabled={profile.name.trim().length < 2 || profile.bio.trim().length < 2} onClick={() => { saveStoredProfile("brand", { ...profile, name: profile.name.trim(), bio: profile.bio.trim() }); setSaved(true); window.setTimeout(() => setSaved(false), 1800); }}>{saved ? "Changes saved" : "Save identity"}<ProductIcon name={saved ? "check" : "arrow"} /></button></section><section id="funding" className="brand-settings-sheet"><header><div><h2>Funding contact</h2><p>Used for receipts, settlement questions and campaign closeout.</p></div><ProductIcon name="bank" /></header><label><span>Finance email</span><input type="email" defaultValue="finance@gbedurecords.com" /></label><div className="verified-funder"><ProductIcon name="shield" /><span><strong>Gbedu Records Ltd.</strong><small>Business identity verified</small></span><Status>Verified</Status></div></section><section id="alerts" className="brand-settings-sheet"><header><div><h2>Campaign alerts</h2><p>Choose which campaign events send an alert.</p></div><ProductIcon name="bell" /></header>{Object.entries(notices).map(([key, value]) => <label className="brand-toggle" key={key}><span><strong>{key === "funding" ? "Funding and pot alerts" : key === "reviews" ? "Submission review alerts" : "Weekly performance report"}</strong><small>{key === "funding" ? "Cleared funds, low pot and campaign closeout" : key === "reviews" ? "Uncertain checks and creator appeals" : "Verified views and spend summary every Monday"}</small></span><input type="checkbox" checked={value} onChange={() => setNotices((current) => ({ ...current, [key]: !value }))} /><i /></label>)}</section></div></div></div>;
+  useEffect(() => {
+    organisationsApi.getProfile().then((data) => {
+      setProfile((current) => ({
+        ...current,
+        name: data.name || current.name,
+        bio: data.bio || current.bio,
+        photo: data.photo_url || current.photo,
+      }));
+      if (data.website) setWebsite(data.website);
+      if (data.finance_email) setFinanceEmail(data.finance_email);
+      if (data.business_legal_name) setOrgName(data.business_legal_name);
+      setVerified(data.business_verified);
+    }).catch(() => undefined);
+  }, []);
+
+  const saveIdentity = () => {
+    const clean = { ...profile, name: profile.name.trim(), bio: profile.bio.trim() };
+    saveStoredProfile("brand", clean);
+    organisationsApi.updateProfile({ name: clean.name, bio: clean.bio, website: website || undefined, finance_email: financeEmail || undefined }).catch(() => undefined);
+    setSaved(true);
+    window.setTimeout(() => setSaved(false), 1800);
+  };
+
+  return <div className="brand-page brand-settings-page"><PageHeading title="Settings" copy="Manage organisation details, funding contact and campaign alerts." /><div className="brand-settings-layout"><nav><a href="#identity">Organisation identity</a><a href="#funding">Funding contact</a><a href="#alerts">Campaign alerts</a></nav><div><section id="identity" className="brand-settings-sheet"><header><div><h2>Organisation identity</h2><p>Shown to creators on your campaigns.</p></div><ProfileAvatar profile={profile} fallback="GR" className="brand-settings-avatar" /></header><div className="brand-profile-editor"><ProfilePhotoPicker value={profile.photo} name={profile.name} onChange={(photo) => setProfile((current) => ({ ...current, photo }))} tone="gold" compact /><div className="brand-profile-fields"><label><span>Public organisation name</span><input value={profile.name} onChange={(event) => setProfile((current) => ({ ...current, name: event.target.value.slice(0, 60) }))} /></label><label><span>Short description</span><textarea value={profile.bio} onChange={(event) => setProfile((current) => ({ ...current, bio: event.target.value.slice(0, 240) }))} /></label><label><span>Website</span><input value={website} onChange={(event) => setWebsite(event.target.value)} /></label></div></div><button type="button" className="brand-button" disabled={profile.name.trim().length < 2 || profile.bio.trim().length < 2} onClick={saveIdentity}>{saved ? "Changes saved" : "Save identity"}<ProductIcon name={saved ? "check" : "arrow"} /></button></section><section id="funding" className="brand-settings-sheet"><header><div><h2>Funding contact</h2><p>Used for receipts, settlement questions and campaign closeout.</p></div><ProductIcon name="bank" /></header><label><span>Finance email</span><input type="email" value={financeEmail} onChange={(event) => setFinanceEmail(event.target.value)} /></label><div className="verified-funder"><ProductIcon name="shield" /><span><strong>{orgName}</strong><small>Business identity {verified ? "verified" : "pending"}</small></span><Status tone={verified ? "lime" : "gold"}>{verified ? "Verified" : "Pending"}</Status></div></section><section id="alerts" className="brand-settings-sheet"><header><div><h2>Campaign alerts</h2><p>Choose which campaign events send an alert.</p></div><ProductIcon name="bell" /></header>{Object.entries(notices).map(([key, value]) => <label className="brand-toggle" key={key}><span><strong>{key === "funding" ? "Funding and pot alerts" : key === "reviews" ? "Submission review alerts" : "Weekly performance report"}</strong><small>{key === "funding" ? "Cleared funds, low pot and campaign closeout" : key === "reviews" ? "Uncertain checks and creator appeals" : "Verified views and spend summary every Monday"}</small></span><input type="checkbox" checked={value} onChange={() => setNotices((current) => ({ ...current, [key]: !value }))} /><i /></label>)}</section></div></div></div>;
 }
