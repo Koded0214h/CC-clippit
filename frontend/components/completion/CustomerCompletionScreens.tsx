@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
+import { authApi, clearTokens } from "@/lib/api/auth";
+import { ApiError } from "@/lib/api/client";
 
 const art = {
   proof: "/assets/illustrations/clippit-icons/verified-proof.webp",
@@ -160,8 +162,30 @@ export function AccountDataScreen() {
 }
 
 export function DeleteAccountScreen() {
+  const router = useRouter();
   const [confirmed, setConfirmed] = useState(false);
-  return <ServiceFrame active="Account"><section className="service-content completion-page"><CompletionHead back="/account/data" title="Delete account" copy="Check what must be settled before deletion can begin." /><div className="delete-layout"><section><h2>Two things need attention</h2><article><span><ProductIcon name="wallet" /></span><p><strong>₦18,400 is still payable</strong><small>Withdraw it before requesting deletion.</small></p><Link href="/dashboard/withdraw">Withdraw money</Link></article><article><span><ProductIcon name="brief" /></span><p><strong>One support ticket is open</strong><small>Close it or wait for the current reply.</small></p><Link href="/support/tickets">Open tickets</Link></article><article className="is-clear"><span><ProductIcon name="check" /></span><p><strong>No active campaigns or disputes</strong><small>This account has no other deletion blockers.</small></p></article></section><aside><MiniArt src={art.bank} tone="gold" /><h2>After the blockers are cleared</h2><p>Your public profile is hidden immediately. Required transaction and safety records are retained under the applicable policy; other eligible account data is deleted or anonymised.</p><label><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />I understand this cannot be undone.</label><button disabled={!confirmed}>Request account deletion</button></aside></div></section></ServiceFrame>;
+  const [stepPassword, setStepPassword] = useState("");
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
+
+  const requestDeletion = async () => {
+    if (!confirmed || !stepPassword) return;
+    setDeleteLoading(true);
+    setDeleteError("");
+    try {
+      const challenge = await authApi.requestStepUp({ action: "delete_account" });
+      const stepUp = await authApi.verifyStepUp({ challenge_token: challenge.challenge_token, password: stepPassword });
+      await authApi.deleteAccount({ step_up_token: stepUp.step_up_token });
+      clearTokens();
+      router.replace("/auth/sign-in");
+    } catch (err) {
+      setDeleteError(err instanceof ApiError ? err.detail : "Could not delete account. Try again.");
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  return <ServiceFrame active="Account"><section className="service-content completion-page"><CompletionHead back="/account/data" title="Delete account" copy="Check what must be settled before deletion can begin." /><div className="delete-layout"><section><h2>Two things need attention</h2><article><span><ProductIcon name="wallet" /></span><p><strong>₦18,400 is still payable</strong><small>Withdraw it before requesting deletion.</small></p><Link href="/dashboard/withdraw">Withdraw money</Link></article><article><span><ProductIcon name="brief" /></span><p><strong>One support ticket is open</strong><small>Close it or wait for the current reply.</small></p><Link href="/support/tickets">Open tickets</Link></article><article className="is-clear"><span><ProductIcon name="check" /></span><p><strong>No active campaigns or disputes</strong><small>This account has no other deletion blockers.</small></p></article></section><aside><MiniArt src={art.bank} tone="gold" /><h2>After the blockers are cleared</h2><p>Your public profile is hidden immediately. Required transaction and safety records are retained under the applicable policy; other eligible account data is deleted or anonymised.</p><label><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />I understand this cannot be undone.</label>{confirmed && <label className="delete-password-label"><span>Confirm your password to continue</span><input type="password" value={stepPassword} onChange={(event) => setStepPassword(event.target.value)} placeholder="Your current password" autoComplete="current-password" /></label>}{deleteError && <p className="auth-error" role="alert">{deleteError}</p>}<button disabled={!confirmed || (confirmed && !stepPassword) || deleteLoading} onClick={requestDeletion}>{deleteLoading ? "Deleting…" : "Request account deletion"}</button></aside></div></section></ServiceFrame>;
 }
 
 const legalDocs = [

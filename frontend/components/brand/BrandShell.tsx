@@ -9,6 +9,7 @@ import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
 import { ProfileAvatar, useStoredProfile, type StoredProfile } from "@/components/ui/ProfilePhotoPicker";
 import { useAutoHideDock } from "@/components/ui/useAutoHideDock";
 import { BrandCampaignProvider } from "./BrandCampaignProvider";
+import { useUser } from "@/lib/user-context";
 
 const BRAND_PROFILE_FALLBACK: StoredProfile = { name: "Gbedu Records", bio: "", photo: "" };
 
@@ -45,6 +46,8 @@ export function BrandShell({ children }: { children: ReactNode }) {
   const dockHidden = useAutoHideDock();
   const [moreOpen, setMoreOpen] = useState(false);
   const [unreadNotifications, setUnreadNotifications] = useState(4);
+  const { user, logout } = useUser();
+  const displayName = user?.full_name ?? profile.name;
   useEffect(() => {
     const sync = (event?: Event) => {
       if (event instanceof CustomEvent && typeof event.detail === "number") { setUnreadNotifications(event.detail); return; }
@@ -58,7 +61,7 @@ export function BrandShell({ children }: { children: ReactNode }) {
     window.addEventListener("storage", sync);
     return () => { window.removeEventListener("clippit:brand-notifications", sync); window.removeEventListener("storage", sync); };
   }, []);
-  const initials = profile.name.trim().split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase() || "GR";
+  const initials = displayName.trim().split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase() || "U";
   const mobilePrimary = navigation.filter((item) => item.mobile && item.label !== "Settings");
   const mobileMore = navigation.filter((item) => ["Transactions", "Team", "Billing", "Verification", "Settings"].includes(item.label));
   const moreIsCurrent = [...mobileMore, ...brandResourceNavigation].some((item) => current(pathname, item.href));
@@ -67,7 +70,7 @@ export function BrandShell({ children }: { children: ReactNode }) {
       <Link href="/brand" className="brand-rail__logo" aria-label="Clippit brand workspace"><Image src="/assets/clippit-mark-light.png" width={42} height={42} alt="" priority /><strong>Clippit</strong><span>for brands</span></Link>
       <nav aria-label="Brand workspace navigation">{navigation.map((item) => <Link key={item.href} href={item.href} className={current(pathname, item.href) ? "is-active" : ""} aria-current={current(pathname, item.href) ? "page" : undefined}><ProductIcon name={item.icon} /><span>{item.label}</span>{item.label === "Review queue" && <b>7</b>}</Link>)}</nav>
       <nav className="brand-resource-nav" aria-label="Account and support"><Link href="/help"><ProductIcon name="brief" /><span>Help & support</span></Link><Link href="/legal"><ProductIcon name="shield" /><span>Legal & privacy</span></Link></nav>
-      <div className="brand-rail__bottom"><div className="escrow-mark"><ProductIcon name="shield" /><span><small>Campaign funds</small><strong>Escrow protected</strong></span></div><Link href="/brand/settings" className="brand-profile"><ProfileAvatar profile={profile} fallback={initials} className="brand-profile__avatar" /><p><strong>{profile.name}</strong><small>Brand workspace</small></p><ProductIcon name="chevron" /></Link></div>
+      <div className="brand-rail__bottom"><div className="escrow-mark"><ProductIcon name="shield" /><span><small>Campaign funds</small><strong>Escrow protected</strong></span></div><Link href="/brand/settings" className="brand-profile"><ProfileAvatar profile={profile} fallback={initials} className="brand-profile__avatar" /><p><strong>{displayName}</strong><small>Brand workspace</small></p><ProductIcon name="chevron" /></Link><button type="button" className="rail-signout" onClick={logout} aria-label="Sign out">Sign out</button></div>
     </aside>
     <div className="brand-stage">
       <header className="brand-topbar"><Link href="/brand" className="brand-topbar__logo"><Image src="/assets/clippit-mark.png" width={31} height={31} alt="" /><strong>Clippit</strong><span>brands</span></Link><div className="brand-topbar__proof"><i />No long thing is live</div><div className="brand-topbar__actions"><Link href="/brand/transactions" className="brand-fund-pill"><ProductIcon name="wallet" /><span><small>Live pot</small><strong><AnimatedNumber value={312500} format="money" /></strong></span></Link><Link href="/brand/notifications" className="brand-alert" aria-label={`${unreadNotifications} unread notifications`} aria-current={pathname === "/brand/notifications" ? "page" : undefined}><ProductIcon name="bell" />{unreadNotifications > 0 && <b>{unreadNotifications}</b>}</Link><Link href="/brand/settings" className="brand-avatar">{profile.photo ? <Image src={profile.photo} alt="" fill unoptimized sizes="48px" /> : initials}</Link></div></header>

@@ -14,9 +14,11 @@ interface AuthFlowState {
   email: string;
   role: AccountRole;
   completion: CompletionKind;
+  resetToken: string;
   setEmail: (email: string) => void;
   setRole: (role: AccountRole) => void;
   setCompletion: (completion: CompletionKind) => void;
+  setResetToken: (token: string) => void;
 }
 
 const AuthFlowContext = createContext<AuthFlowState | null>(null);
@@ -25,6 +27,7 @@ export function AuthFlowProvider({ children }: { children: ReactNode }) {
   const [email, setEmail] = useState("");
   const [role, setRoleState] = useState<AccountRole>("creator");
   const [completion, setCompletion] = useState<CompletionKind>("signup");
+  const [resetToken, setResetToken] = useState("");
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -38,10 +41,12 @@ export function AuthFlowProvider({ children }: { children: ReactNode }) {
     setRoleState(nextRole);
     window.localStorage.setItem("clippit:account-role", nextRole);
   };
+
   const value = useMemo(
-    () => ({ email, role, completion, setEmail, setRole, setCompletion }),
-    [email, role, completion],
+    () => ({ email, role, completion, resetToken, setEmail, setRole, setCompletion, setResetToken }),
+    [email, role, completion, resetToken],
   );
+
   return (
     <AuthFlowContext.Provider value={value}>
       {children}

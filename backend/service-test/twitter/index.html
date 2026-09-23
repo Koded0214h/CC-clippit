@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Clippit · X / Twitter Metrics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;700;800&family=Kalam:wght@400;700&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --lime: #B8FF38;
+    --gold: #EFC884;
+    --paper: #F7F8F2;
+    --ink: #14150F;
+    --muted: #6B6E60;
+    --line: #E4E6DA;
+    --white: #FFFFFF;
+    --x-black: #000000;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 40px 20px 80px; }
+  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+  h1 { font-size: clamp(28px, 5vw, 44px); font-weight: 800; letter-spacing: -0.02em; margin: 0; }
+  .scribble { font-family: "Kalam", cursive; color: var(--muted); font-size: 18px; }
+  .card {
+    background: var(--white);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    padding: 24px;
+    margin-top: 24px;
+  }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--lime);
+    color: var(--ink);
+    border: 1px solid var(--ink);
+    border-radius: 999px;
+    padding: 12px 22px;
+    font: inherit; font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  .btn.x {
+    background: var(--x-black);
+    color: white;
+    border-color: transparent;
+  }
+  .btn.ghost { background: transparent; border-color: var(--line); font-weight: 500; }
+  .btn:active { transform: translateY(1px); }
+  .row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; justify-content: space-between; }
+  .who { display: flex; align-items: center; gap: 12px; }
+  .who img { width: 52px; height: 52px; border-radius: 999px; object-fit: cover; background: var(--line); flex: none; }
+  .who b { display: block; font-size: 17px; }
+  .who span { color: var(--muted); font-size: 14px; }
+  .who .badge {
+    font-size: 11px; background: var(--line); padding: 2px 8px;
+    border-radius: 99px; margin-left: 6px; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .who .verified { color: #1D9BF0; margin-left: 4px; }
+  .totals { display: flex; gap: 28px; margin-top: 20px; flex-wrap: wrap; }
+  .stat .n { font-size: 32px; font-weight: 800; letter-spacing: -0.02em; }
+  .stat .l { color: var(--muted); font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .bio { color: var(--muted); margin-top: 12px; font-size: 14px; max-width: 520px; }
+  .location { color: var(--muted); font-size: 13px; margin-top: 4px; display: flex; align-items: center; gap: 5px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+  th, td { text-align: right; padding: 12px 10px; border-bottom: 1px solid var(--line); font-size: 14px; }
+  th { color: var(--muted); font-weight: 500; text-transform: uppercase; font-size: 11px; letter-spacing: 0.06em; }
+  th:first-child, td:first-child { text-align: left; }
+  .tweet-cell { max-width: 380px; }
+  .tweet-text { color: var(--ink); font-size: 13px; font-weight: 500; line-height: 1.4; }
+  .tweet-text a { color: var(--ink); text-decoration: none; }
+  .tweet-text a:hover { text-decoration: underline; }
+  .type-badge {
+    display: inline-block; font-size: 10px; font-weight: 700;
+    padding: 1px 6px; border-radius: 4px; text-transform: uppercase;
+    letter-spacing: 0.04em; margin-left: 6px;
+  }
+  .type-badge.tweet { background: #E0F2FE; color: #0284C7; }
+  .type-badge.retweet { background: #DCFCE7; color: #16A34A; }
+  .type-badge.reply { background: #F3E8FF; color: #9333EA; }
+  .type-badge.quote { background: #FEF3C7; color: #D97706; }
+  .impr { font-weight: 800; }
+  .muted { color: var(--muted); }
+  .msg { padding: 16px 0; color: var(--muted); }
+  .err { color: #B23B2E; }
+  .account-insights {
+    display: flex; gap: 20px; flex-wrap: wrap; margin-top: 16px; padding-top: 16px;
+    border-top: 1px solid var(--line);
+  }
+  .account-insights .stat .n { font-size: 24px; }
+  @media (max-width: 640px) {
+    .hide-sm { display: none; }
+    .tweet-cell { max-width: 180px; }
+    .totals { gap: 16px; }
+    .stat .n { font-size: 24px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>
+      <svg width="30" height="30" viewBox="0 0 24 24" fill="currentColor" style="vertical-align:middle;margin-right:6px">
+        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.737-8.835L1.254 2.25H8.08l4.258 5.63L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z"/>
+      </svg>
+      X Metrics
+    </h1>
+    <span class="scribble">connect your account, see the numbers</span>
+  </header>
+
+  <div class="card" id="panel">
+    <div class="msg">Loading…</div>
+  </div>
+</div>
+
+<script>
+const panel = document.getElementById("panel");
+const nf = new Intl.NumberFormat();
+
+function fmtDate(iso) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
+
+// Determine tweet type from the raw tweet object
+// Twitter API v2 sets referenced_tweets to indicate retweet/reply/quote
+function tweetType(t) {
+  if (!t.referenced_tweets || !t.referenced_tweets.length) return "TWEET";
+  const types = t.referenced_tweets.map(r => r.type);
+  if (types.includes("retweeted")) return "RETWEET";
+  if (types.includes("replied_to")) return "REPLY";
+  if (types.includes("quoted")) return "QUOTE";
+  return "TWEET";
+}
+
+function typeBadge(type) {
+  const map = { TWEET: "tweet", RETWEET: "retweet", REPLY: "reply", QUOTE: "quote" };
+  const cls = map[type] || "tweet";
+  return `<span class="type-badge ${cls}">${type}</span>`;
+}
+
+function truncate(s, n) {
+  if (!s) return "Untitled";
+  return s.length > n ? s.slice(0, n) + "…" : s;
+}
+
+function connectView(error) {
+  panel.innerHTML = `
+    <div class="row">
+      <div>
+        <b>Not connected</b>
+        <div class="muted">Authorize Clippit to read your X profile, tweets, and insights.</div>
+      </div>
+      <a class="btn x" href="/login">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.737-8.835L1.254 2.25H8.08l4.258 5.63L18.244 2.25zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77z"/>
+        </svg>
+        Connect X Account
+      </a>
+    </div>
+    ${error ? `<div class="msg err">${error}</div>` : ""}`;
+}
+
+function loadingTweets(user) {
+  // user follows Twitter API v2 shape: { id, name, username, description, location,
+  //   profile_image_url, verified, public_metrics: { followers_count, following_count, tweet_count, listed_count } }
+  const m = user.public_metrics || {};
+  panel.innerHTML = `
+    <div class="row">
+      <div class="who">
+        <img src="${user.profile_image_url || ""}" alt="" />
+        <div>
+          <b>@${user.username || "connected"}
+            ${user.verified ? '<span class="verified" title="Verified">✓</span>' : ""}
+            <span class="badge">${user.verified ? "verified" : "user"}</span>
+          </b>
+          <span>${user.name || ""}</span>
+        </div>
+      </div>
+      <a class="btn ghost" href="/logout">Disconnect</a>
+    </div>
+    ${user.description ? `<div class="bio">${user.description}</div>` : ""}
+    ${user.location ? `<div class="location">📍 ${user.location}</div>` : ""}
+    <div class="totals">
+      <div class="stat"><div class="n">${nf.format(m.followers_count || 0)}</div><div class="l">Followers</div></div>
+      <div class="stat"><div class="n">${nf.format(m.following_count || 0)}</div><div class="l">Following</div></div>
+      <div class="stat"><div class="n">${nf.format(m.tweet_count || 0)}</div><div class="l">Tweets</div></div>
+      <div class="stat"><div class="n">${nf.format(m.listed_count || 0)}</div><div class="l">Lists</div></div>
+    </div>
+    <div class="msg">Fetching your tweets and metrics…</div>`;
+}
+
+function render(user, data, accountMetrics) {
+  // data shape expected from backend:
+  // {
+  //   tweets: [ { id, text, created_at, referenced_tweets?, permalink?,
+  //               public_metrics: { impression_count, like_count, retweet_count,
+  //                                 reply_count, quote_count, bookmark_count } } ],
+  //   total_impressions: number,
+  //   total_likes: number,
+  //   total_retweets: number,
+  //   total_replies: number,
+  //   count: number
+  // }
+  //
+  // accountMetrics shape (optional, from /api/insights):
+  // [ { name: string, value: number } ]
+
+  const um = user.public_metrics || {};
+
+  const rows = (data.tweets || []).map(t => {
+    const pm = t.public_metrics || {};
+    const type = tweetType(t);
+    const url = t.permalink || `https://x.com/${user.username}/status/${t.id}`;
+    return `
+    <tr>
+      <td>
+        <div class="tweet-cell">
+          <div class="tweet-text">
+            <a href="${url}" target="_blank" rel="noopener">${truncate(t.text, 80)}</a>${typeBadge(type)}
+          </div>
+        </div>
+      </td>
+      <td class="impr">${nf.format(pm.impression_count || 0)}</td>
+      <td>${nf.format(pm.like_count || 0)}</td>
+      <td>${nf.format(pm.retweet_count || 0)}</td>
+      <td class="hide-sm">${nf.format(pm.reply_count || 0)}</td>
+      <td class="hide-sm">${nf.format(pm.quote_count || 0)}</td>
+      <td class="hide-sm">${nf.format(pm.bookmark_count || 0)}</td>
+      <td class="muted hide-sm">${fmtDate(t.created_at)}</td>
+    </tr>`;
+  }).join("");
+
+  // Optional account-level insights panel
+  let insightsHtml = "";
+  if (accountMetrics && accountMetrics.length) {
+    insightsHtml = `<div class="account-insights">`;
+    for (const m of accountMetrics) {
+      const label = (m.name || m.metric || "").replace(/_/g, " ");
+      insightsHtml += `<div class="stat"><div class="n">${nf.format(m.value ?? 0)}</div><div class="l">${label}</div></div>`;
+    }
+    insightsHtml += `</div>`;
+  }
+
+  panel.innerHTML = `
+    <div class="row">
+      <div class="who">
+        <img src="${user.profile_image_url || ""}" alt="" />
+        <div>
+          <b>@${user.username || "connected"}
+            ${user.verified ? '<span class="verified" title="Verified">✓</span>' : ""}
+            <span class="badge">${user.verified ? "verified" : "user"}</span>
+          </b>
+          <span>${user.name || ""}</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn ghost" id="refresh">Refresh</button>
+        <a class="btn ghost" href="/logout">Disconnect</a>
+      </div>
+    </div>
+    ${user.description ? `<div class="bio">${user.description}</div>` : ""}
+    ${user.location ? `<div class="location">📍 ${user.location}</div>` : ""}
+    <div class="totals">
+      <div class="stat"><div class="n">${nf.format(um.followers_count || 0)}</div><div class="l">Followers</div></div>
+      <div class="stat"><div class="n">${nf.format(um.following_count || 0)}</div><div class="l">Following</div></div>
+      <div class="stat"><div class="n">${nf.format(um.tweet_count || 0)}</div><div class="l">Tweets</div></div>
+      <div class="stat"><div class="n">${nf.format(data.total_impressions || 0)}</div><div class="l">Total Impressions</div></div>
+      <div class="stat"><div class="n">${nf.format(data.total_likes || 0)}</div><div class="l">Total Likes</div></div>
+      <div class="stat"><div class="n">${nf.format(data.total_retweets || 0)}</div><div class="l">Total Retweets</div></div>
+    </div>
+    ${insightsHtml}
+    ${(data.count === 0 || !data.tweets?.length) ? '<div class="msg">No tweets found on this account.</div>' : `
+    <table>
+      <thead>
+        <tr>
+          <th>Tweet</th>
+          <th>Impressions</th>
+          <th>Likes</th>
+          <th>Retweets</th>
+          <th class="hide-sm">Replies</th>
+          <th class="hide-sm">Quotes</th>
+          <th class="hide-sm">Bookmarks</th>
+          <th class="hide-sm">Date</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`}`;
+
+  const btn = document.getElementById("refresh");
+  if (btn) btn.addEventListener("click", () => start());
+}
+
+async function start() {
+  panel.innerHTML = '<div class="msg">Loading…</div>';
+  let status;
+  try {
+    status = await (await fetch("/api/status")).json();
+  } catch (e) {
+    connectView("Could not reach the service. Is service.py running?");
+    return;
+  }
+  if (!status.connected) {
+    connectView(status.error);
+    return;
+  }
+  loadingTweets(status.user);
+
+  try {
+    const [tweetsRes, insightsRes] = await Promise.all([
+      fetch("/api/tweets").then(r => r.json()),
+      fetch("/api/insights").then(r => r.json()).catch(() => ({ metrics: [] })),
+    ]);
+    if (tweetsRes.error) {
+      panel.insertAdjacentHTML("beforeend", `<div class="msg err">${tweetsRes.error}</div>`);
+      return;
+    }
+    render(status.user, tweetsRes, insightsRes.metrics || []);
+  } catch (e) {
+    panel.insertAdjacentHTML("beforeend", '<div class="msg err">Failed to load tweets.</div>');
+  }
+}
+
+start();
+</script>
+</body>
+</html>

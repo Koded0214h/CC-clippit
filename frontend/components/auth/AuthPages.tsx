@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  useEffect,
   useRef,
   useState,
   type ClipboardEvent,
@@ -19,6 +20,8 @@ import {
 import { useAuthFlow } from "./AuthFlowProvider";
 import { Icon } from "@/components/ui/Icon";
 import { isEmail, isStrongPassword, type AccountRole } from "@/lib/auth";
+import { ApiError } from "@/lib/api/client";
+import { authApi, storeTokens } from "@/lib/api/auth";
 
 type Errors = Record<string, string>;
 
@@ -54,6 +57,15 @@ function BackLink({
       <Icon name="back" />
       {children}
     </Link>
+  );
+}
+
+function ApiErrorMessage({ message }: { message: string }) {
+  if (!message) return null;
+  return (
+    <p role="alert" className="field__error" style={{ marginBottom: "0.5rem" }}>
+      {message}
+    </p>
   );
 }
 
@@ -110,7 +122,7 @@ export function SignUpChoice() {
         <AuthButton>Continue</AuthButton>
       </form>
       <p className="auth-legal">
-        By continuing, you agree to Clippit’s <Link href="/terms">Terms</Link>{" "}
+        By continuing, you agree to Clippit's <Link href="/terms">Terms</Link>{" "}
         and <Link href="/privacy">Privacy Policy</Link>.
       </p>
     </section>
@@ -158,20 +170,63 @@ export function SignUpDetails({ role }: { role: AccountRole }) {
   const router = useRouter();
   const flow = useAuthFlow();
   const [errors, setErrors] = useState<Errors>({});
+  const [apiError, setApiError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const organisation = role === "organisation";
-  const enterDemo = (email = "") => {
-    setErrors({});
-    if (email.trim()) flow.setEmail(email.trim());
-    flow.setRole(role);
-    flow.setCompletion("signup");
-    router.push(organisation ? "/onboarding/brand" : "/onboarding/creator");
-  };
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setErrors({});
+    setApiError("");
+
     const data = new FormData(event.currentTarget);
-    const email = String(data.get("email") ?? "");
-    enterDemo(email);
+    const email = String(data.get("email") ?? "").trim();
+    const password = String(data.get("password") ?? "");
+
+    const next: Errors = {};
+    if (!isEmail(email)) next.email = "Enter a valid email address.";
+    if (!isStrongPassword(password))
+      next.password = "Use 8+ characters with at least one number.";
+
+    let full_name: string;
+    if (organisation) {
+      const org = String(data.get("organisation") ?? "").trim();
+      if (!org) next.organisation = "Enter your organisation name.";
+      full_name = org;
+    } else {
+      const firstName = String(data.get("firstName") ?? "").trim();
+      const lastName = String(data.get("lastName") ?? "").trim();
+      if (!firstName) next.firstName = "Enter your first name.";
+      if (!lastName) next.lastName = "Enter your last name.";
+      full_name = `${firstName} ${lastName}`.trim();
+    }
+
+    setErrors(next);
+    if (Object.keys(next).length) return;
+
+    setIsLoading(true);
+    try {
+      const result = await authApi.signup({ email, password, full_name, role });
+      storeTokens(result);
+      flow.setEmail(email);
+      flow.setRole(result.user.role);
+      flow.setCompletion("signup");
+      router.push("/auth/verify-email");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.status === 409) {
+          setErrors({ email: "An account with this email already exists." });
+        } else {
+          setApiError(err.detail);
+        }
+      } else {
+        setApiError("Something went wrong. Please try again.");
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
+
   return (
     <section className="auth-screen" aria-labelledby="details-title">
       <BackLink href="/auth/sign-up">Change account type</BackLink>
@@ -182,7 +237,7 @@ export function SignUpDetails({ role }: { role: AccountRole }) {
             <>
               Bring the budget.
               <br />
-              We’ll bring the buzz.
+              We'll bring the buzz.
             </>
           ) : (
             <>
@@ -212,7 +267,12 @@ export function SignUpDetails({ role }: { role: AccountRole }) {
         onSubmit={submit}
         noValidate
       >
-        <GoogleAuthButton intent="signup" onClick={() => enterDemo()} />
+        <GoogleAuthButton
+          intent="signup"
+          onClick={() => {
+            window.location.href = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/auth/google/login?role=${role}`;
+          }}
+        />
         <AuthDivider />
         {organisation ? (
           <TextField
@@ -257,8 +317,9 @@ export function SignUpDetails({ role }: { role: AccountRole }) {
           hint="Use 8+ characters with a number."
           error={errors.password}
         />
-        <AuthButton>
-          Create my {organisation ? "organisation" : "creator"} account
+        <ApiErrorMessage message={apiError} />
+        <AuthButton disabled={isLoading}>
+          {isLoading ? "Creating account…" : `Create my ${organisation ? "organisation" : "creator"} account`}
         </AuthButton>
       </form>
     </section>
@@ -269,18 +330,52 @@ export function SignIn() {
   const router = useRouter();
   const flow = useAuthFlow();
   const [errors, setErrors] = useState<Errors>({});
-  const enterDemo = (email = "") => {
-    setErrors({});
-    if (email.trim()) flow.setEmail(email.trim());
-    flow.setCompletion("signin");
-    router.push(flow.role === "organisation" ? "/onboarding/brand" : "/onboarding/creator");
-  };
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const [apiError, setApiError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setErrors({});
+    setApiError("");
+
     const data = new FormData(event.currentTarget);
-    const email = String(data.get("email") ?? "");
-    enterDemo(email);
+    const email = String(data.get("email") ?? "").trim();
+    const password = String(data.get("password") ?? "");
+
+    const next: Errors = {};
+    if (!isEmail(email)) next.email = "Enter a valid email address.";
+    if (!password) next.password = "Enter your password.";
+    setErrors(next);
+    if (Object.keys(next).length) return;
+
+    setIsLoading(true);
+    try {
+      const result = await authApi.login({ email, password });
+      storeTokens(result);
+      flow.setEmail(email);
+      flow.setRole(result.user.role);
+      flow.setCompletion("signin");
+
+      if (!result.user.email_verified) {
+        router.push("/auth/verify-email");
+      } else {
+        router.push(result.user.role === "organisation" ? "/onboarding/brand" : "/onboarding/creator");
+      }
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.status === 401) {
+          setErrors({ email: " ", password: "Incorrect email or password." });
+        } else {
+          setApiError(err.detail);
+        }
+      } else {
+        setApiError("Something went wrong. Please try again.");
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
+
   return (
     <section className="auth-screen" aria-labelledby="signin-title">
       <Header
@@ -299,7 +394,12 @@ export function SignIn() {
         }
       />
       <form id="signinForm" className="auth-form" onSubmit={submit} noValidate>
-        <GoogleAuthButton intent="signin" onClick={() => enterDemo()} />
+        <GoogleAuthButton
+          intent="signin"
+          onClick={() => {
+            window.location.href = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/auth/google/login`;
+          }}
+        />
         <AuthDivider />
         <TextField
           label="Email address"
@@ -327,7 +427,10 @@ export function SignIn() {
           </span>
           Keep me signed in on this device
         </label>
-        <AuthButton>Sign in to Clippit</AuthButton>
+        <ApiErrorMessage message={apiError} />
+        <AuthButton disabled={isLoading}>
+          {isLoading ? "Signing in…" : "Sign in to Clippit"}
+        </AuthButton>
       </form>
       <p className="switch-line">
         New around here? <Link href="/auth/sign-up">Create an account</Link>
@@ -340,13 +443,33 @@ export function ForgotPassword() {
   const router = useRouter();
   const flow = useAuthFlow();
   const [error, setError] = useState("");
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const [apiError, setApiError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const email = String(new FormData(event.currentTarget).get("email") ?? "");
+    setError("");
+    setApiError("");
+
+    const email = String(new FormData(event.currentTarget).get("email") ?? "").trim();
     if (!isEmail(email)) return setError("Enter a valid email address.");
-    flow.setEmail(email.trim());
-    router.push("/auth/recovery-code");
+
+    setIsLoading(true);
+    try {
+      await authApi.forgotPassword({ email });
+      flow.setEmail(email);
+      router.push("/auth/recovery-code");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setApiError(err.detail);
+      } else {
+        setApiError("Something went wrong. Please try again.");
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
+
   return (
     <section className="auth-screen" aria-labelledby="forgot-title">
       <BackLink href="/auth/sign-in">Back to sign in</BackLink>
@@ -357,14 +480,14 @@ export function ForgotPassword() {
         kicker="Password rescue"
         title={
           <>
-            Let’s get you
+            Let's get you
             <br />
             back in.
           </>
         }
         intro={
           <>
-            Enter the email on your account. We’ll send the code; you set the
+            Enter the email on your account. We'll send the code; you set the
             new password.
           </>
         }
@@ -379,7 +502,10 @@ export function ForgotPassword() {
           icon="mail"
           error={error}
         />
-        <AuthButton>Send recovery code</AuthButton>
+        <ApiErrorMessage message={apiError} />
+        <AuthButton disabled={isLoading}>
+          {isLoading ? "Sending…" : "Send recovery code"}
+        </AuthButton>
       </form>
     </section>
   );
@@ -391,7 +517,10 @@ export function OtpPage({ recovery = false }: { recovery?: boolean }) {
   const refs = useRef<Array<HTMLInputElement | null>>([]);
   const [digits, setDigits] = useState(["", "", "", "", "", ""]);
   const [error, setError] = useState("");
+  const [apiError, setApiError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+
   const update = (index: number, value: string) => {
     const digit = value.replace(/\D/g, "").slice(-1);
     setDigits((current) =>
@@ -400,10 +529,12 @@ export function OtpPage({ recovery = false }: { recovery?: boolean }) {
     if (digit && index < 5) refs.current[index + 1]?.focus();
     setError("");
   };
+
   const keyDown = (index: number, event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Backspace" && !digits[index] && index > 0)
       refs.current[index - 1]?.focus();
   };
+
   const paste = (event: ClipboardEvent<HTMLDivElement>) => {
     const incoming = event.clipboardData
       .getData("text")
@@ -415,17 +546,47 @@ export function OtpPage({ recovery = false }: { recovery?: boolean }) {
     setDigits(Array.from({ length: 6 }, (_, index) => incoming[index] ?? ""));
     refs.current[Math.min(incoming.length, 6) - 1]?.focus();
   };
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (digits.join("").length !== 6) return setError("Enter all six digits.");
-    if (recovery) router.push("/auth/reset-password");
-    else {
-      flow.setCompletion("signup");
-      router.push("/auth/success");
+    const code = digits.join("");
+    if (code.length !== 6) return setError("Enter all six digits.");
+    setError("");
+    setApiError("");
+    setIsLoading(true);
+
+    try {
+      if (recovery) {
+        const result = await authApi.verifyRecoveryCode({ email: flow.email, code });
+        flow.setResetToken(result.reset_token);
+        router.push("/auth/reset-password");
+      } else {
+        await authApi.verifyEmail({ code, email: flow.email || undefined });
+        flow.setCompletion("signup");
+        router.push("/auth/success");
+      }
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setError(err.detail);
+      } else {
+        setApiError("Something went wrong. Please try again.");
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
-  const resend = () => {
+
+  const resend = async () => {
     if (cooldown) return;
+    try {
+      if (recovery) {
+        await authApi.forgotPassword({ email: flow.email });
+      } else {
+        await authApi.resendVerification({ email: flow.email || undefined });
+      }
+    } catch {
+      // resend failures are silent — the user can try again
+    }
     setCooldown(30);
     const timer = window.setInterval(
       () =>
@@ -439,6 +600,7 @@ export function OtpPage({ recovery = false }: { recovery?: boolean }) {
       1000,
     );
   };
+
   return (
     <section className="auth-screen" aria-labelledby="otp-title">
       <BackLink
@@ -465,7 +627,7 @@ export function OtpPage({ recovery = false }: { recovery?: boolean }) {
             <>
               Six digits.
               <br />
-              Then you’re in.
+              Then you're in.
             </>
           ) : (
             <>
@@ -513,8 +675,13 @@ export function OtpPage({ recovery = false }: { recovery?: boolean }) {
             {error}
           </small>
         </fieldset>
-        <AuthButton>
-          {recovery ? "Check the code" : "Verify my email"}
+        <ApiErrorMessage message={apiError} />
+        <AuthButton disabled={isLoading}>
+          {isLoading
+            ? "Checking…"
+            : recovery
+              ? "Check the code"
+              : "Verify my email"}
         </AuthButton>
       </form>
       <p className="resend-line">
@@ -532,12 +699,19 @@ export function ResetPassword() {
   const router = useRouter();
   const flow = useAuthFlow();
   const [errors, setErrors] = useState<Errors>({});
+  const [apiError, setApiError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const [password, setPassword] = useState("");
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setErrors({});
+    setApiError("");
+
     const data = new FormData(event.currentTarget);
     const nextPassword = String(data.get("password") ?? "");
     const confirm = String(data.get("confirmPassword") ?? "");
+
     const next: Errors = {};
     if (!isStrongPassword(nextPassword))
       next.password = "Use 8+ characters with at least one number.";
@@ -545,9 +719,28 @@ export function ResetPassword() {
       next.confirmPassword = "Those passwords do not match.";
     setErrors(next);
     if (Object.keys(next).length) return;
-    flow.setCompletion("recovery");
-    router.push("/auth/success");
+
+    if (!flow.resetToken) {
+      setApiError("Your reset session has expired. Start again.");
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      await authApi.resetPassword({ reset_token: flow.resetToken, password: nextPassword });
+      flow.setCompletion("recovery");
+      router.push("/auth/success");
+    } catch (err) {
+      if (err instanceof ApiError) {
+        setApiError(err.detail);
+      } else {
+        setApiError("Something went wrong. Please try again.");
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
+
   return (
     <section className="auth-screen" aria-labelledby="reset-title">
       <BackLink href="/auth/recovery-code">Back to code</BackLink>
@@ -560,7 +753,7 @@ export function ResetPassword() {
             Make it yours.
           </>
         }
-        intro={<>Choose a password you haven’t used on Clippit before.</>}
+        intro={<>Choose a password you haven't used on Clippit before.</>}
       />
       <form id="resetForm" className="auth-form" onSubmit={submit} noValidate>
         <div
@@ -598,18 +791,34 @@ export function ResetPassword() {
             At least one number
           </li>
         </ul>
-        <AuthButton>Save my new password</AuthButton>
+        <ApiErrorMessage message={apiError} />
+        <AuthButton disabled={isLoading}>
+          {isLoading ? "Saving…" : "Save my new password"}
+        </AuthButton>
       </form>
     </section>
   );
 }
 
 export function Success() {
+  const router = useRouter();
   const { completion, role } = useAuthFlow();
   const signin = completion === "signin";
   const recovery = completion === "recovery";
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const accessToken = params.get("access_token");
+    const refreshToken = params.get("refresh_token");
+    const next = params.get("next");
+    if (accessToken) {
+      storeTokens({ access_token: accessToken, refresh_token: refreshToken });
+      window.history.replaceState({}, "", window.location.pathname);
+      if (next) router.replace(next);
+    }
+  }, [router]);
   const copy = signin
-    ? "You’re signed in. Your campaigns and earnings are ready when the product API lands."
+    ? "You're signed in. Head to your dashboard to get started."
     : recovery
       ? "Your password is reset. You can sign in with the new one now."
       : role === "organisation"
@@ -625,7 +834,7 @@ export function Success() {
         kicker="All sorted"
         title={
           <>
-            You’re in.
+            You're in.
             <br />
             Make your move.
           </>
@@ -645,7 +854,7 @@ export function Success() {
         {recovery
           ? "Sign in"
           : signin
-            ? "Continue my setup"
+            ? "Go to my dashboard"
             : "Set up my Clippit"}
         <Icon name="arrow" />
       </Link>

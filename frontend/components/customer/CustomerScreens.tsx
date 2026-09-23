@@ -10,6 +10,9 @@ import { ProfileAvatar, useStoredProfile, type StoredProfile } from "@/component
 import { ReceiptHeader } from "@/components/ui/ReceiptHeader";
 import { BRAND_CAMPAIGN_FEE_RATE, calculateFee } from "@/lib/fees";
 import { money } from "@/lib/product";
+import { authApi } from "@/lib/api/auth";
+import type { SessionOut } from "@/lib/api/auth";
+import { ApiError } from "@/lib/api/client";
 
 const CREATOR_PROFILE: StoredProfile = {
   name: "Tobi On Cam",
@@ -123,26 +126,84 @@ export function PayoutAccountScreen() {
   </div>;
 }
 
-type Session = { id: number; device: string; place: string; seen: string; current?: boolean };
+type Session = { id: string; device: string; place: string; seen: string; current?: boolean };
+
+function relativeTime(dateStr: string): string {
+  const date = new Date(dateStr);
+  const diffMins = Math.floor((Date.now() - date.getTime()) / 60000);
+  if (diffMins < 1) return "Just now";
+  if (diffMins < 60) return `${diffMins} minutes ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours} hours ago`;
+  if (diffHours < 48) return "Yesterday";
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "long" });
+}
+
+const MOCK_SESSIONS: Session[] = [
+  { id: "mock-1", device: "Chrome on Windows", place: "Lagos, Nigeria", seen: "Active now", current: true },
+  { id: "mock-2", device: "Chrome on Android", place: "Lagos, Nigeria", seen: "18 minutes ago" },
+  { id: "mock-3", device: "Safari on iPhone", place: "Abuja, Nigeria", seen: "14 September" },
+];
 
 export function SecurityScreen() {
   const [twoFactor, setTwoFactor] = useState(false);
-  const [sessions, setSessions] = useState<Session[]>([
-    { id: 1, device: "Chrome on Windows", place: "Lagos, Nigeria", seen: "Active now", current: true },
-    { id: 2, device: "Chrome on Android", place: "Lagos, Nigeria", seen: "18 minutes ago" },
-    { id: 3, device: "Safari on iPhone", place: "Abuja, Nigeria", seen: "14 September" },
-  ]);
+  const [sessions, setSessions] = useState<Session[]>(MOCK_SESSIONS);
   const [saved, setSaved] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
   const [passwords, setPasswords] = useState({ current: "", next: "", confirm: "" });
-  const valid = passwords.current.length >= 6 && passwords.next.length >= 8 && passwords.next === passwords.confirm;
+  const valid = passwords.current.length >= 6 && passwords.next.length >= 8 && /\d/.test(passwords.next) && passwords.next === passwords.confirm;
   const update = (key: keyof typeof passwords, value: string) => setPasswords((current) => ({ ...current, [key]: value }));
+
+  useEffect(() => {
+    authApi.getSessions()
+      .then((data: SessionOut[]) => {
+        if (data.length > 0) {
+          setSessions(data.map((s) => ({
+            id: s.id,
+            device: s.device_label || "Unknown device",
+            place: s.ip_address || "Unknown location",
+            seen: s.current ? "Active now" : relativeTime(s.last_seen_at),
+            current: s.current,
+          })));
+        }
+      })
+      .catch(() => { /* keep mock sessions */ });
+  }, []);
+
+  const signOutOthers = async () => {
+    setSessions((current) => current.filter((s) => s.current));
+    try { await authApi.revokeOtherSessions(); } catch {}
+  };
+
+  const removeSession = async (id: string) => {
+    setSessions((current) => current.filter((s) => s.id !== id));
+    try { await authApi.revokeSession(id); } catch {}
+  };
+
+  const changePassword = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!valid) return;
+    setPasswordLoading(true);
+    setPasswordError("");
+    try {
+      await authApi.changePassword({ current_password: passwords.current, new_password: passwords.next, revoke_other_sessions: true });
+      setSaved(true);
+      setPasswords({ current: "", next: "", confirm: "" });
+      window.setTimeout(() => setSaved(false), 1800);
+    } catch (err) {
+      setPasswordError(err instanceof ApiError ? err.detail : "Failed to change password.");
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
 
   return <div className="dashboard-page customer-page security-page">
     <ScreenHead title="Security" copy="Manage your password, verification method and signed-in devices." back="/dashboard/settings" />
     <div className="security-layout">
       <section className="security-sheet security-score"><div className="security-orbit"><strong><AnimatedNumber value={twoFactor ? 100 : 72} suffix="%" /></strong><span>Account protection</span><i /><i /><i /></div><div><h2>{twoFactor ? "Protection is complete" : "Add one more layer"}</h2><p>Turn on two-step verification before changing payout details.</p><label className="security-toggle"><span><ProductIcon name="shield" /><b>Two-step verification</b><small>Use a code when a new device signs in.</small></span><input type="checkbox" checked={twoFactor} onChange={() => setTwoFactor((value) => !value)} /><i /></label></div></section>
-      <form className="security-sheet password-sheet" onSubmit={(event) => { event.preventDefault(); if (valid) { setSaved(true); setPasswords({ current: "", next: "", confirm: "" }); window.setTimeout(() => setSaved(false), 1800); } }}><header><span><ProductIcon name="settings" /></span><div><h2>Change password</h2><p>Use at least eight characters for the new password.</p></div></header><label><span>Current password</span><input type="password" value={passwords.current} onChange={(event) => update("current", event.target.value)} /></label><label><span>New password</span><input type="password" value={passwords.next} onChange={(event) => update("next", event.target.value)} /></label><label><span>Confirm new password</span><input type="password" value={passwords.confirm} onChange={(event) => update("confirm", event.target.value)} /></label><button className="lime-button" type="submit" disabled={!valid}>{saved ? "Password changed" : "Change password"}<ProductIcon name={saved ? "check" : "arrow"} /></button></form>
-      <section className="security-sheet sessions-sheet"><header><div><h2>Signed-in devices</h2><p>Remove any session you do not recognise.</p></div><button className="customer-text-button" type="button" onClick={() => setSessions((current) => current.filter((session) => session.current))} disabled={sessions.length === 1}>Sign out other devices</button></header>{sessions.map((session) => <article key={session.id}><span><ProductIcon name={session.device.includes("Android") || session.device.includes("iPhone") ? "phone" : "tech"} /></span><p><strong>{session.device}{session.current && <i>Current</i>}</strong><small>{session.place} · {session.seen}</small></p>{!session.current && <button type="button" onClick={() => setSessions((current) => current.filter((item) => item.id !== session.id))}>Remove</button>}</article>)}</section>
+      <form className="security-sheet password-sheet" onSubmit={changePassword}><header><span><ProductIcon name="settings" /></span><div><h2>Change password</h2><p>Use at least eight characters including a number.</p></div></header><label><span>Current password</span><input type="password" value={passwords.current} onChange={(event) => update("current", event.target.value)} /></label><label><span>New password</span><input type="password" value={passwords.next} onChange={(event) => update("next", event.target.value)} /></label><label><span>Confirm new password</span><input type="password" value={passwords.confirm} onChange={(event) => update("confirm", event.target.value)} /></label>{passwordError && <p className="auth-error" role="alert">{passwordError}</p>}<button className="lime-button" type="submit" disabled={!valid || passwordLoading}>{saved ? "Password changed" : passwordLoading ? "Saving…" : "Change password"}<ProductIcon name={saved ? "check" : "arrow"} /></button></form>
+      <section className="security-sheet sessions-sheet"><header><div><h2>Signed-in devices</h2><p>Remove any session you do not recognise.</p></div><button className="customer-text-button" type="button" onClick={signOutOthers} disabled={sessions.length === 1}>Sign out other devices</button></header>{sessions.map((session) => <article key={session.id}><span><ProductIcon name={session.device.includes("Android") || session.device.includes("iPhone") ? "phone" : "tech"} /></span><p><strong>{session.device}{session.current && <i>Current</i>}</strong><small>{session.place} · {session.seen}</small></p>{!session.current && <button type="button" onClick={() => removeSession(session.id)}>Remove</button>}</article>)}</section>
     </div>
   </div>;
 }

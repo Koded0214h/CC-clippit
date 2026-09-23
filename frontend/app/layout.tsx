@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Kalam } from "next/font/google";
 import type { ReactNode } from "react";
+import { UserProvider } from "@/lib/user-context";
 import "./globals.css";
 import "../styles/product.css";
 import "../styles/creator.css";
@@ -41,7 +42,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${geist.variable} ${kalam.variable}`}>
-      <body>{children}</body>
+      <body><UserProvider>{children}</UserProvider></body>
     </html>
   );
 }

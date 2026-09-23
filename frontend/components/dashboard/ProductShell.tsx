@@ -8,6 +8,7 @@ import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { ProfileAvatar, useStoredProfile, type StoredProfile } from "@/components/ui/ProfilePhotoPicker";
 import { useAutoHideDock } from "@/components/ui/useAutoHideDock";
+import { useUser } from "@/lib/user-context";
 
 const CREATOR_PROFILE_FALLBACK: StoredProfile = { name: "Tobi On Cam", bio: "", photo: "" };
 
@@ -44,7 +45,9 @@ export function ProductShell({ children }: { children: ReactNode }) {
   const profile = useStoredProfile("creator", CREATOR_PROFILE_FALLBACK);
   const dockHidden = useAutoHideDock();
   const [moreOpen, setMoreOpen] = useState(false);
-  const initials = profile.name.trim().split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase() || "TO";
+  const { user, logout } = useUser();
+  const displayName = user?.full_name ?? profile.name;
+  const initials = displayName.trim().split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase() || "U";
   const moreIsCurrent = creatorMoreItems.some((item) => pathname.startsWith(item.href));
 
   return (
@@ -82,11 +85,14 @@ export function ProductShell({ children }: { children: ReactNode }) {
           <Link className="rail-profile" href="/dashboard/settings">
             <ProfileAvatar profile={profile} fallback={initials} className="avatar" />
             <span>
-              <strong>{profile.name}</strong>
+              <strong>{displayName}</strong>
               <small>Creator</small>
             </span>
             <ProductIcon name="chevron" />
           </Link>
+          <button type="button" className="rail-signout" onClick={logout} aria-label="Sign out">
+            Sign out
+          </button>
         </div>
       </aside>
 
