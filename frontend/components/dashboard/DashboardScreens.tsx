@@ -10,6 +10,7 @@ import { campaigns, leaderboard, type Campaign } from "@/lib/product";
 import { campaignsApi, type CampaignOut } from "@/lib/api/campaigns";
 import { earningsApi, type LeaderRow } from "@/lib/api/earnings";
 import { creatorApi } from "@/lib/api/creator";
+import { creatorProfileApi } from "@/lib/api/social";
 
 function campaignOutToLocal(c: CampaignOut): Campaign {
   return {
@@ -638,6 +639,17 @@ export function SettingsScreen() {
   }, [storedProfile]);
 
   useEffect(() => {
+    creatorProfileApi.get().then((data) => {
+      setProfile((current) => ({
+        ...current,
+        name: data.display_name || current.name,
+        bio: data.bio || current.bio,
+        photo: data.photo_url || current.photo,
+      }));
+    }).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
     const ids = ["profile", "accounts", "payouts", "notifications"];
     const syncFromHash = () => {
       const id = window.location.hash.slice(1);
@@ -692,7 +704,7 @@ export function SettingsScreen() {
               <label><span>Location</span><input defaultValue="Lagos, Nigeria" /></label>
               </div>
             </div>
-            <div className="settings-profile-actions"><button className="lime-button" type="button" disabled={profile.name.trim().length < 2 || profile.bio.trim().length < 2} onClick={() => { saveStoredProfile("creator", { ...profile, name: profile.name.trim(), bio: profile.bio.trim() }); setSaved(true); window.setTimeout(() => setSaved(false), 2200); }}>{saved ? <><ProductIcon name="check" /> Changes saved</> : <>Save profile<ProductIcon name="arrow" /></>}</button><Link className="ink-button" href="/dashboard/profile">View public profile<ProductIcon name="eye" /></Link></div>
+            <div className="settings-profile-actions"><button className="lime-button" type="button" disabled={profile.name.trim().length < 2 || profile.bio.trim().length < 2} onClick={() => { const clean = { ...profile, name: profile.name.trim(), bio: profile.bio.trim() }; saveStoredProfile("creator", clean); creatorProfileApi.update({ display_name: clean.name, bio: clean.bio }).catch(() => undefined); setSaved(true); window.setTimeout(() => setSaved(false), 2200); }}>{saved ? <><ProductIcon name="check" /> Changes saved</> : <>Save profile<ProductIcon name="arrow" /></>}</button><Link className="ink-button" href="/dashboard/profile">View public profile<ProductIcon name="eye" /></Link></div>
           </section>
 
           <section id="accounts" className="settings-sheet">

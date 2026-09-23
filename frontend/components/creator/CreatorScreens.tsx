@@ -11,6 +11,7 @@ import { CREATOR_WITHDRAWAL_FEE_RATE, calculateFee, feePercentage } from "@/lib/
 import { campaigns, money } from "@/lib/product";
 import { earningsApi, type EarningRow } from "@/lib/api/earnings";
 import { creatorApi } from "@/lib/api/creator";
+import { socialApi, type ConnectedAccountOut } from "@/lib/api/social";
 
 const art = {
   appeal: "/assets/illustrations/clippit-icons/appeal-review.webp",
@@ -94,13 +95,44 @@ export function MyClipsScreen() {
 
 type Social = { name: string; icon: ProductIconName; handle: string; connected: boolean; note: string };
 
+const MOCK_SOCIAL_ACCOUNTS: Social[] = [
+  { name: "TikTok", icon: "tiktok", handle: "@tobioncam", connected: true, note: "Views checked 2 min ago" },
+  { name: "Instagram", icon: "instagram", handle: "@tobioncam", connected: true, note: "Views checked 4 min ago" },
+  { name: "YouTube", icon: "youtube", handle: "", connected: false, note: "Required for YouTube briefs" },
+];
+
+function socialIcon(platform: string): ProductIconName {
+  if (platform.toLowerCase() === "instagram") return "instagram";
+  if (platform.toLowerCase() === "youtube") return "youtube";
+  return "tiktok";
+}
+
+function formatLastChecked(dateStr: string | null): string {
+  if (!dateStr) return "Not yet checked";
+  const mins = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
+  if (mins < 1) return "Checked just now";
+  if (mins < 60) return `Views checked ${mins} min ago`;
+  return `Views checked ${Math.floor(mins / 60)} hr ago`;
+}
+
 export function ConnectedAccountsScreen() {
-  const [accounts, setAccounts] = useState<Social[]>([
-    { name: "TikTok", icon: "tiktok", handle: "@tobioncam", connected: true, note: "Views checked 2 min ago" },
-    { name: "Instagram", icon: "instagram", handle: "@tobioncam", connected: true, note: "Views checked 4 min ago" },
-    { name: "YouTube", icon: "youtube", handle: "", connected: false, note: "Required for YouTube briefs" },
-  ]);
+  const [accounts, setAccounts] = useState<Social[]>(MOCK_SOCIAL_ACCOUNTS);
   const connected = accounts.filter((account) => account.connected).length;
+
+  useEffect(() => {
+    socialApi.accounts().then((data) => {
+      if (data.length > 0) {
+        setAccounts(data.map((a) => ({
+          name: a.platform,
+          icon: socialIcon(a.platform),
+          handle: a.handle ? `@${a.handle.replace(/^@/, "")}` : "",
+          connected: a.connected,
+          note: a.connected ? formatLastChecked(a.last_checked_at) : (a.connectable ? "Connect to join briefs" : "Coming soon"),
+        })));
+      }
+    }).catch(() => undefined);
+  }, []);
+
   const toggle = (name: string) => setAccounts((current) => current.map((account) => account.name === name ? { ...account, connected: !account.connected, handle: account.handle || "@tobioncam", note: account.connected ? "Required for this platform" : "Connection ready for demo" } : account));
   return <div className="dashboard-page creator-flow-page">
     <CreatorHeading title="Connected accounts" copy="Connect the accounts Clippit should use to verify views." action={<PrimaryLink href="/dashboard/campaigns/indomie-no-long-thing/submit">Continue to submission</PrimaryLink>} />
