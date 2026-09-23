@@ -10,6 +10,7 @@ import { money } from "@/lib/product";
 import { authApi, clearTokens, storeTokens } from "@/lib/api/auth";
 import {
   adminApi,
+  type AdminOverview,
   type AdminCampaignDetail,
   type AdminCampaignRow,
   type AdminLedgerRow,
@@ -131,15 +132,39 @@ const queueMeta: Record<QueueKind, { title: string; copy: string; eyebrow: strin
 export function AdminLoginScreen() {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
-  const submit = (event: FormEvent) => { event.preventDefault(); setBusy(true); window.setTimeout(() => router.push("/admin"), 550); };
+  const [error, setError] = useState("");
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const email = (form.querySelector('input[type="email"]') as HTMLInputElement | null)?.value ?? "";
+    const password = (form.querySelector('input[type="password"]') as HTMLInputElement | null)?.value ?? "";
+    setBusy(true);
+    setError("");
+    try {
+      const session = await authApi.login({ email, password });
+      if ((session.user.role as string) !== "admin") {
+        clearTokens();
+        setError("This account does not have operator access.");
+        return;
+      }
+      storeTokens(session);
+      router.push("/admin");
+    } catch {
+      setError("We could not sign you in. Check your work email and password.");
+    } finally {
+      setBusy(false);
+    }
+  };
   return <main className="admin-login"><section><Link href="/"><Image src="/assets/clippit-mark-light.png" width={44} height={44} alt="" /><strong>Clippit</strong><span>operations</span></Link><div className="admin-login__signal"><i /><i /><i /><span><ProductIcon name="shield" /></span></div><blockquote>Customer money and decisions require an accountable operator.</blockquote><small>Restricted workspace · actions are written to the audit log</small></section><form onSubmit={submit}><AdminStatus tone="gold">Operator access</AdminStatus><h1>Sign in to operations.</h1><p>Use your company account and security key.</p><label><span>Work email</span><input type="email" defaultValue="amara@clippit.ng" required /></label><label><span>Password</span><input type="password" defaultValue="password" required /></label><div className="admin-login__key"><ProductIcon name="shield" /><span><strong>Security key</strong><small>Ready on this device</small></span><AdminStatus tone="lime">Connected</AdminStatus></div><AdminButton type="submit" disabled={busy}>{busy ? "Opening workspace" : "Continue securely"}</AdminButton><Link href="/support/tickets/new">Cannot access your operator account?</Link></form></main>;
 }
 
 export function AdminCommandCentreScreen() {
+  const [overview, setOverview] = useState<AdminOverview | null>(null);
+  useEffect(() => { adminApi.overview().then(setOverview).catch(() => undefined); }, []);
   const pulse = [
-    { label: "Money moving", value: 4820000, suffix: "", format: "money" as const, tone: "lime" as Tone, href: "/admin/payouts" },
-    { label: "Decisions due", value: 23, suffix: "", format: "number" as const, tone: "gold" as Tone, href: "/admin/submissions" },
-    { label: "Risk holds", value: 14, suffix: "", format: "number" as const, tone: "red" as Tone, href: "/admin/risk" },
+    { label: "Money moving", value: overview?.creator_liability ?? 4820000, suffix: "", format: "money" as const, tone: "lime" as Tone, href: "/admin/payouts" },
+    { label: "Decisions due", value: overview?.submissions_needing_review ?? 23, suffix: "", format: "number" as const, tone: "gold" as Tone, href: "/admin/submissions" },
+    { label: "Risk holds", value: overview?.blocked_earning_accounts ?? 14, suffix: "", format: "number" as const, tone: "red" as Tone, href: "/admin/risk" },
     { label: "Delivery health", value: 99.94, suffix: "%", format: "number" as const, tone: "blue" as Tone, href: "/admin/system" },
   ];
   return <div className="admin-page"><AdminHeading eyebrow="Tuesday · 22 September" title="Operations, right now" copy="The queues that need a person before customers feel the delay." action={<AdminStatus tone="lime">Live</AdminStatus>} /><section className="admin-command-pulse">{pulse.map((item) => <Link href={item.href} key={item.label} className={`is-${item.tone}`}><small>{item.label}</small><strong><AnimatedNumber value={item.value} format={item.format} decimals={item.value % 1 ? 2 : 0} suffix={item.suffix} duration={720} /></strong><span>Open queue<ProductIcon name="arrow" /></span></Link>)}</section><div className="admin-command-grid"><section className="admin-now"><header><div><h2>Needs attention</h2><p>Ordered by customer impact and deadline.</p></div><Link href="/admin/audit">Open audit log<ProductIcon name="arrow" /></Link></header>{[
@@ -154,8 +179,19 @@ export function AdminQueueScreen({ kind }: { kind: QueueKind }) {
   const config = queueMeta[kind];
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("All");
-  const rows = useMemo(() => config.rows.filter((row) => `${row.name} ${row.id} ${row.meta}`.toLowerCase().includes(query.toLowerCase()) && (filter === "All" || row.status === filter)), [config.rows, filter, query]);
-  const statuses = ["All", ...new Set(config.rows.map((row) => row.status))];
+  const [sourceRows, setSourceRows] = useState(config.rows);
+  useEffect(() => {
+    setSourceRows(config.rows);
+    const apply = (items: typeof config.rows) => { if (items.length) setSourceRows(items); };
+    if (kind === "users") adminApi.listUsers().then((items) => apply(items.map((item) => ({ id: item.id, name: item.full_name, meta: `${titleCase(item.role)} · ${item.email}`, value: item.email_verified ? "Email verified" : "Email unverified", status: item.suspended ? "Suspended" : "Active", tone: item.suspended ? "red" : "lime", age: relativeTime(item.created_at), href: `/admin/users/${item.id}` })))).catch(() => undefined);
+    if (kind === "campaigns") adminApi.listCampaigns().then((items) => apply(items.map((item) => ({ id: item.id, name: item.title, meta: `${item.organisation_name} · Campaign`, value: money(item.pot - item.spent), status: titleCase(item.status), tone: item.status === "active" ? "lime" : "gold", age: relativeTime(item.created_at), href: `/admin/campaigns/${item.slug}` })))).catch(() => undefined);
+    if (kind === "submissions") adminApi.allSubmissions().then((items) => apply(items.map((item) => ({ id: item.id, name: item.campaign_title, meta: `${item.creator_name} · ${titleCase(item.platform)}`, value: `${item.cumulative_views.toLocaleString()} views`, status: titleCase(item.verification_status), tone: item.flagged ? "red" : item.verification_status === "needs_review" ? "gold" : "lime", age: relativeTime(item.created_at), href: `/admin/submissions/${item.id}` })))).catch(() => undefined);
+    if (kind === "support") adminApi.supportQueue().then((items) => apply(items.map((item) => ({ id: item.id, name: item.subject, meta: titleCase(item.category), value: titleCase(item.priority), status: titleCase(item.status), tone: item.priority === "urgent" ? "red" : item.status === "open" ? "gold" : "lime", age: relativeTime(item.updated_at), href: `/admin/support/${item.id}` })))).catch(() => undefined);
+    if (kind === "disputes") adminApi.disputeQueue().then((items) => apply(items.map((item) => ({ id: item.id, name: titleCase(item.type), meta: item.reason, value: item.amount_at_risk === null ? "No money held" : money(item.amount_at_risk), status: titleCase(item.status), tone: item.status === "open" ? "gold" : "lime", age: untilTime(item.deadline_at), href: `/admin/disputes/${item.id}` })))).catch(() => undefined);
+    if (kind === "payouts") adminApi.listPayouts().then((items) => apply(items.map((item) => ({ id: item.id, name: item.creator_name, meta: `${item.provider} · ${item.reference}`, value: money(item.amount), status: titleCase(item.status), tone: item.status === "failed" ? "red" : item.status === "processing" ? "blue" : "gold", age: relativeTime(item.initiated_at), href: `/admin/payouts/${item.id}` })))).catch(() => undefined);
+  }, [config.rows, kind]);
+  const rows = useMemo(() => sourceRows.filter((row) => `${row.name} ${row.id} ${row.meta}`.toLowerCase().includes(query.toLowerCase()) && (filter === "All" || row.status === filter)), [filter, query, sourceRows]);
+  const statuses = ["All", ...new Set(sourceRows.map((row) => row.status))];
   return <div className="admin-page"><AdminHeading eyebrow={config.eyebrow} title={config.title} copy={config.copy} action={<div className="admin-queue-count"><ProductIcon name={config.icon} /><span><strong>{config.metric}</strong><small>{config.unit}</small></span></div>} /><section className="admin-queue-tools"><label><ProductIcon name="search" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`Search ${config.title.toLowerCase()}`} /></label><div>{statuses.map((status) => <button type="button" className={filter === status ? "is-active" : ""} onClick={() => setFilter(status)} key={status}>{status}</button>)}</div></section><section className="admin-queue"><header><span>Case</span><span>Account or subject</span><span>Value</span><span>Status</span><span>Age</span></header>{rows.map((row) => <Link href={row.href} key={row.id}><code>{row.id}</code><p><strong>{row.name}</strong><small>{row.meta}</small></p><b>{row.value}</b><AdminStatus tone={row.tone}>{row.status}</AdminStatus><time>{row.age}</time><ProductIcon name="arrow" /></Link>)}{rows.length === 0 && <div className="admin-queue-empty"><ProductIcon name="search" /><strong>No matching cases</strong><span>Clear the search or choose another status.</span></div>}</section></div>;
 }
 
