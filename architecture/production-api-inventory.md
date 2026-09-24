@@ -1,1080 +1,663 @@
-# Clippit production API inventory and gap register
+# Clippit V1 API inventory and PRD compliance register
 
-Last audited: 2026-09-21
+Last reconciled: 2026-09-24
 
-This document is the backend contract for taking Clippit from the current reviewable product to a production service for creators, brands, support staff, finance operators, trust and safety, and administrators.
+Authoritative product source: `Clippit_Product_Requirements_Document_V1.0.pdf`, 16 pages, September 2026
 
-It has four jobs:
+Repository baseline: commit `88c675b`
 
-1. Record every endpoint currently mounted by `backend/main.py`.
-2. Distinguish code that exists from code that is genuinely launch-ready.
-3. Define the endpoints still missing from the customer and operator journeys.
-4. Identify production work that cannot be solved by adding an endpoint.
+This document is the API build contract for the Clippit V1 product. It translates the locked product behavior in the V1 PRD into API responsibilities and records whether the current backend satisfies them.
 
-The inventory was produced from the FastAPI routers and FastAPI's automatically mounted documentation routes, not from the older README count. There are currently **101 mounted routes** in the main application: 97 application routes plus 4 framework documentation routes. This count includes hidden webhook/media routes and internal service routes.
+The V1 PRD supersedes the earlier high-level PRD where they conflict. Requirements from the older document, previous screen explorations, or implementation preferences are not V1 requirements unless the V1 PRD states them.
 
-The audited target adds **194 definite routes**: **123 P0 launch blockers** and **71 P1 broad-production routes**. It also defines **21 conditional routes** used only when help/legal content is managed internally or when domains run as separate services/workers. That produces a maximum target surface of **316 main-application routes**. The repository also contains 38 unmounted provider-experiment routes documented separately and excluded from that total. This does not mean 215 unrelated systems need to be written: many of the new routes are thin, permissioned views or actions over shared onboarding, session, identity, campaign-draft, asset, ledger, support, dispute, verification, moderation, and operator services.
+## Reading rules
 
-## Status and priority
+- **Required behavior** is copied or directly derived from locked V1 behavior.
+- Endpoint paths are the repository's API contract for delivering that behavior; the PRD itself does not prescribe URL names.
+- Where the PRD says **TBD**, this document preserves the decision as TBD. It must not invent a provider, role hierarchy, fraud threshold, polling cadence, or recovery policy.
+- A route existing in code does not make the behavior compliant. The status applies to the complete PRD contract behind it.
+- Extra endpoints may remain in the application, but they are not V1 acceptance blockers unless listed here.
+- Raw route count is not a completion metric. V1 acceptance is based on the behaviors and invariants in this document.
 
-| Label | Meaning |
+## Status labels
+
+| Status | Meaning |
 |---|---|
-| Built | The route and domain behavior exist in the repository. It still needs frontend integration and deployment verification. |
-| Built, dependency pending | The route exists, but a provider or production subsystem behind it is incomplete or still defaults to a sandbox/local implementation. |
-| Internal | Service-to-service or operator-only route; never call it directly from the browser. |
-| Missing P0 | Required before real customers or real money are allowed onto the service. |
-| Missing P1 | Required before a broad public launch or a staffed production operation. |
-| Conditional | Required only if the named concern is split into a separate service. |
-
-P0 means launch-blocking. P1 does not mean decorative or optional; it means the product can be piloted without it only if the team has an explicit manual operating procedure.
-
-## Production-wide API rules
-
-These rules apply to every route, including routes already built.
-
-- Keep the existing paths for the first integration pass. Add `/api/v1` at the gateway or in one coordinated migration; do not version routes piecemeal.
-- Browser routes use short-lived bearer access tokens plus rotating refresh tokens in secure, HTTP-only, `SameSite=Lax` cookies.
-- Internal routes require `X-Internal-Secret` now and service identity/mTLS when services are separated.
-- Every list route uses cursor pagination, a bounded `limit`, deterministic ordering, and documented filters.
-- Every money-moving POST accepts an `Idempotency-Key` and returns the same resource for safe retries.
-- Every mutation writes an audit event containing actor, subject, resource, request ID, timestamp, and safe metadata.
-- Errors use one envelope: `code`, `message`, `field_errors`, `request_id`, and optional `retry_after`.
-- Timestamps are ISO 8601 UTC. Money is serialized as decimal strings plus an ISO currency code; never use binary floats.
-- Public and browser responses never expose access tokens, unmasked bank details, internal trust features, provider secrets, or raw storage keys.
-- Webhooks verify signatures against the raw request body, store provider event IDs, and are idempotent.
-- All upload/download routes enforce ownership, MIME sniffing, size limits, malware scanning, expiry, and signed access.
-- Destructive actions use re-authentication and a confirmation token when they affect identity, payout destinations, campaign money, or account deletion.
+| **Compliant** | The current backend route and domain behavior satisfy the V1 requirement. Live-provider approval or deployment configuration may still be needed. |
+| **Partial** | A route or service exists, but required V1 behavior, state, provenance, or enforcement is incomplete or contradictory. |
+| **Missing** | No usable backend contract currently delivers the requirement. |
+| **TBD** | The PRD intentionally leaves the named provider or narrow policy undecided. Do not implement an invented product rule. |
+| **Supporting** | Useful implementation/API behavior that is not itself a V1 product requirement. |
 
 ---
 
-# Part I: endpoints that already exist
+# 1. Locked V1 product decisions
 
-## System and framework-mounted documentation
+These values are product constants, not implementation options.
 
-| Method and path | Access | What it does | Status |
-|---|---|---|---|
-| `GET /health` | Public | Returns a shallow process-health response. It does not prove database, storage, provider, queue, or worker readiness. | Built |
-| `GET /openapi.json` | Public by FastAPI default | Returns the generated OpenAPI schema for routes included in the schema. Hidden webhook/media routes are omitted. | Built automatically; disable publicly or protect in production |
-| `GET /docs` | Public by FastAPI default | Serves Swagger UI. | Built automatically; disable publicly or protect in production |
-| `GET /docs/oauth2-redirect` | Public by FastAPI default | Swagger UI OAuth redirect helper. | Built automatically; disable with Swagger or protect in production |
-| `GET /redoc` | Public by FastAPI default | Serves ReDoc. | Built automatically; disable publicly or protect in production |
-
-## Authentication and email recovery
-
-| Method and path | Access | Request / result | Status |
-|---|---|---|---|
-| `POST /auth/signup` | Public, rate limited | Creates a creator or organisation account from email, password, name, and role; returns a bearer token and user. | Built |
-| `POST /auth/login` | Public, rate limited | Validates email/password and returns a bearer token and user. | Built |
-| `POST /auth/logout` | Signed in | Revokes the current access-token `jti`. Other devices remain signed in. | Built |
-| `GET /auth/me` | Signed in | Returns the current user, role, email-verification state, and onboarding state. | Built |
-| `POST /auth/verify-email` | User/email flow | Consumes the six-digit email code and marks the address verified. | Built, dependency pending: production email delivery |
-| `POST /auth/verify-email/resend` | User/email flow, cooldown | Sends a replacement verification code without bypassing cooldown/attempt limits. | Built, dependency pending: production email delivery |
-| `POST /auth/forgot-password` | Public, enumeration safe | Starts password recovery and always returns a neutral accepted response. | Built, dependency pending: production email delivery |
-| `POST /auth/recovery-code/verify` | Public, attempt limited | Validates a recovery code and returns a single-use reset token. | Built |
-| `POST /auth/reset-password` | Reset-token flow | Replaces the password and invalidates existing sessions/tokens. | Built |
-| `POST /auth/refresh` | Refresh-token flow | Rotates a refresh token; reuse of an already-spent one revokes the whole session. | Built 2026-09-22 |
-| `GET /auth/sessions` | Signed in | Lists this account's active sessions/devices, marking the current one. | Built 2026-09-22 |
-| `DELETE /auth/sessions/{session_id}` | Signed in, owner | Revokes one session immediately (its access tokens stop working, not just its refresh token). | Built 2026-09-22 |
-| `DELETE /auth/sessions/others` | Signed in | Revokes every session but the caller's own. | Built 2026-09-22 |
-| `POST /auth/change-password` | Signed in | Requires the current password; revokes other sessions by default. | Built 2026-09-22 |
-| `POST /auth/password` | Signed in, step-up | Sets a first password for a Google-only account. | Built 2026-09-22 |
-| `GET /auth/providers` | Signed in | Which sign-in methods are linked and which are safe to remove. | Built 2026-09-22 |
-| `DELETE /auth/providers/google` | Signed in, step-up | Unlinks Google — refused if no password exists to fall back to. | Built 2026-09-22 |
-| `POST /auth/step-up/request`, `POST /auth/step-up/verify` | Signed in | Generic action-bound re-authentication proof (password only — the only factor that exists). Built as a primitive; not yet required by the endpoints that should ask for it (payout destination, refunds, email change). | Built 2026-09-22 |
-| `DELETE /auth/account` | Signed in, step-up | Anonymises the account (email/name scrubbed, socials disconnected, every session revoked); refuses while money traces back to it unsettled. | Built 2026-09-22 |
-| `GET /auth/google/login`, `GET /auth/google/callback` | Public / OAuth callback | Google OIDC sign-in — creates, signs in to, or (email-verified match only) auto-links an account. Verifies via Google's `tokeninfo` endpoint, not local JWKS. | Built 2026-09-22, dependency pending: real `GOOGLE_CLIENT_ID`/`SECRET`, never exercised against real Google |
-| `GET /auth/google/link` | Signed in | Attaches Google to the current account (a redirect flow, not the `POST .../link` the inventory names — see the note in Part II §B). | Built 2026-09-22 |
-
-## Connected social accounts
-
-| Method and path | Access | Request / result | Status |
-|---|---|---|---|
-| `GET /social/accounts` | Signed in | Lists the caller's connected platform accounts. | Built |
-| `DELETE /social/{platform}` | Signed in, owner | Disconnects one social account. | Built |
-| `GET /social/{platform}/login` | Signed in via query token, OAuth state protected | Starts the selected platform OAuth flow. | Built, dependency pending: provider production approval and token-refresh policy |
-| `GET /social/{platform}/callback` | OAuth callback | Validates state, exchanges the code, reads the platform profile where possible, stores tokens, and redirects to the frontend. | Built, dependency pending: provider production approval and token-refresh policy |
-
-The generic social paths are mounted for all platform strings, but that does not mean every platform works. TikTok, Instagram, Facebook, Threads, and X adapters exist. YouTube is only an enum value and still needs a provider, OAuth scopes, token lifecycle, ingestion adapter, and tests.
-
-## Shared profile and preferences
-
-| Method and path | Access | Request / result | Status |
-|---|---|---|---|
-| `GET /profile` | Signed in | Returns the account, connected socials, and preferences in one payload. | Built |
-| `GET /profile/preferences` | Signed in | Returns notification and account preferences. | Built |
-| `PATCH /profile/preferences` | Signed in | Partially updates supported preferences. | Built |
-
-## Onboarding: current aggregate completion routes
-
-These are the only two onboarding routes currently implemented. They accept a final aggregate payload; they do not support step-by-step autosave, cross-device resume, draft reset, explicit completion, or the complete set of answers collected by the frontend.
-
-| Method and path | Access | Request / result | Status |
-|---|---|---|---|
-| `PUT /creators/me/onboarding` | Creator | Stores one final creator onboarding payload and marks onboarding complete. | Built, schema incomplete |
-| `PUT /organisations/me/onboarding` | Organisation | Stores one final organisation onboarding payload and marks onboarding complete. | Built, schema incomplete |
-
-The current creator body only supports `display_name`, one combined `interests` list, `platforms`, optional `photo_upload_id`, `discovery_source`, `experience`, and `goals`. It cannot preserve location or distinguish content the creator makes from content the creator watches.
-
-The current organisation body only supports `name`, `bio`, optional `photo_upload_id`, `production_workflow`, `team_size`, `campaign_goal`, and `budget_range`. It cannot preserve the person's preferred name separately from the organisation, location, brand-versus-individual identity, company-registration answer, website during onboarding, content-to-fund lanes, content-to-view lanes, or discovery source.
-
-## Creator profile, onboarding, bank destination, and workspace
-
-| Method and path | Access | Request / result | Status |
-|---|---|---|---|
-| `PUT /creators/me/bank-details` | Creator | Saves bank code/name/account number and resets verification whenever details are submitted. | Built |
-| `GET /creators/me/bank-details` | Creator | Returns the creator's masked payout destination and verification state. | Built |
-| `GET /creators/{creator_id}/bank-details` | Admin only | Returns a creator's masked bank details for a support/dispute case. | Built; keep admin-only and audit every read before launch |
-| `GET /creators/me/profile` | Creator | Returns editable creator identity, bio, photo, interests, intended platforms, discovery source, experience, goals, and onboarding state. | Built |
-| `PUT /creators/me/profile` | Creator | Replaces editable creator profile fields after ownership-checking the photo upload. | Built |
-| `GET /creators/me/clips` | Creator | Returns creator submission totals and clip rows with status, verified views, and earnings. | Built |
-| `GET /creators/me/accounts` | Creator | Returns every supported platform, connection state, handle, and last reading time. | Built, dependency pending for YouTube |
-| `GET /creators/me/overview` | Creator | Returns dashboard campaign recommendations and earnings summary. | Built |
-
-## Organisation profile and onboarding
-
-| Method and path | Access | Request / result | Status |
-|---|---|---|---|
-| `GET /organisations/me/profile` | Organisation | Returns organisation identity, description, logo, finance contact, workflow data, and verification state. | Built |
-| `PUT /organisations/me/profile` | Organisation | Updates editable organisation fields; business verification itself remains admin-controlled. | Built |
-
-## Campaign discovery and management
-
-| Method and path | Access | Request / result | Status |
-|---|---|---|---|
-| `POST /campaigns` | Verified organisation | Creates a draft campaign with identity, brief fields, platforms, budget/rate/duration data, rules, and cover. | Built |
-| `GET /campaigns` | Signed in; visibility is role/status aware | Lists public live campaigns for creators or the organisation's own campaigns. Supports search/feed/category/platform/status and pagination fields. | Built |
-| `GET /campaigns/{campaign_ref}` | Signed in/public according to status | Returns one campaign by UUID or slug; draft visibility is restricted to owner/admin. | Built |
-| `GET /campaigns/{campaign_ref}/pool` | Permitted campaign viewer | Returns promised, allocated, and remaining pot values. | Built |
-| `PATCH /campaigns/{campaign_ref}` | Owning organisation/admin; draft only | Edits mutable draft campaign fields. | Built |
-| `PUT /campaigns/{campaign_ref}/payout-rule` | Owning organisation/admin; draft only | Replaces rate, minimum views, creator cap, and related payout rules. | Built |
-| `GET /campaigns/{campaign_ref}/rules` | Permitted campaign viewer | Lists must-do and must-avoid checklist requirements. | Built |
-| `PUT /campaigns/{campaign_ref}/rules` | Owning organisation/admin; draft only | Replaces the complete ordered requirements checklist. | Built |
-| `POST /campaigns/{campaign_ref}/activate` | Owning organisation/admin | Activates only after confirmed full funding. | Built |
-| `POST /campaigns/{campaign_ref}/pause` | Owning organisation/admin | Stops new entries while existing approved clips continue under the documented rule. | Built |
-| `POST /campaigns/{campaign_ref}/resume` | Owning organisation/admin | Reopens entries for a paused live campaign. | Built |
-| `POST /campaigns/{campaign_ref}/close` | Owning organisation/admin | Books final eligible views, closes the campaign, and stops tracking. | Built |
-| `GET /campaigns/{campaign_ref}/stats` | Owning organisation/admin | Returns live pot, view deltas, pipeline counts, and last-read signals. | Built |
-| `GET /campaigns/{campaign_ref}/submissions` | Owning organisation/admin | Lists recent campaign submissions and their current earning/review state. | Built |
-| `GET /campaigns/{campaign_ref}/report` | Owning organisation/admin | Downloads the campaign report as CSV. | Built |
-
-## Funding
-
-| Method and path | Access | Request / result | Status |
-|---|---|---|---|
-| `POST /campaigns/{campaign_ref}/funding` | Owning organisation | Creates or returns the open funding order, locks campaign terms, and returns a hosted checkout URL or collection account. | Built, dependency pending: production Paystack verification |
-| `GET /campaigns/{campaign_ref}/funding` | Owning organisation/admin | Returns the latest funding order and status. | Built, dependency pending: production Paystack verification |
-| `POST /campaigns/{campaign_ref}/funding/confirm` | Owning organisation | Asks the provider whether funds actually cleared; the customer's click alone cannot open the campaign. | Built, dependency pending: production Paystack verification |
-| `DELETE /campaigns/{campaign_ref}/funding` | Owning organisation | Cancels an unpaid order and unlocks the draft; refuses after payment is claimed. | Built, dependency pending: production Paystack verification |
-
-## Brand workspace and review queue
-
-| Method and path | Access | Request / result | Status |
-|---|---|---|---|
-| `GET /brand/overview` | Organisation | Returns dashboard counts, spend, recent view/earning movement, and the featured live campaign. | Built |
-| `GET /brand/reviews` | Organisation/admin | Returns needs-review, appeal, or resolved queue data and tab counts. | Built |
-| `GET /brand/reviews/{submission_id}` | Campaign owner/admin | Returns clip evidence, requirement results, confidence, and appeal context. | Built |
-| `POST /brand/reviews/{submission_id}/approve` | Campaign owner/admin | Approves the submission and allows eligible verified views to earn. | Built |
-| `POST /brand/reviews/{submission_id}/request-correction` | Campaign owner/admin | Records a reason/requirement and sends the creator a correction verdict. | Built |
-
-## Creator submissions, verdicts, appeals, and performance
-
-| Method and path | Access | Request / result | Status |
-|---|---|---|---|
-| `POST /submissions` | Verified creator | Registers a public post and optional owned original-video upload after campaign/account/platform checks. | Built, dependency pending: automated brief verifier |
-| `GET /submissions` | Signed in, role-scoped | Lists submissions visible to the caller. | Built |
-| `GET /submissions/{submission_id}` | Creator owner, campaign owner, or admin | Returns status, verification steps, requirement verdicts, rejection reason, and appeal. | Built |
-| `POST /submissions/{submission_id}/withdraw` | Creator owner | Withdraws an eligible submission and stops its tracking. | Built |
-| `POST /submissions/{submission_id}/appeal` | Creator owner | Creates one appeal with a minimum-length reason and optional owned evidence upload. | Built |
-| `GET /submissions/{submission_id}/earnings` | Authorised participant/admin | Returns accrued/payable earnings and next release date for the clip. | Built |
-| `GET /submissions/{submission_id}/performance` | Authorised participant/admin | Returns normalized platform performance and trust-safe public details. | Built |
-
-The default verifier currently routes submissions with requirements to human review. A real frame/transcript/brief verifier is still missing even though the endpoint exists.
-
-## Earnings and leaderboard
-
-| Method and path | Access | Request / result | Status |
-|---|---|---|---|
-| `GET /earnings/summary` | Creator | Returns payable, on-hold, processing, paid, lifetime views, and next-clear data. | Built |
-| `GET /earnings/history` | Creator | Returns accrual ledger entries with campaign, clip, billable views, amount, and state. | Built |
-| `GET /leaderboard` | Signed in | Returns weekly/all-time or campaign-filtered verified-view rankings plus the caller's rank. | Built |
-
-## Banks, payouts, and payment webhook
-
-| Method and path | Access | Request / result | Status |
-|---|---|---|---|
-| `GET /banks` | Signed in | Returns supported Nigerian banks from the active payment provider. | Built, dependency pending: production provider |
-| `POST /banks/resolve` | Creator | Resolves a bank code/account number to an account name. | Built, dependency pending: production provider |
-| `POST /creators/me/bank-details/verify` | Creator | Confirms that the saved destination resolves and marks it verified. | Built, dependency pending: production provider |
-| `POST /payouts` | Verified creator, idempotent request body | Reserves eligible earnings and dispatches a transfer. | Built, dependency pending: live money rehearsal and provider reconciliation |
-| `GET /payouts` | Creator | Lists the creator's payouts. | Built |
-| `GET /payouts/{payout_id}` | Creator owner/admin | Returns status, destination, provider reference, allocations, and provenance used by the receipt. | Built |
-| `POST /webhooks/payments` | Signed provider webhook, hidden from schema | Applies funding and transfer events idempotently after raw-body signature verification. | Built, dependency pending: live provider webhook verification |
-
-## Notifications
-
-| Method and path | Access | Request / result | Status |
-|---|---|---|---|
-| `GET /notifications` | Signed in | Returns the caller's notification inbox and unread information. | Built |
-| `POST /notifications/read-all` | Signed in | Marks every notification read. | Built |
-| `POST /notifications/{notification_id}/read` | Notification owner | Marks one notification read. | Built |
-
-## Uploads and development media serving
-
-| Method and path | Access | Request / result | Status |
-|---|---|---|---|
-| `POST /uploads/images` | Signed in, rate limited | Streams a profile photo, logo, or campaign cover into the active storage adapter. | Built, dependency pending: R2, scanning, signed delivery |
-| `POST /uploads/videos` | Verified user, rate limited | Streams an original submission video. | Built, dependency pending: R2, multipart upload, scanning, thumbnail/transcode |
-| `POST /uploads/evidence` | Signed in, rate limited | Streams appeal evidence. | Built, dependency pending: R2, scanning, signed delivery |
-| `GET /media/{key:path}` | Possession of unguessable local URL; hidden from schema | Serves local development files. It must not be the production delivery mechanism. | Built for development only |
-
-## Admin and finance operations
-
-All routes in this section require the admin role. Every mutation is intended to be auditable.
-
-| Method and path | Request / result | Status |
-|---|---|---|
-| `GET /admin/overview` | Returns user/campaign/payout counts, review and appeal counts, liability, unconfirmed funding, and blocked earnings. | Built |
-| `GET /admin/payouts` | Lists/filter payouts with creator and provider data. | Built |
-| `POST /admin/payouts/{payout_id}/retry` | Safely re-drives a pending/processing payout using the provider idempotency reference. | Built, dependency pending: live provider reconciliation |
-| `POST /admin/payouts/{payout_id}/fail` | Marks an in-flight payout failed with a reason and releases its allocation. | Built |
-| `GET /admin/funding` | Lists/filter funding orders. | Built |
-| `POST /admin/funding/{order_id}/confirm` | Manually confirms fully received funding with amount and audit note. | Built |
-| `GET /admin/earnings/blocked` | Lists earning accounts blocked by trust, cap, or pot conditions. | Built |
-| `POST /admin/earnings/settle` | Runs one settlement tick immediately. | Built |
-| `POST /admin/campaigns/sweep` | Runs one campaign expiry/close sweep immediately. | Built |
-| `POST /admin/organisations/{user_id}/verify-business` | Sets or removes business verification and legal name. | Built, but there is no customer application or admin queue yet |
-| `GET /admin/audit` | Reads filtered recent audit events. | Built |
-
-## Internal auth and intelligence
-
-These routes are implementation contracts, not browser APIs.
-
-| Method and path | Caller / result | Status |
-|---|---|---|
-| `GET /internal/users/{user_id}` | Other backend modules resolve role and identity through the internal contract. | Internal |
-| `GET /internal/social-accounts/{user_id}/{platform}/token` | Intelligence retrieves a current platform token. | Internal; token refresh remains incomplete for Meta providers |
-| `POST /internal/submissions/{submission_id}/metrics` | Registers content or forces a fresh platform reading. | Internal, dependency pending for YouTube |
-| `GET /internal/submissions/{submission_id}/performance` | Reads stored normalized performance without calling the platform. | Internal |
-| `GET /internal/submissions/{submission_id}/trust` | Returns the latest trust verdict. | Internal |
-| `POST /internal/submissions/{submission_id}/trust/review` | Stores a human trust label. | Internal |
-| `GET /internal/trust/rules` | Returns the currently configured trust thresholds. | Internal |
-| `POST /internal/submissions/{submission_id}/tracking/stop` | Stops scheduled metric tracking. | Internal |
-| `POST /internal/submissions/{submission_id}/tracking/resume` | Resumes scheduled metric tracking. | Internal |
-
----
-
-# Part II: endpoints still required
-
-## A. Service health and production operations
-
-| Priority | Method and path | Required contract |
-|---|---|---|
-| Missing P0 | `GET /ready` | Readiness check for database migrations/connectivity, storage, queue/worker lease, and required provider configuration. Return non-200 when traffic must not be sent to the instance. |
-| Missing P1 | `GET /version` | Return release SHA, build time, API version, and migration head without exposing secrets. |
-| Missing P0 | `GET /internal/metrics` | Authenticated Prometheus-compatible counters/histograms for HTTP, jobs, platform reads, verification, funding, settlement, and payouts. Never expose publicly. |
-
-`GET /health` can remain the liveness check; it should stay cheap and must not call dependencies.
-
-## B. Sessions, password/security settings, Google auth, and account lifecycle
-
-These endpoints are required by the existing Google buttons and security/device UI. Current JWT revocation only logs out the current token and cannot model real device sessions.
-
-| Priority | Method and path | Required contract |
-|---|---|---|
-| Missing P0 | `POST /auth/refresh` | Rotate a refresh token, revoke the previous token family member, detect reuse, and return a new short-lived access token. |
-| Missing P0 | `POST /auth/change-password` | Require current password or recent step-up authentication, set the new password, and optionally revoke other sessions. |
-| Missing P0 | `GET /auth/sessions` | List the caller's sessions with ID, device/browser label, approximate location, created time, last-seen time, and current-session marker. |
-| Missing P0 | `DELETE /auth/sessions/{session_id}` | Revoke one owned session. Prevent deleting another user's session. |
-| Missing P0 | `DELETE /auth/sessions/others` | Revoke every session except the current one. |
-| Missing P0 | `GET /auth/google/login` | Start Google OIDC with state, nonce, PKCE, and the intended creator/organisation role when signing up. |
-| Missing P0 | `GET /auth/google/callback` | Validate OIDC claims, safely link or create the account, prevent account takeover through ambiguous emails, and establish a session. |
-| Missing P0 | `GET /auth/providers` | Return the caller's usable sign-in methods, password-present state, linked provider identities, and whether each method may be removed safely. |
-| Missing P1 | `POST /auth/providers/google/link` | Start/complete an authenticated Google-link flow with step-up verification and collision protection. This may share the OIDC callback internally but needs an explicit link intent. |
-| Missing P0 | `DELETE /auth/providers/google` | Unlink Google only when another verified sign-in method remains; require recent step-up and audit the change. |
-| Missing P0 | `POST /auth/password` | Let a provider-only account establish its first password after recent provider authentication; distinct from changing an existing password. |
-| Missing P1 | `POST /auth/2fa/setup` | Create a pending TOTP secret and return an `otpauth` URI/QR payload without enabling 2FA yet. |
-| Missing P1 | `POST /auth/2fa/confirm` | Verify the first TOTP, enable 2FA, and return one-time recovery codes. |
-| Missing P1 | `POST /auth/2fa/challenge` | Complete a login or sensitive-action challenge with TOTP or one recovery code. |
-| Missing P1 | `DELETE /auth/2fa` | Disable 2FA after password/recent step-up verification. |
-| Missing P1 | `POST /auth/2fa/recovery-codes/regenerate` | Invalidate old recovery codes and issue a new one-time set after step-up verification. |
-| Missing P1 | `POST /auth/email-change/request` | Verify the password/step-up state and send codes to old and new addresses. |
-| Missing P1 | `POST /auth/email-change/confirm` | Consume both proofs, change the email, audit the change, and notify the old address. |
-| Missing P0 | `POST /auth/step-up/request` | Start a short-lived sensitive-action challenge using the strongest available verified factor; bind it to a declared action such as payout-destination change, refund, email change, or account deletion. |
-| Missing P0 | `POST /auth/step-up/verify` | Verify password/TOTP/email code as policy allows and return a single-action, short-expiry proof token. Never return a general long-lived access token. |
-| Missing P1 | `POST /auth/account-export` | Queue a privacy export containing profile, campaigns/submissions, ledger, and audit-visible customer data; return a job ID. |
-| Missing P0 | `DELETE /auth/account` | Re-authenticate, apply legal/ledger retention rules, revoke sessions/tokens, disconnect socials, and schedule deletion/anonymisation. Refuse unsafe deletion while money is unsettled. |
-| Missing P1 | `GET /auth/account-export/{job_id}` | Return export status and a short-lived download URL when ready. |
-
-**2026-09-22 — Built**, all P0 rows above except the 2FA/email-change P1 rows (still missing, along with account-export):
-- `POST /auth/refresh`, `GET/DELETE /auth/sessions*`: a new `sessions`/`refresh_tokens` pair backs real, revocable devices. Access tokens now carry a `sid` claim checked on every request; revoking a session invalidates its access tokens immediately, not just its refresh token. Refresh-token reuse (a token presented twice) revokes the whole session — signup/login now return a `refresh_token` alongside `access_token`.
-- `POST /auth/change-password`, `POST /auth/password` (first password for a Google-only account), `GET /auth/providers`, `DELETE /auth/providers/google`: `users` gained `has_password`/`google_id`/`google_email`; `/auth/providers` reports which method is safe to remove (never the last one).
-- `POST /auth/step-up/{request,verify}`: a generic, action-bound proof primitive (password only today — the only factor that exists; 2FA would add a factor choice at `request` without changing the shape). **Not yet wired to the endpoints that should require it** — payout-destination change, refunds, email change — those still accept the request without a step-up token. `DELETE /auth/account` and `POST /auth/password`/`DELETE /auth/providers/google` do require and consume one.
-- `GET /auth/google/login`, `GET /auth/google/callback`: real OIDC (state+nonce, verified via Google's `tokeninfo` endpoint rather than local JWKS/RS256 — this environment has no `cryptography` wheel; see `modules/auth/google.py`'s docstring). Auto-links onto an existing account only when Google reports the email verified; an unverified match or one already linked to a different Google account is refused, not silently taken over or duplicated. **Needs a real `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`** (both empty by default; `/auth/google/login` 503s without them) — never exercised against real Google.
-- `POST /auth/providers/google/link` is built as `GET /auth/google/link` instead (a redirect-flow login, matching how `/social/{platform}/login` already works) rather than a POST — the doc's path assumed a JSON call, but starting an OAuth round trip needs a browser navigation either way.
-- PKCE was scoped out of the Google flow: Google's server-side (confidential-client) OAuth flow doesn't require it the way TikTok's public-client PKCE flow does; the state token still carries a nonce, which is what OIDC actually needs checked back against the id_token.
-
-## C. Onboarding lifecycle: creator and brand
-
-Onboarding is a first-class product domain. Authentication already determines whether the account is a creator or an organisation; onboarding must never ask the user to choose that account role again. An organisation account may still branch between an individual funder and a brand/business because those paths collect different data.
-
-The two existing `PUT .../onboarding` routes are final-submit endpoints, not a complete lifecycle. Production onboarding must autosave after every screen, resume on another device, preserve conditional branches, validate completion on the server, and redirect from the authenticated user state rather than browser `localStorage`.
-
-### Required onboarding endpoints
-
-| Priority | Method and path | Required contract |
-|---|---|---|
-| Missing P1 | `GET /onboarding/options` | Return a versioned catalogue of content categories, publishing platforms, experience levels, discovery sources, goals, team sizes, workflows, and budget ranges. Include enabled/disabled state and display order so backend validation and frontend choices cannot drift. |
-| Missing P0 | `GET /creators/me/onboarding` | Return creator onboarding status and saved draft: `not_started`, `in_progress`, or `completed`; schema version; current step; completed/required steps; percentage; answer payload; validation blockers; and `updated_at`. |
-| Missing P0 | `PATCH /creators/me/onboarding` | Autosave any valid subset of creator answers after one screen. Accept an optimistic revision/version and `last_step`; return the canonical saved draft and next required step. It must not mark onboarding complete. |
-| Missing P0 | `POST /creators/me/onboarding/complete` | Validate every compulsory creator answer together, atomically copy the final identity/feed fields into the creator profile, set `onboarding_completed`, emit an audit/analytics event, and return `next_route: /dashboard`. Idempotent after completion. |
-| Missing P0 | `DELETE /creators/me/onboarding/draft` | Reset an incomplete creator draft. It must not delete the account, uploaded photo, profile, or a completed onboarding record. |
-| Missing P0 | `GET /organisations/me/onboarding` | Return organisation onboarding status, saved draft, selected individual/business branch, calculated required steps, validation blockers, completion percentage, and revision. |
-| Missing P0 | `PATCH /organisations/me/onboarding` | Autosave any valid subset of organisation answers, recalculate the conditional step graph, clear answers made invalid by an intentional branch change, and return the canonical next step. It must not mark onboarding complete. |
-| Missing P0 | `POST /organisations/me/onboarding/complete` | Validate the appropriate individual or business branch, update the organisation/funder profile atomically, set `onboarding_completed`, create the verification state where applicable, and return `next_route: /brand`. Idempotent after completion. |
-| Missing P0 | `DELETE /organisations/me/onboarding/draft` | Reset an incomplete organisation draft without deleting the account, profile, uploaded image, or completed record. |
-
-**2026-09-22 — Built** (all eight `GET`/`PATCH`/`.../complete`/`.../draft` rows above, both creator and organisation): answers autosave into a JSONB draft on the existing profile row, guarded by `revision` for the two-tabs case; `complete` re-validates the accumulated draft against the same schema the old `PUT` used and is idempotent once `onboarding_completed`; `DELETE .../draft` refuses once complete. Still missing from this pass: `GET /onboarding/options` (the versioned catalogue — answers are still validated against hand-coded bounds, not a driven list), the organisation individual/business branch recalculation, `next_route`/analytics-event on completion, and the wider creator/organisation field contract below (location, makes/watches split, funder identity) — the draft still only carries the original `PUT` schemas' fields.
-
-The existing `PUT /creators/me/onboarding` and `PUT /organisations/me/onboarding` may temporarily remain as backwards-compatible all-at-once completion calls. New frontend work should use GET/PATCH/complete so a phone refresh or connection loss never destroys progress. Remove or deprecate the PUT routes only in a versioned API change.
-
-### Creator onboarding field contract
-
-| Step key | API field | Type and validation | Required |
-|---|---|---|---|
-| `name` | `display_name` | Trimmed string, 2-80 characters. | Yes |
-| `photo` | `photo_upload_id` | Owned image upload UUID or null. The existing `POST /uploads/images` performs the upload. | No; skipping must be explicit and valid |
-| `location` | `location` | Structured object with `country_code`, optional `state`, and `city`; Nigeria is the only payout country in v1. | Yes |
-| `makes` | `makes_content_categories` | 2-5 unique versioned category keys. | Yes |
-| `watches` | `watches_content_categories` | 2-5 unique versioned category keys, stored separately from `makes`. | Yes |
-| `platforms` | `publishing_platforms` | At least one supported platform key. Choosing YouTube is allowed as an interest only if the response clearly states whether connection is currently available. | Yes |
-| `experience` | `experience_level` | One versioned option key. | Yes |
-| `discovery` | `discovery_source` | One versioned option key plus optional bounded free text for `other`. | Yes |
-| `goal` | `primary_goal` | One versioned creator-goal key. | Yes |
-
-The completed creator response must include the normalized creator profile, role, completion timestamp, destination route, and any next action such as connecting a selected platform. Do not store these answers only in generic JSON if they drive campaign matching; queryable fields or normalized association tables are required.
-
-### Brand/individual onboarding field contract
-
-| Step key | API field | Type and validation | Individual funder | Brand/business |
-|---|---|---|---|---|
-| `name` | `preferred_name` | Trimmed string, 2-80 characters; this is the person using the workspace. | Required | Required |
-| `photo` | `photo_upload_id` | Owned image UUID or null, uploaded through `POST /uploads/images`. | Optional | Optional |
-| `location` | `location` | Structured `country_code`, optional `state`, and `city`. | Required | Required |
-| `identity` | `funder_type` | `individual` or `business`. This is not the auth role. | Required | Required |
-| `registration` | `company_registered` | Boolean. Omit for an individual. | Not applicable | Required |
-| `organisation` | `organisation_name` | Public name creators will see. | Not applicable | Required when the company is registered; collect a working name when unregistered if campaigns will display one |
-| `website` | `website_or_social_url` | Normalized HTTPS URL with SSRF-safe validation. | Optional | Required for the current registered-company branch |
-| `description` | `description` | Trimmed 30-240 character creator-facing description. | Optional | Required for the current registered-company branch |
-| `team` | `team_size` | One versioned team-size option. | Not applicable | Required for the current registered-company branch |
-| `fund` | `funded_content_categories` | 2-5 unique versioned category keys. | Required | Required |
-| `workflow` | `production_workflow` | One versioned workflow key. | Not currently asked | Required for business accounts |
-| `view` | `watched_content_categories` | 2-5 unique versioned category keys, separate from funded lanes. | Required | Required |
-| `discovery` | `discovery_source` | One versioned option key plus optional bounded free text for `other`. | Required | Required |
-| `campaignGoal` | `campaign_goal` | One versioned campaign-goal key. | Required | Required |
-| `budget` | `budget_range` | One versioned budget-range key. This is preference data, not a funding commitment. | Required | Required |
-
-Changing `funder_type` or `company_registered` must cause the server to recalculate required steps. The API must never silently keep contradictory business-only answers on an individual branch. Completion returns the normalized organisation/funder profile, verification requirement/status, completion timestamp, and `/brand` destination.
-
-### Onboarding authorization and behavior
-
-- Only the authenticated account may read or mutate its onboarding draft.
-- Creator endpoints reject organisation accounts and organisation endpoints reject creator accounts with `403`.
-- Email verification may be required for completion, but draft saving should work before verification so progress is not lost.
-- Every PATCH is idempotent and guarded by a revision to prevent two tabs from overwriting newer answers.
-- Completion is one database transaction. A half-completed profile must never be visible.
-- Photo skipping is represented by `photo_upload_id: null`; it is the only optional frontend step. All other branch-relevant answers are compulsory.
-- Uploaded images remain untrusted until ownership, MIME, scan, and processing state pass.
-- Returning users with completed onboarding are routed to their workspace. They may edit supported fields through profile/settings endpoints, not by reopening onboarding.
-- Admin user detail may display onboarding status and final answers, but admin staff must not edit customer preferences through the onboarding endpoints.
-- Record schema version so future questions can be added without pretending old users answered them.
-
-## D. Product configuration, handles, and public profiles
-
-The campaign builder, onboarding choices, creator settings, public creator profile, and platform badges currently rely on hard-coded frontend data. Public profile responses must never expose connected-account tokens, private email, bank data, exact payout amounts, trust internals, or unpublished work.
-
-| Priority | Method and path | Required contract |
-|---|---|---|
-| Missing P0 | `GET /product-config` | Return customer-safe runtime rules: supported country/currency, hold period, minimum withdrawal, funding fee, enabled platforms and connection state, campaign pot/rate/duration limits, upload limits, and current legal-document versions. Cacheable and versioned. |
-| Missing P1 | `GET /handles/{handle}/availability` | Normalize a proposed public handle and return availability/reservation reason without leaking private accounts. Rate limited. |
-| Missing P0 | `GET /profiles/creators/{handle}` | Public creator profile with handle, display name, photo, bio, location at the chosen privacy precision, availability, content lanes, verified aggregate stats, and a bounded list of approved public campaign work. |
-| Missing P1 | `GET /profiles/creators/{handle}/clips` | Cursor-paginated approved public portfolio; never return rejected, processing, withdrawn, private, or disputed clips. |
-| Missing P1 | `GET /profiles/organisations/{slug}` | Public brand/funder identity, verification badge, description, website, logo, and public live/completed campaign summary. |
-
-No separate endpoint is required to edit handle, location, lane, public visibility, or availability if `PUT /creators/me/profile` is expanded to support them with uniqueness/privacy validation. The current profile schema does not support those fields and must be widened. Likewise `PUT /organisations/me/profile` must support a stable public slug if organisation profiles are exposed.
-
-**2026-09-22 — Built**: all five rows. `creator_profiles.handle` and `organisation_profiles.slug` (both nullable — no public page exists before one is set) plus a `public_profile` toggle on each, edited through the existing `PUT` profile routes (as this section anticipated) with uniqueness checked across *both* tables — a creator's handle and a brand's slug share one namespace, so `GET /handles/{handle}/availability` checks both. Not modeled: `location` (no location field exists anywhere yet — see the still-open field-contract gap in §C) and a separate "availability for briefs" flag. Public creator stats are `approved_clips` and lifetime `verified_views` (summed from `EarningAccount.cumulative_views`, never a payout amount); `recent_work` is the 6 most recent approved, non-withdrawn submissions. `/handles/.../availability` isn't rate-limited yet (P1 in the row, not done).
-
-## E. Creator identity verification/KYC
-
-The payout-account UI says the bank name must match a verified identity, but the backend has no creator identity-verification record or workflow. The exact evidence and provider must be approved by payment/compliance counsel; Clippit should prefer a hosted verification session and avoid storing raw identity documents or numbers unless necessary.
-
-| Priority | Method and path | Required contract |
-|---|---|---|
-| Missing P0 | `POST /creators/me/verification/session` | Create or resume an idempotent hosted identity-verification session and return provider URL/token, expiry, required checks, and application ID. |
-| Missing P0 | `GET /creators/me/verification` | Return `not_started`, `pending`, `needs_action`, `verified`, `rejected`, or `expired`, with customer-safe reasons and retry/resubmission rules. |
-| Missing P0 | `POST /webhooks/identity` | Verify the identity provider signature, store provider event ID, update the application idempotently, and notify the creator. |
-| Missing P0 | `GET /admin/creators/verifications` | Paginated creator-verification queue with state, risk, age, provider, and assignee filters. |
-| Missing P0 | `GET /admin/creators/verifications/{application_id}` | Secure operator detail with provider checks, minimally necessary identity data, bank-name comparison, prior decisions, and audit events. |
-| Missing P0 | `POST /admin/creators/verifications/{application_id}/approve` | Audited manual approval available only under documented policy. |
-| Missing P0 | `POST /admin/creators/verifications/{application_id}/reject` | Audited rejection/needs-action decision with structured customer-safe reasons. |
-
-Bank verification and identity verification are separate: account resolution proves an account exists; it does not by itself prove the Clippit user owns the identity.
-
-## F. Social-token lifecycle, provider compliance, and YouTube
-
-| Priority | Method and path | Required contract |
-|---|---|---|
-| Missing P0 | `POST /social/{platform}/refresh` | Refresh an expiring provider token when supported; update encrypted credentials atomically and surface `reconnect_required` when refresh is impossible. This may normally be called by a worker rather than the browser. |
-| Missing P1 | `POST /social/{platform}/sync-profile` | Re-read the connected handle/display name and connection health after permission changes. |
-| Missing P0 | `POST /webhooks/social/{platform}/deauthorize` | Verify the provider request and disconnect/revoke the affected account when a user removes Clippit at the platform. |
-| Missing P0 | `POST /webhooks/social/{platform}/data-deletion` | Satisfy Meta/platform data-deletion callbacks and return the required confirmation/status reference. |
-
-No new public path is needed for YouTube because the generic login/callback and account-list paths already exist. The missing work is a YouTube OAuth provider, token refresh, channel identity, video lookup/metrics adapter, quota handling, ingestion tests, and enabling `connectable` only after those pass.
-
-## G. Creator participation in campaigns
-
-The PRD explicitly says a creator joins a campaign. The current API infers participation only after submission, which cannot correctly power Joined filters, capacity rules, or pre-submission campaign updates.
-
-| Priority | Method and path | Required contract |
-|---|---|---|
-| Missing P0 | `POST /campaigns/{campaign_ref}/join` | Join an open campaign after checking role, required connected account, capacity/caps, campaign state, and duplicate membership. Idempotent. |
-| Missing P0 | `DELETE /campaigns/{campaign_ref}/join` | Leave before an accepted submission exists; preserve historical membership and refuse invalid withdrawal after earning begins. |
-| Missing P0 | `GET /creators/me/campaigns` | List joined, submitted, active, completed, and left campaigns with cursor pagination. |
-| Missing P1 | `DELETE /campaigns/{campaign_ref}` | Permanently delete an unfunded draft owned by the organisation. Refuse once funding or submissions exist. |
-| Missing P1 | `POST /campaigns/{campaign_ref}/duplicate` | Copy an owned campaign into a new unfunded draft without copying transactions, submissions, dates, or provider references. |
-
-**2026-09-22 — Built**: a new `campaign_memberships` table backs `POST`/`DELETE /campaigns/{campaign_ref}/join` (idempotent join, requires a connected account for one of the campaign's platforms, refuses leaving after an approved submission) and `GET /creators/me/campaigns` (joined/submitted/active/completed/left, filterable by `membership_status`). `joined`/`open` feed filters and the `joined`/`feed_status` card fields now read membership as well as submissions, so a creator who joined without submitting still shows as Joined. Pagination is `limit`/`offset`, matching every other list route today, not the cursor pagination this section calls for — that's a cross-cutting change (see "Existing contract corrections" below), not specific to this endpoint. Headcount capacity/caps aren't modeled (there's no max-creators field on a campaign yet) so that check is a no-op. `DELETE /campaigns/{campaign_ref}` and `POST .../duplicate` are still missing.
-
-Campaign editing does not need a new endpoint: `PATCH /campaigns/{campaign_ref}`, `PUT .../rules`, and `PUT .../payout-rule` already cover it.
-
-## H. Campaign-studio drafts, source assets, analytics, and closeout
-
-The six-screen campaign studio currently persists only to browser `localStorage`. `POST /campaigns` cannot autosave the early screens because its schema requires title, description, platform, budget, and payout rule together. Production needs a resumable server draft before a fully valid Campaign can be created.
-
-### Campaign studio drafts
-
-| Priority | Method and path | Required contract |
-|---|---|---|
-| Missing P0 | `POST /campaign-drafts` | Create an empty owned studio draft with schema version, revision, current step, and expiry policy. Return a stable draft ID. |
-| Missing P0 | `GET /campaign-drafts` | List the organisation's in-progress studio drafts so work can resume across devices. |
-| Missing P0 | `GET /campaign-drafts/{draft_id}` | Return the owned canonical draft, completed/required steps, validation blockers, revision, and updated time. |
-| Missing P0 | `PATCH /campaign-drafts/{draft_id}` | Autosave any subset of details, cover, source material, rules, platforms, earning rules, end condition, pot, and rate with optimistic revision control. |
-| Missing P0 | `DELETE /campaign-drafts/{draft_id}` | Delete an incomplete owned studio draft and detach unreferenced assets. Refuse if it was finalized. |
-| Missing P0 | `POST /campaign-drafts/{draft_id}/finalize` | Validate all campaign invariants, atomically create the canonical unfunded Campaign and checklist, consume the draft, and return the campaign ID/slug and funding next route. Idempotent. |
-
-The existing `POST /campaigns` remains useful for API clients that already have a complete campaign payload. The frontend campaign studio should use the draft lifecycle.
-
-**2026-09-22 — Built**, all six rows: a `campaign_drafts` table (JSONB `draft_answers`, revisioned autosave, same pattern as the onboarding drafts in §C). `GET`/`PATCH` return a `blockers` map (field → what's missing) computed without raising, so the builder can flag the exact incomplete screen live. `finalize` re-validates the accumulated draft as the same `CampaignCreate` shape `POST /campaigns` uses — that route's creation logic was factored into `service.create_campaign` so there's exactly one place a `Campaign` row gets made — and is idempotent (`finalized_campaign_id` on the draft; a second call returns the same campaign rather than erroring or duplicating). `GET /campaign-drafts` lists only unfinalized drafts. **Not built**: source-asset attachment (`POST /uploads/campaign-assets`, `/campaigns/{ref}/assets`, and the equivalent PATCH-the-draft path this section allows for) — `CampaignDraftPatch` covers details/platforms/rules/budget/cover image only, not source material. `expires_at` is a column with no sweep job behind it yet (nothing expires stale drafts). Analytics and closeout (below) are also still open.
-
-### Campaign source materials
-
-| Priority | Method and path | Required contract |
-|---|---|---|
-| Missing P0 | `POST /uploads/campaign-assets` | Upload owned audio, image, video, PDF, or approved document source material with scan/processing state and short-lived signed access. |
-| Missing P0 | `GET /campaigns/{campaign_ref}/assets` | Return creator-visible ordered source assets with type, title, duration/size, processing state, and signed download/stream URL. Hide unsafe/unready assets. |
-| Missing P0 | `POST /campaigns/{campaign_ref}/assets` | Attach an owned completed upload or validated external HTTPS link to an unfunded draft campaign. |
-| Missing P1 | `PATCH /campaigns/{campaign_ref}/assets/{asset_id}` | Rename, replace link metadata, change visibility, or update creator-facing description while terms remain editable. |
-| Missing P1 | `DELETE /campaigns/{campaign_ref}/assets/{asset_id}` | Detach an asset from an editable campaign and schedule unreferenced private media for deletion. |
-| Missing P1 | `PUT /campaigns/{campaign_ref}/assets/order` | Replace the complete ordered asset-ID list with ownership and membership validation. |
-
-For campaign-studio drafts, equivalent asset attachment may be accepted directly by `PATCH /campaign-drafts/{draft_id}` until finalization.
-
-### Live analytics and completed closeout
-
-| Priority | Method and path | Required contract |
-|---|---|---|
-| Missing P0 | `GET /campaigns/{campaign_ref}/analytics` | Authorised time series for verified views, spend, pot remaining, submissions, approvals, platforms, and reading freshness with bounded date range/granularity. Powers real sparklines instead of static bars. |
-| Missing P0 | `GET /campaigns/{campaign_ref}/closeout` | Immutable final campaign summary: close reason/time, pot, creator earnings, refundable/returned funds, verified views, approved creators/clips, platform delivery, top clips, review outcomes, and reconciliation state. |
-| Missing P0 | `GET /campaigns/{campaign_ref}/closeout.pdf` | Server-generated official one-page or paginated closeout document from immutable data with verification reference/digest. |
-| Missing P1 | `GET /campaigns/{campaign_ref}/activity` | Cursor-paginated customer-safe campaign lifecycle events: created, terms changed, funding, opened, paused/resumed, reviews, low pot, closed, settlement, refund. |
-
-The existing CSV `GET /campaigns/{campaign_ref}/report` remains the machine-readable export. It does not replace analytics or the closeout record.
-
-## I. Submission corrections and earnings provenance
-
-| Priority | Method and path | Required contract |
-|---|---|---|
-| Missing P0 | `POST /submissions/{submission_id}/resubmit` | Create a corrected submission linked to the rejected/correction-requested predecessor after validating campaign state, platform ownership, URL/file, and retry policy. Preserve the original verdict and appeal history. |
-| Missing P0 | `GET /earnings/entries/{entry_id}` | Return one owned earning entry with campaign, clip, whole-thousand calculation, rate, cap effects, hold/payable state, and immutable platform snapshot provenance. This is how every naira can be traced to a platform reading. |
-| Missing P1 | `GET /earnings/export` | Date/campaign-filtered creator earnings CSV with safe cells and ledger references. |
-| Missing P1 | `GET /earnings/statement.pdf` | Server-generated creator earnings statement for a bounded period, distinct from an individual payout receipt. |
-
-Processing progress, approved/rejected verdicts, appeals, clip detail, performance, and clip earnings already resolve through the existing submission endpoints; they need dynamic IDs in the frontend, not duplicate APIs.
-
-**2026-09-22 — Built**: `POST /submissions/{submission_id}/resubmit` and `GET /earnings/entries/{entry_id}`. Resubmit works on a submission whose link was rejected at registration *or* whose verdict is `rejected` (which covers both an ordinary rejection and a brand's "request correction" — both land on the same status); it links the new submission via `resubmitted_from_id` without touching the original's verdict, requirement results, or appeal, and caps a chain at 3 attempts (the original plus two corrections). `POST /submissions` and the resubmit route now share one registration path (`_register` in the submissions router) so campaign/account/platform validation can't drift between them. The entry-provenance route returns the rate and cap the entry was billed under (from the campaign's payout rule, not a per-entry snapshot — caps aren't tracked per-entry in the model), its pipeline state (Accrued/Payable/Processing/Paid, same rule as `earnings/history`), and its allocated payout id if any. `GET /earnings/export` and `GET /earnings/statement.pdf` (both P1) are still missing.
-
-## J. Brand ledger, refunds, statements, official receipts, and public verification
-
-The frontend currently fabricates brand transactions and prints client-rendered receipts. Official financial records must come from the server-side ledger.
-
-| Priority | Method and path | Required contract |
-|---|---|---|
-| Missing P0 | `GET /organisations/me/transactions` | Cursor-paginated ledger of funding, fees, creator allocations, refunds, and adjustments with filters for campaign, type, status, and date. |
-| Missing P0 | `GET /organisations/me/transactions/{transaction_id}` | Return one authorised immutable ledger item with sender, recipient, provider references, amount, currency, campaign, and audit-safe provenance. |
-| Missing P1 | `GET /organisations/me/transactions/export` | Export a date-filtered CSV statement using formula-injection-safe cells. |
-| Missing P0 | `POST /campaigns/{campaign_ref}/funding/quote` | Return server-calculated pot, fee/tax components, total, currency, supported methods, expiry, and terms version before creating/locking a funding order. |
-| Missing P0 | `POST /campaigns/{campaign_ref}/refunds` | Create an idempotent refund of the legally refundable unused balance after close/cancellation and provider reconciliation. |
-| Missing P0 | `GET /campaigns/{campaign_ref}/refunds` | Return refund amount, status, destination, provider reference, timestamps, and failure reason. |
-| Missing P1 | `POST /payouts/quote` | Validate amount and destination and return fee, net amount, currency, and quote expiry without reserving money. |
-| Missing P1 | `DELETE /creators/me/bank-details` | Remove the saved payout destination after step-up authentication when no payout is pending; preserve masked historical destination snapshots on existing receipts. |
-| Missing P0 | `GET /payouts/{payout_id}/receipt.pdf` | Generate the creator's official one-page PDF from immutable server data, with a page-level watermark and verification code. |
-| Missing P0 | `GET /organisations/me/transactions/{transaction_id}/receipt.pdf` | Generate the brand's official one-page transaction PDF from the ledger. |
-| Missing P0 | `GET /campaigns/{campaign_ref}/funding/receipt.pdf` | Generate the official funding order/certificate PDF from provider-confirmed data. |
-| Missing P0 | `GET /receipts/{reference}/verify` | Public, rate-limited verification response containing safe amount/status/date/type/issuer facts and a signed-document digest; never expose private bank or account data. |
-| Missing P1 | `GET /organisations/me/invoices` | List fee/tax invoices or credit notes issued to the organisation, subject to the chosen provider and tax/accounting structure. |
-| Missing P1 | `GET /organisations/me/invoices/{invoice_id}` | Return one authorised invoice/credit-note record with line items and linked funding/fee transaction. |
-| Missing P1 | `GET /organisations/me/invoices/{invoice_id}.pdf` | Server-generated immutable invoice/credit-note PDF using the organisation's verified billing identity at issue time. |
-| Missing P1 | `POST /admin/refunds/{refund_id}/retry` | Re-drive a retryable provider refund idempotently and audit the operator. |
-| Missing P1 | `POST /admin/refunds/{refund_id}/fail` | Finalise an unrecoverable refund failure with an operator reason and escalation state. |
-
-**2026-09-22 — Built**: transactions ledger, funding quote, and refunds — the three rows that don't need a PDF library or a tax/billing decision. **Not built, and each needs a real decision, not an assumption**: every `*.pdf` row (no PDF library is wired in; needs a template/branding decision), invoices (needs the tax/accounting structure), and `POST /payouts/quote` + `DELETE /creators/me/bank-details` (straightforward, just not done this pass).
-
-- `GET /organisations/me/transactions(+/{id})`: not a new table — it presents `FundingOrder` and `Refund` rows (each already an immutable record) as one merged, sorted list (`modules/organisations/ledger.py`). Creator payouts are deliberately excluded from the *brand's* ledger: the brand's money movement ends at funding; where the pot goes afterwards is the creator's earnings/payout history, a separate ledger. Cursor pagination wasn't done — same `limit`/`offset` gap as the rest of the app. `/export` (P1) is still missing.
-- `POST /campaigns/{ref}/funding/quote`: pure calculation (pot × current fee rate), doesn't lock anything or create an order.
-- `POST`/`GET /campaigns/{ref}/refunds`: **refunds only the unspent pot, never the 1.5% funding fee — an assumption, not a confirmed policy** (see `modules.refunds.models`'s docstring). Idempotent per campaign (a second request returns the existing refund). Needs a closed campaign. Routes through a new `PaymentProvider.create_refund`/`get_refund` (added to the provider interface alongside `create_transfer`; sandbox always succeeds). **The Paystack refund implementation is unverified against a real account** — Paystack's `/refund` endpoint doesn't accept a caller-supplied idempotency reference the way transfers do, and its refund-status lookup/webhook shape wasn't confirmed against live docs, so reconciliation (`get_refund`) is a stub and the admin retry/fail rows are still open.
-- `GET /receipts/{reference}/verify`: public, rate-limited, checks funding orders, refunds, and payouts by reference and returns safe facts plus a tamper-check digest (`core/receipts.py`) — not a signature over a document, since no PDF exists yet.
-
-## K. Support centre and customer tickets
-
-Support must serve both creator and brand accounts. A ticket belongs to the caller and may reference a campaign, submission, payout, funding order, or transaction.
-
-| Priority | Method and path | Required contract |
-|---|---|---|
-| Missing P1 | `GET /support/categories` | Return help-centre categories and article counts. This can be backed by a CMS but must have a stable app contract. |
-| Missing P1 | `GET /support/articles` | Search/list published support articles by category and query. |
-| Missing P1 | `GET /support/articles/{slug}` | Return one published support article, revision, and updated time. |
-| Missing P0 | `POST /support/tickets` | Create a ticket with category, subject, first message, optional resource reference, and owned attachment IDs. |
-| Missing P0 | `GET /support/tickets` | List the caller's open and closed tickets with unread-reply counts. |
-| Missing P0 | `GET /support/tickets/{ticket_id}` | Return an owned ticket and ordered message thread. |
-| Missing P0 | `POST /support/tickets/{ticket_id}/messages` | Add a customer reply with optional owned attachments and reopen according to policy. |
-| Missing P1 | `POST /support/tickets/{ticket_id}/close` | Allow the customer to close a resolved ticket. |
-| Missing P1 | `POST /support/tickets/{ticket_id}/reopen` | Reopen within the allowed window or create a linked follow-up. |
-| Missing P0 | `GET /admin/support/tickets` | Admin/support queue with status, category, role, assignee, priority, age, and resource filters. |
-| Missing P0 | `GET /admin/support/tickets/{ticket_id}` | Operator view including thread, safe customer context, related resources, and audit history. |
-| Missing P0 | `POST /admin/support/tickets/{ticket_id}/messages` | Add an operator reply and notify the customer. |
-| Missing P0 | `PATCH /admin/support/tickets/{ticket_id}` | Assign, change priority/status/category, and record internal disposition. |
-| Missing P1 | `POST /admin/support/tickets/{ticket_id}/notes` | Add an internal-only note that is never returned to the customer endpoint. |
-
-**2026-09-22 — Built**: every row in the ticket table above (customer and admin sides). `category` is a free-text field, not a controlled taxonomy — there's no `GET /support/categories` behind it, since that (and the help articles below it) needs real content that doesn't exist yet. Unread is measured against a `customer_last_read_at` timestamp the customer's own `GET .../{id}` bumps; the admin queue doesn't get a symmetric "unread from customer" signal (not asked for in this row's contract). A customer message on a closed ticket reopens it automatically; the explicit `/reopen` route is for reopening *without* a new message, and refuses past a 14-day window (arbitrary — no policy was specified; change it if the real support process wants something else). `resource_type`/`resource_id` are a loose, unenforced reference (same pattern as `audit_events`), not a foreign key into whichever module owns that resource. Attachments reuse the existing `image`/`evidence` upload kinds rather than a dedicated `support-attachments` kind (still open, P1). "Notify the customer" on an operator reply isn't wired to email — only the in-app unread count reflects it.
-
-If Clippit owns help content instead of using an external CMS, the following content-management routes are also required:
-
-| Priority | Method and path | Required contract |
-|---|---|---|
-| Conditional P1 | `GET /admin/support/categories` | List draft/published categories and ordering. |
-| Conditional P1 | `POST /admin/support/categories` | Create a category with unique slug and audit author. |
-| Conditional P1 | `PATCH /admin/support/categories/{category_id}` | Rename/reorder/archive a category without breaking article URLs. |
-| Conditional P1 | `GET /admin/support/articles` | Search all draft/published articles and revisions. |
-| Conditional P1 | `POST /admin/support/articles` | Create a draft article with category, slug, body, locale, and author. |
-| Conditional P1 | `PATCH /admin/support/articles/{article_id}` | Create a new editable revision rather than silently replacing published content. |
-| Conditional P1 | `POST /admin/support/articles/{article_id}/publish` | Publish one reviewed revision and update cache/version. |
-| Conditional P1 | `POST /admin/support/articles/{article_id}/unpublish` | Remove from public discovery while preserving revisions and existing ticket references. |
-
-## L. Financial disputes and safety reports
-
-Support tickets answer questions. Disputes and safety reports change risk, money, or moderation state and therefore require structured reasons, evidence, deadlines, assignment, decisions, and immutable audit history.
-
-### Customer disputes
-
-| Priority | Method and path | Required contract |
-|---|---|---|
-| Missing P0 | `POST /disputes` | Open one structured dispute against an authorised submission verdict, earning entry, payout, funding order, refund, or transaction. Enforce type-specific time windows and prevent duplicate open cases. |
-| Missing P0 | `GET /disputes` | List the caller's disputes with type, resource reference, status, deadline, last update, and unread reply count. |
-| Missing P0 | `GET /disputes/{dispute_id}` | Return an owned case, customer-visible evidence, decision history, deadlines, and messages. |
-| Missing P0 | `POST /disputes/{dispute_id}/messages` | Add a customer response and owned evidence upload IDs without altering the original claim. |
-| Missing P1 | `POST /disputes/{dispute_id}/withdraw` | Let the opener withdraw an unresolved dispute while preserving its audit record. |
-| Missing P0 | `GET /admin/disputes` | Paginated operator queue filtered by type, money at risk, deadline, state, customer role, assignee, and age. |
-| Missing P0 | `GET /admin/disputes/{dispute_id}` | Operator view containing the case, related immutable ledger/trust records, customer messages, evidence, and audit timeline. |
-| Missing P0 | `PATCH /admin/disputes/{dispute_id}` | Assign, prioritize, request information, or change workflow state with optimistic concurrency. |
-| Missing P0 | `POST /admin/disputes/{dispute_id}/resolve` | Apply a structured upheld/denied/partial resolution and invoke only approved domain actions such as verdict override, payout retry, or refund. Never edit history directly. |
-| Missing P1 | `POST /admin/disputes/{dispute_id}/reopen` | Reopen under policy with an operator reason and a new resolution deadline. |
-
-**2026-09-22 — Built**, all ten rows. Five `DisputeType`s (`submission_verdict`, `earning_entry`, `payout`, `funding_order`, `refund` — "transaction" from the inventory's wording is covered by `funding_order`/`refund`, since a brand ledger transaction *is* one of those rows, not a separate record). Each type resolves to an owner, a reference timestamp, and — where the resource has one — an amount (`modules/disputes/service.py`'s `RESOURCE_TYPES`), which is what both the ownership check and "money at risk" in the admin queue come from. Filing windows are **assumed, not confirmed policy**: 7 days for a verdict, 14 for a payout, 30 for earnings/funding/refunds. The resolution SLA (`deadline_at`, 14 days) is likewise a guess with no stated policy behind it. `resolve()` **only records the decision** — upheld/denied/partial plus a note — it does not itself trigger a refund, a payout retry, or a verdict override; those stay separate, already-audited actions an operator takes through their own endpoints, so a resolution can never be silently coupled to a side effect that might itself fail.
-
-The existing creator appeal endpoint remains the fast, submission-specific first review. A dispute is the escalated case after ordinary appeal/review or for money operations.
-
-### Customer safety and abuse reports
-
-| Priority | Method and path | Required contract |
-|---|---|---|
-| Missing P0 | `POST /reports` | Report an accessible campaign, public profile, source asset, or public clip using a structured reason, optional text, and evidence. Rate limit and protect the reporter's identity. |
-| Missing P1 | `GET /reports/me` | Return the reporter's own cases and customer-safe statuses without exposing moderation notes. |
-| Missing P0 | `GET /admin/reports` | Moderation queue filtered by target type, severity, reason, status, age, and assignee. |
-| Missing P0 | `GET /admin/reports/{report_id}` | Return report evidence, target snapshot, related reports, account/campaign context, and audit data. |
-| Missing P0 | `POST /admin/reports/{report_id}/resolve` | Record no-action, content restriction, campaign pause, account sanction, or escalation through audited domain services. |
-
-**2026-09-22 — Built**, all five rows. Same `resolve()`-records-the-decision pattern as disputes: it doesn't itself pause a campaign or sanction an account. `target_type` covers campaign/creator-profile/organisation-profile/submission, matching "accessible campaign, public profile, source asset, or public clip" minus source assets (no source-asset entity exists yet — see §H). `POST /reports` is rate-limited (10/minute); the reporter's identity (`reporter_id`) is stored but only the admin queue/detail ever returns it — `GET /reports/me` and the create response never do.
-
-## M. Business verification/KYB
-
-The current admin API can flip a boolean, but there is no application, evidence, review queue, rejection reason, or resubmission trail.
-
-| Priority | Method and path | Required contract |
-|---|---|---|
-| Missing P0 | `POST /uploads/documents` | Upload an owned KYB/support document using stricter types, scanning, encryption, retention, and access controls than public media. |
-| Missing P0 | `POST /organisations/me/verification` | Submit legal name, registration number, address, representatives, document IDs, and attestations. Version every application. |
-| Missing P0 | `GET /organisations/me/verification` | Return status, submitted time, safe checks, required corrections, decision reason, and resubmission eligibility. |
-| Missing P0 | `GET /admin/organisations/verifications` | Paginated KYB queue with status, risk, age, and assignee filters. |
-| Missing P0 | `GET /admin/organisations/verifications/{application_id}` | Return the application, secure document links, previous decisions, and related account risk/audit data. |
-| Missing P0 | `POST /admin/organisations/verifications/{application_id}/approve` | Approve with legal identity fields and an auditable decision. |
-| Missing P0 | `POST /admin/organisations/verifications/{application_id}/reject` | Reject/request corrections with structured reasons and customer-safe copy. |
-| Missing P1 | `POST /organisations/me/finance-email/change/request` | Send verification to a new finance email after step-up authentication; do not change receipt/closeout delivery yet. |
-| Missing P1 | `POST /organisations/me/finance-email/change/confirm` | Consume the code, switch the finance contact, notify the previous address, and audit the change. |
-
-The existing `POST /admin/organisations/{user_id}/verify-business` should become an audited emergency override, not the normal verification workflow.
-
-## N. Admin users, campaigns, moderation, trust, and fraud
-
-The PRD explicitly requires a flagged-submissions queue. Current admin endpoints expose counts and blocked earnings but not an operable investigation queue.
-
-| Priority | Method and path | Required contract |
-|---|---|---|
-| Missing P0 | `GET /admin/users` | Search/filter creators, organisations, and admins by state, verification, risk, creation date, and recent activity. |
-| Missing P0 | `GET /admin/users/{user_id}` | Return safe identity/profile, verification, sessions summary, connected-platform health, money summary, sanctions, and audit timeline. |
-| Missing P0 | `POST /admin/users/{user_id}/suspend` | Suspend access/earning/funding with scope, reason, duration, and customer notification. Never delete ledger history. |
-| Missing P0 | `POST /admin/users/{user_id}/restore` | Restore a suspended account after recording reason and operator. |
-| Missing P1 | `POST /admin/users/{user_id}/force-logout` | Revoke all sessions for a compromised account and notify the customer. |
-| Missing P1 | `POST /admin/users/{user_id}/reset-2fa` | High-risk, separately permissioned recovery action that invalidates 2FA/recovery codes after documented identity checks and notifies the user. Require reason and, if policy demands, second approval. |
-| Missing P0 | `GET /admin/submissions/flagged` | Paginated flagged-submission queue with platform, campaign, creator, risk rule, severity, amount at risk, age, and assignment. |
-| Missing P0 | `GET /admin/submissions` | Global submission search/filter across lifecycle, verification, appeal, platform, campaign, creator, trust, tracking, and date; flagged is also available as a filter. |
-| Missing P0 | `GET /admin/submissions/{submission_id}` | Investigation view with public post, stored snapshots, trust features, requirements, earnings exposure, related accounts, comments, and audit trail. |
-| Missing P0 | `POST /admin/submissions/{submission_id}/trust/clear` | Clear the flag, record reason/evidence, resume eligible settlement/tracking, and notify affected parties. |
-| Missing P0 | `POST /admin/submissions/{submission_id}/trust/confirm` | Confirm fraud, block affected earnings, stop tracking, record sanction/recovery actions, and notify under policy. |
-| Missing P1 | `POST /admin/submissions/{submission_id}/assign` | Assign/unassign an investigator and enforce optimistic concurrency on decisions. |
-| Missing P0 | `GET /admin/campaigns` | Search/filter all campaigns by owner, state, funding, risk, review backlog, pot, and dates. |
-| Missing P0 | `GET /admin/campaigns/{campaign_ref}` | Full operator view of terms, owner, funding, submissions, pot ledger, flags, and audit trail. |
-| Missing P0 | `POST /admin/campaigns/{campaign_ref}/pause` | Emergency pause with reason and notification, distinct from the brand's normal pause action. |
-| Missing P0 | `POST /admin/campaigns/{campaign_ref}/close` | Emergency close with reason, final settlement/refund plan, and audit record. |
-| Missing P1 | `GET /admin/refunds` | List/filter refund operations and failures. |
-| Missing P1 | `POST /admin/payouts/{payout_id}/reconcile` | Ask the provider for authoritative state and apply an idempotent reconciliation result. |
-| Missing P0 | `GET /admin/earnings` | Search/filter all immutable earning entries by creator, campaign, submission, hold/payable/allocated state, trust block, and snapshot reference. |
-| Missing P0 | `GET /admin/earnings/{entry_id}` | Full provenance view for one earning entry, including calculation, caps, snapshot, allocations, payout, and audit events. |
-| Missing P0 | `POST /admin/earnings/{submission_id}/hold` | Place a scoped, reasoned investigation/compliance hold on future release without deleting accruals or snapshots; notify under policy. |
-| Missing P0 | `POST /admin/earnings/{submission_id}/release` | Release an operator hold after documented resolution; do not bypass campaign pot, cap, trust, or statutory constraints. |
-| Missing P0 | `GET /admin/ledger` | Unified immutable finance ledger across collections, campaign funds, fees, creator accruals, payout allocations, transfers, refunds, reversals, and adjustments. |
-| Missing P0 | `GET /admin/ledger/{entry_id}` | One ledger event with debit/credit accounts, references, provider correlation, provenance, and linked audit events. |
-| Missing P1 | `GET /admin/ledger/export` | Strictly permissioned, date/type/account-filtered finance export with request audit and safe cells. |
-| Missing P1 | `GET /admin/reconciliation` | Provider-versus-Clippit reconciliation runs, unmatched items, age, amount, and resolution state. |
-| Missing P1 | `POST /admin/reconciliation/run` | Start an idempotent bounded reconciliation job for a provider/date range and return job ID. |
-| Missing P1 | `GET /admin/audit/{event_id}` | Return one full audit event with request/provider correlation fields. |
-| Missing P1 | `GET /admin/audit/export` | Export filtered audit data for an incident or finance review with strict permissions. |
-| Missing P1 | `GET /admin/jobs` | Return scheduled-job last run, next run, lease owner, duration, processed count, and last error. |
-| Missing P1 | `POST /admin/jobs/{job_name}/run` | Run one allowlisted job with an idempotency key and audit record. This supersedes one-off settle/sweep buttons over time. |
-
-**2026-09-22 — Built**: every P0 row (19 of them) plus `GET /admin/refunds` was left for a later pass — everything else P1 here (`force-logout`, `reset-2fa`, submission `/assign`, `POST /admin/payouts/{id}/reconcile`, ledger export, reconciliation runs, `audit/{id}`/`audit/export`, jobs visibility) is still open.
-
-- **Suspension** (`POST/POST /admin/users/{id}/suspend`,`/restore`): three scopes — `access` (blocks sign-in, checked in `deps.get_current_user`), `funding` (blocks new funding orders), `earning` (blocks new payout requests) — each enforced at its own chokepoint, not centrally, so a scoped suspension can't accidentally lock someone out of everything. `duration_days` is accepted and stored as `suspension_expires_at` but **nothing sweeps it** — a "temporary" suspension still needs a manual `/restore`. No risk score or "recent activity" signal exists to filter `GET /admin/users` by, despite the row asking for one.
-- **Trust clear/confirm**: `EarningAccount.admin_trust_override` is a tri-state (unset defers to Intelligence's live read every settlement tick, `True` forces accrual through even if Intelligence still says flagged, `False` forces it blocked even if Intelligence would clear it) — see `earnings.service.settle_submission`. Both actions also write a `flagged_queue` review back to Intelligence via the existing internal contract, so the decision becomes a labelled training example, not just a local override. `GET /admin/submissions/flagged` doesn't call Intelligence per row for a severity/risk-rule breakdown (that's an N-calls-per-page cost); `GET /admin/submissions/{id}` does, for the one-submission investigation view.
-- **Earnings hold/release**: a *new* concept, `EarningAccount.release_hold_at`, separate from a trust block — it keeps already-accrued, otherwise-payable money out of `payouts.service.reserve`'s eligible-entries query and out of `earnings.queries.balances`'s `payable` figure, without touching accrual at all. Money already inside an existing payout's allocation isn't clawed back.
-- **Emergency campaign pause/close**: thin wrappers around the same `campaign_service` functions the brand's own pause/close use, just under an `admin.*` audit kind and without the owner check.
-- **Unified ledger**: same "present existing immutable rows together" approach as the brand's own ledger (§J) — funding orders, refunds, and payouts merged and sorted, not a new table.
-
-## O. Admin operator access, trust configuration, and provider operations
-
-Admin accounts cannot be self-created, which is correct, but there is currently no controlled provisioning, permission, deprovisioning, or operator-session surface. Production administration must use named people, MFA, least privilege, short sessions, and complete audit records.
-
-### Operator lifecycle and permissions
-
-| Priority | Method and path | Required contract |
-|---|---|---|
-| Missing P0 | `GET /admin/operators` | List named operators, roles/permissions, MFA state, status, last activity, and inviter. Restricted to owner/security-admin permission. |
-| Missing P0 | `POST /admin/operators/invitations` | Invite an email to an allowlisted operator role with short expiry, one-time token, mandatory MFA setup, and audited inviter. |
-| Missing P0 | `GET /auth/admin-invitations/{token}` | Return a minimal valid/expired/already-used invitation description without exposing other operators. |
-| Missing P0 | `POST /auth/admin-invitations/{token}/accept` | Verify email, establish credentials, require MFA enrollment, consume the invitation once, and create the operator. |
-| Missing P0 | `PATCH /admin/operators/{operator_id}` | Change allowlisted role/permissions or profile under separation-of-duties rules; prevent self-escalation. |
-| Missing P0 | `POST /admin/operators/{operator_id}/suspend` | Revoke all operator sessions immediately and disable access while preserving audit history. |
-| Missing P1 | `POST /admin/operators/{operator_id}/restore` | Restore access without bypassing MFA or invitation policy. |
-| Missing P0 | `GET /auth/permissions` | Return the current user's effective permissions so admin UI and API enforcement share one truth. |
-
-**2026-09-22 — Built**, all eight rows except `POST /admin/operators/{id}/restore` (cheap addition, just not done). `User` gained `permissions` (empty means unrestricted — every existing admin today) and `invited_by`; a stateless `operator_invitations` row plus a signed token (its own `jti` doubling as the row's id, same pattern as every other short-lived token here) drives the invite/accept flow. **MFA enrollment is not enforced at accept** — 2FA doesn't exist yet (still open in §B) — so "mandatory MFA setup" from this row's contract is not actually mandatory; accepting an invitation creates a password-only operator. `PATCH .../{id}` blocks an operator from changing their own permissions (self-escalation); `.../suspend` revokes every session immediately by reusing the same suspension primitive built in §N. **Nothing yet enforces a granular permission on any individual admin route** — `permissions`/`GET /auth/permissions` are the data model and the one shared read, not per-route gating throughout the ~130 other admin endpoints.
-
-### Trust rules and random audits
-
-| Priority | Method and path | Required contract |
-|---|---|---|
-| Missing P0 | `GET /admin/trust/rules` | Return versioned active and draft fraud/trust thresholds, applicability, author, validation state, and activation time. |
-| Missing P0 | `POST /admin/trust/rules` | Create a new immutable draft rule version after schema validation; never edit the active version in place. |
-| Missing P0 | `POST /admin/trust/rules/{version_id}/activate` | Activate a tested version with approver, reason, effective time, and rollback reference. |
-| Missing P0 | `GET /admin/submissions/random-audits` | Queue statistically sampled unflagged submissions so precision and recall can both be measured. |
-| Missing P0 | `POST /admin/submissions/{submission_id}/trust/review` | Record a labelled random-audit or investigation outcome using the internal trust review service, with required source and evidence. |
-
-**2026-09-22 — Built**: `GET /admin/submissions/random-audits` (an unbiased sample of *unflagged* submissions — see `modules.intelligence.contracts.ReviewSource`'s own docstring on why that matters) and `POST /admin/submissions/{id}/trust/review` (the generic label-capture route, distinct from `/trust/clear` and `/trust/confirm` in §N — those two also apply the accrual override; this one is just the label). **`GET /admin/trust/rules` is a read-only proxy** onto Intelligence's existing `/internal/trust/rules` — it does not return draft-vs-active state or an author/validation trail beyond whatever that internal contract already exposes. **`POST /admin/trust/rules` and `.../activate` (versioned draft/edit) are deliberately not built**: the thresholds are Intelligence's own domain (decision register, `architecture/intelligence-contracts.md`), and writing versioned rule mutations here would mean this module editing Intelligence's own tables rather than calling its contract — that's Adam's module to build, not a gap in this one.
-
-### Provider/webhook operations
-
-| Priority | Method and path | Required contract |
-|---|---|---|
-| Missing P1 | `GET /admin/providers` | Operational health for payment, email, storage, identity, transcription, AI, and each social adapter: configured state, last success/failure, latency, quota, and circuit state. Never expose secrets. |
-| Missing P1 | `GET /admin/webhooks` | Filter stored webhook envelopes by provider, event kind, handled state, reference, date, and retry state. |
-| Missing P1 | `GET /admin/webhooks/{event_id}` | Return one redacted verified event, signature result, handler attempts, linked resource, and outcome. |
-| Missing P1 | `POST /admin/webhooks/{event_id}/replay` | Replay one allowlisted failed handler idempotently without re-verifying a modified payload; audit the operator. |
-| Missing P1 | `POST /webhooks/email` | Verify email-provider events and record delivered, bounced, deferred, complained, or unsubscribed state for transactional/optional mail policy. |
-
-**2026-09-22 — Built**: `GET /admin/providers` only, and narrower than the row asks — configured/sandbox state for the payment provider, email backend, storage backend, Google, and each social adapter, with **no latency, quota, or last-success/failure tracking** (that needs an observability/metrics layer this pass doesn't add — see the monitoring gap in Part III). **Webhook envelope storage and replay are not built** — `POST /webhooks/payments` still verifies and handles events without persisting a stored envelope first, the exact gap already flagged in Part III's "existing contract corrections"; `GET/POST /admin/webhooks*` have nothing to read until that's fixed. `POST /webhooks/email` needs a transactional-email provider decision this pass doesn't make (console/SMTP only today).
-
-## P. Production media lifecycle
-
-The existing streaming upload routes are acceptable for development and small pilots. Large creator videos should not pass through a single web worker in production.
-
-| Priority | Method and path | Required contract |
-|---|---|---|
-| Missing P0 | `POST /uploads/multipart` | Create an owned R2 multipart upload after validating intended kind, filename, declared size, and content type; return short-lived signed part URLs. |
-| Missing P0 | `POST /uploads/multipart/{upload_id}/complete` | Verify uploaded parts, size, byte signature, checksum, and ownership; queue scan/transcode/thumbnail work. |
-| Missing P1 | `GET /uploads/{upload_id}` | Return owner-safe metadata and processing/scan state, plus a short-lived signed read URL when allowed. |
-| Missing P1 | `DELETE /uploads/{upload_id}` | Delete an unattached owned upload or schedule deletion under retention rules. Refuse deletion when referenced by immutable evidence/finance records. |
-| Missing P1 | `POST /uploads/support-attachments` | Upload ticket attachments under support-specific type, size, scanning, and access rules. This may reuse the multipart implementation. |
-
-`GET /media/{key:path}` must be disabled in production once signed R2 delivery is active.
-
-## Q. Notification delivery beyond the inbox
-
-| Priority | Method and path | Required contract |
-|---|---|---|
-| Missing P1 | `GET /notifications/unread-count` | Cheap shell badge count without downloading the full inbox. |
-| Missing P1 | `POST /notifications/{notification_id}/archive` | Hide one owned notification while preserving the audit/event record. |
-| Missing P1 | `POST /push-subscriptions` | Register/update a browser push subscription for the current session and preference state. |
-| Missing P1 | `DELETE /push-subscriptions/{subscription_id}` | Remove one owned push subscription on logout, revocation, or browser unsubscribe. |
-
-Push can be deferred during a controlled pilot if in-app and transactional email delivery are operational.
-
-**2026-09-22 — Built**, all four rows: `GET /notifications/unread-count` (excludes archived, matching the inbox's own count); `POST /notifications/{id}/archive` (hides from the default inbox list; the row and its audit trail stay); `POST`/`DELETE /push-subscriptions*` (re-registering the same browser endpoint updates the row rather than duplicating it). Nothing actually sends a push yet — these endpoints only manage subscriptions; the send side is still whatever web-push integration is chosen.
-
-## R. Legal documents and consent records
-
-The frontend currently links to `/terms` and `/privacy`, but those pages do not exist. The pages may be statically rendered; the acceptance record still belongs in the backend.
-
-| Priority | Method and path | Required contract |
-|---|---|---|
-| Missing P0 | `GET /legal/documents/{slug}` | Return the currently published Terms, Privacy Policy, Community Rules, or campaign-funding terms with immutable version and effective date. A static frontend can consume this at build time. |
-| Missing P0 | `POST /legal/acceptances` | Record user, document/version, accepted time, IP/user-agent hash, and the action that required consent. Idempotent per version. |
-| Missing P1 | `GET /legal/acceptances/me` | Return the caller's accepted versions and any newly required consent. |
-
-**2026-09-22 — Built**: content lives in a small static, versioned registry (`modules/legal/documents.py` — deployed with the app, per the "may be statically rendered" note), so the conditional `/admin/legal/*` CRUD rows below weren't built. `POST /legal/acceptances` is idempotent per `(user, slug, version)` and 409s on a stale version. **The four documents' bodies are placeholder text, not real legal copy** — this needs counsel review before launch. `product-config`'s `legal` array exposes the current versions.
-
-If legal documents are managed in Clippit rather than versioned files deployed with the application:
-
-| Priority | Method and path | Required contract |
-|---|---|---|
-| Conditional P1 | `GET /admin/legal/documents` | List slugs, versions, effective dates, publication state, and acceptance counts. |
-| Conditional P1 | `POST /admin/legal/documents/{slug}/versions` | Create an immutable draft version with checksum and counsel/author metadata. |
-| Conditional P1 | `POST /admin/legal/documents/{slug}/versions/{version}/publish` | Publish with effective date and whether re-acceptance is mandatory; never rewrite an accepted version. |
-
-## S. Automated brief verification and media processing
-
-These are internal contracts. They are needed only if verification/transcoding run outside the FastAPI process, which is the recommended production topology.
-
-| Priority | Method and path | Required contract |
-|---|---|---|
-| Conditional P0 | `POST /internal/submissions/{submission_id}/verification/start` | Idempotently enqueue transcription, frame sampling, brief checks, and decision aggregation. |
-| Conditional P0 | `GET /internal/submissions/{submission_id}/verification` | Return internal stage state, attempts, model/provider versions, safe failure codes, and resulting requirement checks. |
-| Conditional P0 | `POST /internal/submissions/{submission_id}/verification/callback` | Signed worker callback that stores requirement-level evidence and the final verifier decision exactly once. |
-| Conditional P1 | `POST /internal/uploads/{upload_id}/processed` | Signed media-worker callback for scan, duration, dimensions, normalized video, waveform, and thumbnail assets. |
-
-If these jobs remain in-process, expose no extra HTTP routes; call the same service functions directly. The product still needs the worker behavior, retries, dead-letter queue, and audit data.
-
-## T. Internal performance aggregates and optional service-split contracts
-
-The intelligence contract names two aggregate reads that are not implemented. They are useful to campaign analytics, creator profile aggregates, trust investigations, and support without forcing each consumer to rebuild snapshot logic.
-
-| Priority | Method and path | Required contract |
-|---|---|---|
-| Missing P1 | `GET /internal/campaigns/{campaign_id}/performance` | Stored campaign-level platform totals/time series, freshness, coverage, and trust distribution derived from snapshots; never call platforms during the read. |
-| Missing P1 | `GET /internal/creators/{creator_id}/performance` | Stored creator-level approved public performance aggregates with campaign/platform breakdown and trust-safe visibility. |
-
-The following endpoints are **conditional**, not required inside the current monolith. Implement them only if core domains are deployed as separate services; otherwise keep direct service calls so there is not a fake network boundary inside one process.
-
-| Priority | Method and path | Required contract |
-|---|---|---|
-| Conditional P1 | `GET /internal/campaigns/{campaign_id}` | Canonical campaign state, platforms, owner, terms, and payout rules for another trusted service. |
-| Conditional P1 | `GET /internal/submissions/{submission_id}` | Canonical submission identity, URL, creator, campaign, platform, and lifecycle state. |
-| Conditional P0 | `GET /internal/campaigns/{campaign_id}/balance` | Authoritative available/committed/refundable campaign ledger balance. |
-| Conditional P0 | `POST /internal/campaigns/{campaign_id}/debit` | Idempotently reserve/debit a campaign using a payout/earning reference; hard-refuse overspend. |
-| Conditional P1 | `GET /internal/payouts` | Restricted payout query for a separate admin/finance service. |
-| Conditional P0 | `POST /internal/payouts/{payout_id}/override` | Audited retry/fail/reconcile command executed by the money-owning service, never by an admin service directly. |
-
----
-
-# Part III: existing routes that need production changes, not replacements
-
-## Frontend integration
-
-The largest current product gap is not an endpoint count: the Next.js frontend still reads fixtures and `localStorage`. Every relevant form, list, badge, dashboard, receipt, and state transition must be moved to the API inventory above with:
-
-- one typed API client;
-- authenticated server/client request handling;
-- refresh/retry behavior that never repeats non-idempotent money actions unsafely;
-- route guards by role, verification, and onboarding state;
-- real loading, empty, partial, provider-outage, validation, forbidden, conflict, rate-limit, and retry states;
-- cache invalidation after mutations;
-- no customer financial or identity truth stored only in browser storage.
-
-The current onboarding components are a concrete example of this gap: they write all answers to `localStorage`, while the two backend completion schemas omit several questions. The production integration must use the onboarding GET/PATCH/complete lifecycle above and remove browser storage as the source of truth.
-
-## Onboarding persistence and migration
-
-- Add durable creator and organisation onboarding-draft storage with revision, schema version, current step, answer timestamps, status, and completion time.
-- Add structured location fields or a normalized location object.
-- Split creator `interests` into content made and content watched; do not collapse them back into one list.
-- Add organisation preferred user name, funder type, registration state, content-to-fund lanes, content-to-view lanes, and discovery source.
-- Preserve profile fields used after onboarding in the normal profile tables; preserve research/personalization answers in dedicated typed columns or versioned answer records.
-- Backfill existing completed profiles into a legacy onboarding version without inventing answers for questions they were never asked.
-- Never treat a missing legacy answer as customer consent or as an explicit preference.
-
-## Existing contract corrections found by the screen audit
-
-- `PUT /creators/me/profile` must add handle, structured location, primary/content lanes, public visibility, and available-for-briefs fields. The current settings screen edits these values but the schema cannot store them.
-- `GET /creators/me/profile` must return the same fields plus handle-change limits and safe public-profile URL.
-- `PUT /organisations/me/profile` must distinguish the workspace user's preferred name from the public organisation/funder name and support a stable public slug if brand profiles are enabled.
-- ~~`POST /campaigns` and `PATCH /campaigns/{campaign_ref}` must model the end condition explicitly. `duration_days = null` means **no calendar deadline; close only when the pot is exhausted or an authorised actor closes it**. The current funding service incorrectly converts null to a default 14-day deadline.~~ **Fixed 2026-09-22**: `funding.service.open_campaign` no longer defaults a null `duration_days` to 14; `ends_at` stays null and the rest of the codebase already treated `ends_at is None` as no-deadline correctly (list filters, `time_left`, `is_open_for_entries`, the sweep job). The explicit end-condition field on create/update responses (separate from just `duration_days`/`ends_at`) is still not modeled.
-- Campaign create/update responses must expose source assets, end condition, close policy, funding lock state, and revision. A single `source_link` cannot power the sound plus visual-reference UI.
-- Campaign money schema fields currently use Python `float` in several Pydantic models. They must accept/return decimal money values consistently with the NUMERIC ledger.
-- `GET /campaigns`, `/submissions`, `/campaigns/{ref}/submissions`, `/earnings/history`, `/leaderboard`, `/notifications`, review queues, and every admin list need consistent cursor pagination and total/next-cursor metadata. Offset may remain for exports but is not the primary customer pagination contract.
-- `GET /campaigns/{ref}/stats` must not fabricate a countdown for budget-only campaigns and must report why/when a campaign can close.
-- `GET /campaigns/{ref}/report` must record the export request and derive every money/view field from immutable ledger and snapshot provenance.
-- `POST /webhooks/payments` currently verifies and handles events but does not persist a provider-event envelope before dispatch. Store event ID/digest, signature result, redacted body, attempts, handler result, and linked resource for deduplication and operations.
-- `POST /payouts` already carries an idempotency key in the body; standardize on an `Idempotency-Key` header or document the body field consistently across all money mutations.
-- `POST /creators/me/bank-details/verify` must compare resolved name against the verified identity under a documented fuzzy/exact-match policy. Account resolution alone must not set identity verification.
-- `GET /leaderboard` needs a privacy rule for displaying another creator's earnings. Prefer verified views/rank publicly unless the creator explicitly opts in to showing money.
-- `GET /media/{key:path}` must not remain possession-only file access in production. Replace it with authorised short-lived signed URLs and disable the local route.
-- `GET /openapi.json`, `/docs`, `/docs/oauth2-redirect`, and `/redoc` must be disabled or protected outside approved development/staging/operator access.
-- The frontend must stop collecting raw card number, expiry, and CVV. `POST /campaigns/{ref}/funding` returns a provider-hosted checkout URL; card data must never touch Clippit's frontend or backend.
-- Provider naming must be consistent in API responses, receipts, and UI. The PRD/frontend say Payaza while the implemented provider adapter is Paystack.
-
-## Payment and money movement
-
-- Select one provider name everywhere. The backend implements Paystack while parts of the frontend still say Payaza.
-- Run live-shaped test-mode funding, webhook, refund, transfer, timeout, duplicate-event, reversal, and reconciliation rehearsals.
-- Store provider event IDs and raw-event digests; never log card/bank secrets.
-- Reconcile the Clippit ledger against provider statements, not only webhook state.
-- Decide the legal escrow/collection structure and confirm that the provider account supports the campaign-to-many-creators flow.
-
-## Social platforms and metrics
-
-- Complete provider review/production access, especially TikTok and Meta.
-- Encrypt social tokens at rest and rotate the encryption key safely.
-- Implement Meta refresh and reconnect behavior.
-- Build and verify the YouTube adapter.
-- Add quota budgets, provider circuit breakers, exponential backoff, and customer-visible degraded states.
-- Retain every view snapshot used for billing and make its provenance immutable.
-
-## Automated content checking
-
-- Implement R2 ingestion, safe FFmpeg processing, Deepgram transcription, frame sampling, and the verifier behind the existing `Verifier` interface.
-- Store model/provider version, prompt/rule version, evidence timestamps, confidence, and human overrides.
-- Do not auto-approve ambiguous or failed processing; route it to human review.
-- Measure appeal overturn rate and freeze automatic decisions if quality thresholds fail.
-
-## Email, jobs, storage, and observability
-
-- Replace console email with a production sender, domain authentication, templates, bounce/complaint handling, and delivery monitoring.
-- Move local uploads to R2 with signed URLs, scanning, lifecycle rules, and backups.
-- Move periodic jobs out of the API process into one durable scheduler/queue with leases, retries, alerts, and dead-letter handling.
-- Move rate limiting and shared cache state to Redis before running multiple application instances.
-- Add Sentry/error monitoring, structured logs, request IDs, redaction, dashboards, and money-path alerts.
-- Back up Postgres, test point-in-time recovery, and document restore/runbook procedures.
-
-## Security and privacy
-
-- Store refresh tokens and provider tokens hashed/encrypted as appropriate.
-- Add CSRF protection to cookie-authenticated mutations.
-- Add per-account and per-resource authorization tests for every object endpoint.
-- Add step-up authentication for payout-account changes, 2FA changes, email changes, refunds, and account deletion.
-- Add webhook replay protection and secret rotation.
-- Add retention/deletion policies that preserve statutory finance/audit records while removing unnecessary personal data.
-- Perform dependency, container, secret, and application security scans before launch.
-
----
-
-# Part IV: recommended implementation order
-
-## Phase 1: connect the product already designed
-
-1. Typed frontend API client, access/refresh session model, role guards, and error envelope.
-2. Build onboarding draft/status/complete APIs and align their schemas with every creator and brand question.
-3. Connect existing auth, profile, campaigns, submissions, reviews, notifications, earnings, payouts, and funding endpoints.
-4. Replace all fixtures and `localStorage` business state.
-5. Add campaign membership endpoints so Joined is real.
-
-## Phase 2: make identity and money safe
-
-1. Refresh tokens, sessions, Google OIDC, password change, account deletion, and step-up authentication.
-2. Live-shaped payment tests, brand ledger, refunds, server PDFs, and public receipt verification.
-3. R2 multipart uploads, signed delivery, scanning, and media processing.
-4. KYB customer application and operator queue.
-
-## Phase 3: operate and support real customers
-
-1. Support tickets and operator inbox.
-2. Flagged-submission investigation, user/campaign controls, reconciliation, and job visibility.
-3. Legal documents/acceptances, data export, and privacy workflows.
-4. Monitoring, alerts, backups, incident runbooks, and audit export.
-
-## Phase 4: remove manual product bottlenecks
-
-1. Automated video/transcript/brief verification with evidence.
-2. YouTube OAuth and metric ingestion.
-3. Durable scheduling/queues and provider-degradation controls.
-4. Push notifications if customer research shows they are needed.
-
----
-
-# Part V: endpoint-to-screen ownership
-
-| Product area | Existing endpoints to connect | New endpoints required |
-|---|---|---|
-| Auth screens | `/auth/signup`, `/login`, verification and recovery routes | Refresh, Google OIDC, real sessions, password change, 2FA, email change, account lifecycle |
-| Creator onboarding | Existing all-at-once `PUT /creators/me/onboarding` and image upload | Creator onboarding GET, PATCH autosave, complete, reset, versioned options, schema/data migration |
-| Creator settings | Creator profile, uploads, preferences, social routes, banks | Public profile/portfolio, handle/config support, KYC, security/session endpoints, production upload lifecycle |
-| Creator campaigns | Campaign list/detail/rules/pool | Join, leave, joined-campaign list, source assets |
-| Creator clips/verdicts | Submission create/list/detail/earnings/performance/appeal | Corrected resubmission and automated verifier internal contract if split into workers |
-| Creator money | Earnings, banks, payout create/list/detail | Entry provenance, exports/statements, quote, server PDF, public receipt verification |
-| Brand/individual onboarding | Existing all-at-once `PUT /organisations/me/onboarding` and image upload | Organisation onboarding GET, PATCH autosave, conditional completion, reset, versioned options, schema/data migration |
-| Brand settings | Organisation profile/preferences | KYB application/status and document upload |
-| Brand campaign studio | Complete campaign create/edit/rules/payout/funding | Resumable studio drafts, campaign source-asset lifecycle, finalized draft delete/duplicate |
-| Brand campaign control | Stats, submissions, CSV report, pause/resume/close | Analytics time series, activity, closeout, refund status and server-generated financial documents |
-| Brand money | Funding routes only | Organisation transaction ledger/detail/export, refunds, receipt PDFs |
-| Notifications | Inbox/read routes | Unread count/archive; push only when enabled |
-| Support and disputes | None | Help articles, customer/operator tickets, structured money/trust disputes and safety reports |
-| Admin | Overview, payouts, funding, blocked earnings, job triggers, business override, audit | Operators/RBAC, users, creator KYC and brand KYB, flagged/random audits, campaign emergency controls, support/dispute/report queues, refunds, reconciliation, jobs, providers/webhooks, trust rules and audit detail |
-| Legal | None | Versioned documents and acceptance records |
-
-## Explicit non-goals for v1
-
-These remain outside the PRD and should not expand the launch API unless product scope changes:
-
-- content editing or creation tools;
-- influencer discovery/search marketplace;
-- payouts outside Nigeria;
-- crypto/stablecoin settlement;
-- multiple currencies;
-- agency sub-accounts and complex organisation teams;
-- native mobile-only APIs.
-
-Fund, post, verify, pay, support, and operate are the production boundary.
-
----
-
-# Part VI: all current frontend routes traced to APIs
-
-This matrix covers every `page.tsx` currently under `frontend/app`. A dash means the page is intentionally static or only routes the user; it does not mean an API was forgotten.
-
-## Landing, auth, and onboarding
-
-| Frontend route | Reads | Mutations/actions |
-|---|---|---|
-| `/` | `GET /product-config` only if live platform/fee/legal copy is shown; the marketing composition can otherwise remain static. | No production mutation. The sample brief remains a local download and must clearly say it does not create/fund a campaign. |
-| `/auth` | Optional `GET /auth/me` to redirect an existing session. | None. |
-| `/auth/sign-up` | Optional `GET /auth/me`; `GET /legal/documents/{slug}` for current terms links. | Role selection is local; consent is recorded by `POST /legal/acceptances` during account creation/completion. |
-| `/auth/sign-up/creator` | `GET /product-config`, legal documents as needed. | `POST /auth/signup` or Google OIDC start/callback; establish session. |
-| `/auth/sign-up/organisation` | Same as creator signup. | `POST /auth/signup` or Google OIDC with organisation role intent. |
-| `/auth/sign-in` | `GET /auth/providers` when showing available methods. | `POST /auth/login`, Google OIDC, and `POST /auth/2fa/challenge` when required. |
-| `/auth/forgot-password` | None. | `POST /auth/forgot-password`. |
-| `/auth/recovery-code` | None. | `POST /auth/recovery-code/verify`. |
-| `/auth/reset-password` | None. | `POST /auth/reset-password`. |
-| `/auth/verify-email` | `GET /auth/me` when session exists. | `POST /auth/verify-email`, `POST /auth/verify-email/resend`. |
-| `/auth/success` | `GET /auth/me` to select role/onboarding/workspace destination. | None. |
-| `/onboarding` | `GET /auth/me` and the role-specific onboarding GET to resume/redirect. | None beyond routing. |
-| `/onboarding/creator` | `GET /onboarding/options`, `GET /creators/me/onboarding`. | `POST /uploads/images`, `PATCH /creators/me/onboarding` per screen, `DELETE .../draft`, `POST .../complete`. |
-| `/onboarding/brand` | `GET /onboarding/options`, `GET /organisations/me/onboarding`. | `POST /uploads/images`, `PATCH /organisations/me/onboarding` per screen/branch, `DELETE .../draft`, `POST .../complete`. |
-
-## Creator workspace
-
-| Frontend route | Reads | Mutations/actions |
-|---|---|---|
-| `/dashboard` | `GET /creators/me/overview`, `GET /earnings/summary`, shell profile/notification count. | Notification read actions only when opened. |
-| `/dashboard/campaigns` | `GET /campaigns` with search/feed/category/platform/cursor filters. | None. |
-| `/dashboard/campaigns/[slug]` | `GET /campaigns/{ref}` including rules/pool/membership; `GET .../assets`; campaign-filtered leaderboard. | `POST /campaigns/{ref}/join`, `DELETE .../join`, `POST /reports` for safety reporting. |
-| `/dashboard/campaigns/[slug]/submit` | Campaign detail, connected accounts, upload limits/config. | `POST /uploads/videos`, `POST /submissions`; reconnect platform via social OAuth when required. |
-| `/dashboard/clips` | `GET /creators/me/clips` with status/cursor filters. | None. Each row opens its real submission ID. |
-| `/dashboard/submissions/processing` | `GET /submissions/{id}` polling or revalidation. | Optional retry only through documented resubmission/reconnect paths; do not duplicate the original create request. |
-| `/dashboard/submissions/approved` | `GET /submissions/{id}`, `GET .../earnings`, `GET .../performance`. | None. |
-| `/dashboard/submissions/rejected` | Same submission/verdict reads. | `POST /submissions/{id}/resubmit`, `POST .../appeal`, or `POST /disputes` after ordinary appeal policy. |
-| `/dashboard/submissions/appeal` | `GET /submissions/{id}` including appeal. | `POST /uploads/evidence`, `POST /submissions/{id}/appeal`, follow-up dispute only when eligible. |
-| `/dashboard/earnings` | `GET /earnings/summary`, `GET /earnings/history`, optional `GET /earnings/entries/{id}`. | CSV/PDF exports. |
-| `/dashboard/withdraw` | Earnings summary, payout destination, KYC status, `POST /payouts/quote`. | Step-up request/verify, then idempotent `POST /payouts`. |
-| `/dashboard/payouts/receipt` | `GET /payouts/{id}`. | `GET /payouts/{id}/receipt.pdf`; dispute action when eligible. |
-| `/dashboard/payout-account` | `GET /banks`, bank details, creator verification status. | Step-up, `POST /banks/resolve`, `PUT /creators/me/bank-details`, `POST .../verify`, optional delete. |
-| `/dashboard/leaderboard` | `GET /leaderboard` with period/campaign/cursor. | None. |
-| `/dashboard/notifications` | `GET /notifications`. | Read one/read all/archive. |
-| `/dashboard/accounts` | `GET /creators/me/accounts` or `/social/accounts`. | OAuth login/callback, refresh/reconnect, disconnect, sync profile. |
-| `/dashboard/settings` | Creator profile, preferences, accounts, bank details, KYC/public-profile state. | Profile save/photo upload, preference patch, social and bank actions. |
-| `/dashboard/profile` | Own `GET /profiles/creators/{handle}` preview using the same public contract. | Copy URL locally; edits return to settings. |
-| `/dashboard/security` | Auth providers, 2FA state, sessions. | Change/set password, 2FA setup/confirm/disable/recovery codes, revoke sessions, email change, export/delete account. |
-
-## Brand workspace
-
-| Frontend route | Reads | Mutations/actions |
-|---|---|---|
-| `/brand` | `GET /brand/overview`, notification count, organisation profile. | None beyond navigation. |
-| `/brand/campaigns` | `GET /campaigns` with owner/status/cursor; `GET /campaign-drafts`. | Create, resume, duplicate, or delete allowed drafts. |
-| `/brand/campaigns/new` | `GET /product-config`, `GET /campaign-drafts/{id}`. | `POST /campaign-drafts`, `PATCH` details/cover/source, image/asset upload. |
-| `/brand/campaigns/new/brief` | Current campaign draft. | PATCH checklist changes with revision. |
-| `/brand/campaigns/new/platforms` | Draft and enabled platform config. | PATCH platforms. Never advertise an unavailable adapter as ready. |
-| `/brand/campaigns/new/rules` | Draft and product rule limits. | PATCH minimum, creator cap, explicit duration-versus-pot end condition. |
-| `/brand/campaigns/new/budget` | Draft and fee/limit config. | PATCH decimal pot/rate; server recalculates expected views. |
-| `/brand/campaigns/new/review` | Canonical draft plus validation blockers. | `POST /campaign-drafts/{id}/finalize`. |
-| `/brand/campaigns/new/fund` | Campaign, server funding quote, and `GET /campaigns/{ref}/funding` when an order exists. | `POST .../funding`, redirect to hosted checkout or show collection account, `POST .../confirm`, cancel unpaid order. |
-| `/brand/campaigns/new/funded` | Campaign and confirmed funding order. | Download funding receipt; no client-side fake confirmation. |
-| `/brand/campaigns/[slug]` | Campaign, stats, analytics, assets, submissions, activity. | Pause/resume, authorised close, report export, safety/dispute actions. |
-| `/brand/campaigns/[slug]/report` | `GET .../closeout`, transactions/refund state as needed. | CSV report, closeout PDF, transaction receipt download. |
-| `/brand/reviews` | `GET /brand/reviews` with tab/cursor filters. | Assignment is admin-only; brand chooses a row. |
-| `/brand/reviews/[id]` | `GET /brand/reviews/{submission_id}` and signed evidence media. | Approve or request correction; decision must be idempotent/concurrency-safe. |
-| `/brand/transactions` | Organisation ledger summary/list. | CSV statement export and row selection. |
-| `/brand/transactions/[id]` | Transaction detail. | Server receipt PDF and eligible dispute action. |
-| `/brand/notifications` | Notification inbox. | Read one/read all/archive. |
-| `/brand/settings` | Organisation profile/preferences, KYB state, finance email, auth security link. | Profile/logo save, finance-email verification, preference patch, KYB submission. |
-
-## Framework and fallback routes
-
-| Frontend route | Reads | Mutations/actions |
-|---|---|---|
-| Next.js not-found boundary | None. | None. It must not mask API authorization or provider errors as generic 404s. |
-
----
-
-# Part VII: unmounted experimental endpoints in the repository
-
-The following 38 Flask routes live under `backend/service-test/`. They are isolated provider experiments, are **not included by `backend/main.py`**, are not part of the 101-route production application count, and must not be deployed on the public Clippit API. Their tested logic should live behind the production provider adapters instead.
-
-| Experimental service | Routes present in the experiment |
+| Decision | Locked V1 behavior |
 |---|---|
-| TikTok | `GET /`, `GET /login`, `GET /callback`, `GET /logout`, `GET /api/status`, `GET /api/videos` |
-| Instagram | `GET /`, `GET /login`, `GET /callback`, `GET /logout`, `GET /api/status`, `GET /api/media`, `GET /api/insights` |
-| Facebook | `GET /`, `GET /login`, `GET /callback`, `GET /select-page/{page_id}`, `GET /logout`, `GET /api/status`, `GET /api/posts`, `GET /api/page-insights` |
-| Threads | `GET /`, `GET /login`, `GET /callback`, `GET /logout`, `GET /api/status`, `GET /api/threads`, `GET /api/user-insights` |
-| X | `GET /`, `GET /login`, `GET /callback`, `POST /api/dev-connect`, `GET /logout`, `GET /api/config`, `GET /api/status`, `GET /api/posts`, `GET /api/verify`, `GET /api/replies` |
+| Supported social platforms | Instagram, TikTok, Facebook, X (Twitter), and YouTube only |
+| Submission input | Creator submits the live social URL only; the product must not require a second manual video upload |
+| Media retrieval | `yt-dlp` retrieves the posted media for compliance analysis |
+| Compliance model | `Qwen3.8-Omni-Flash`, using the real video and its audio where possible |
+| Payable view source | Official APIs for the five supported platforms only; never creator-entered views |
+| Payments | Paystack |
+| Initial campaign fee | 15% of the initial creator pot; non-refundable |
+| Campaign top-up fee | 2.5% of the amount added |
+| Manual cancellation fee | 2.5% of the refundable unused balance, after creator obligations are protected |
+| Creator wallet withdrawal fee | 7% of the creator's requested gross withdrawal |
+| Brand wallet withdrawal fee | 7% of the Brand's requested gross withdrawal |
+| Minimum wallet withdrawal | NGN 5,000 |
+| Minimum campaign earning threshold | At least 1,000 official verified views; a Brand may set a higher value, never a lower one |
+| Review window | Five days after Qwen approval at the submission level |
+| Account model | Creator and Brand are separate account types; no one-click role switching |
+| Brand types | Individual Brand and Company Brand |
+| Campaign access | Public or invite-code |
+| Pause behavior | Acquisition-only pause or full earning freeze |
+| Leaderboards | Global, Country, and Campaign; rankable by verified views or valid earnings |
 
-`POST /api/dev-connect` is explicitly development-only and must never be copied into the production authentication surface.
+Threads is not a supported V1 platform. Existing Threads code may remain dormant, but product configuration, campaign validation, connection UI, and submission validation must expose only the five locked platforms.
 
 ---
 
-# Part VIII: PRD invariant traceability
+# 2. Cross-cutting invariants
 
-| PRD requirement or invariant | API/service contract that owns it |
+Every relevant route and background process must preserve these rules.
+
+## 2.1 Identity and authority
+
+- Creator and Brand accounts remain separate. No API may mutate one account into the other or expose a role-switch action.
+- Company Brands support teammates and permission checks for funding, withdrawals, cancellation, Qwen overrides, team management, and campaign editing.
+- Exact Company role names and the final permission matrix are **TBD**. APIs must use stored permissions/capabilities rather than hard-coded invented role names.
+- The Brand has final authority over campaign-specific content compliance for its own campaign.
+- Admin retains platform-wide authority for fraud, abuse, enforcement, account restriction, and campaign removal.
+- Every Brand/Admin verdict override records actor, prior verdict, new verdict, reason, and timestamp.
+
+## 2.2 Money and ledger
+
+- Brand and Creator balances are projections of immutable ledger entries, never editable balance fields.
+- A campaign pot is a reserved Brand-wallet balance and is not freely withdrawable while allocated.
+- No campaign allocation can make the pot negative.
+- If the next valid earning exceeds the remaining pot, allocate only the remaining amount.
+- Creator earnings already validly recognized or reserved are protected before any Brand refund is calculated.
+- The initial 15% campaign fee is never refunded.
+- The 2.5% cancellation fee applies only to a Brand-initiated manual early end and only to the refundable unused remainder.
+- Natural end with unused money returns that unused balance to the Brand wallet without the manual-cancellation fee.
+- Top-ups add pot only; they never change the immutable payout rate or content rules.
+- Clippit absorbs Paystack and other system costs. No extra pass-through provider fee may appear in customer contracts.
+- Money-moving commands must be transactionally safe and idempotent so retries cannot collect, reserve, refund, or transfer twice.
+
+## 2.3 Submission, review, and earnings
+
+- A submission is a URL for a post on one supported platform and must belong to the submitting Creator's connected account.
+- Retrieval/model failure is a technical state. It must never become an automatic content rejection.
+- Every Qwen result contains an overall verdict, one result per campaign rule, evidence, timestamps where possible, confidence, and a human-review reason when uncertain.
+- Qwen approval starts one five-day review window for the submission.
+- Official views are tracked immediately during that window; calculated earnings remain held/provisional.
+- If no valid in-window rejection occurs, the held amount becomes recognized/available and subsequent valid earnings continue normally. The backend must not create a new five-day product review window for every later view accrual.
+- A valid Brand rejection inside the window prevents unrecognized held amounts from becoming withdrawable.
+- A Brand rejection after the window stops future earnings but cannot claw back already recognized earnings.
+- AI rejection, Brand/human rejection, and fraud enforcement expose an appeal path where applicable.
+- Appeal history preserves the original decision and evidence, appeal content/evidence, reviewer, and final outcome.
+
+## 2.4 Views and ranking
+
+- Payable views come only from official Instagram, TikTok, Facebook, X, and YouTube APIs.
+- Every view reading is timestamped and retained with source/reference metadata sufficient to reconstruct earnings.
+- No customer or operator endpoint accepts a payable view count.
+- Only complete thousands pay: 4,900 eligible views are billed as 4,000.
+- Per-video and per-creator caps are enforced before new earnings are recognized.
+- Global, Country, and Campaign leaderboards support ranking by verified views and by valid earnings.
+- Country is the only local scope in V1. No state or city leaderboard is required.
+
+## 2.5 Audit and explainability
+
+For every naira earned and every content rejection, stored records must reconstruct:
+
+- the campaign, immutable rate, applicable cap, and pot balance before/after;
+- the official platform reading and complete-thousand increment used;
+- the Qwen model/version and rule-by-rule result, or the human decision;
+- the hold/recognized/available state transition;
+- the ledger entries that reserved, moved, refunded, or paid the money;
+- every Brand/Admin override and appeal outcome;
+- notification event, recipient, channel, delivery state, and timestamps.
+
+---
+
+# 3. Accounts, authentication, verification, and social connection
+
+## 3.1 Accounts and sessions
+
+| Method and path | Status | Required V1 contract |
+|---|---|---|
+| `POST /auth/signup` | **Partial** | Create a separate Creator or Brand account. Brand signup/onboarding must classify the account as Individual or Company. Current auth has `creator`/`organisation` but no persisted Brand subtype. |
+| `POST /auth/login` | **Compliant** | Authenticate the selected account. Admin may use the same secure credential flow. |
+| `POST /auth/logout` | **Compliant** | End the current authenticated session. |
+| `GET /auth/me` | **Partial** | Return account type, Brand subtype where applicable, onboarding state, KYC/KYB state, and effective Company permissions. Current response lacks Brand subtype, KYC/KYB, and Company permissions. |
+| No role-switch endpoint | **Compliant** | Creator and Brand identities remain separate; do not add a one-click role switch. |
+
+Refresh tokens, password recovery, session/device management, Google sign-in, 2FA, email change, and account export may be useful security/product features, but the V1 PRD does not make their particular endpoints acceptance requirements.
+
+## 3.2 Social connection
+
+| Method and path | Status | Required V1 contract |
+|---|---|---|
+| `GET /social/accounts` | **Partial** | List connection/health for the five V1 platforms only. Make clear what access is used for and what data Clippit reads. |
+| `GET /social/{platform}/login` | **Partial** | Start official platform authentication for a supported V1 platform. Exact OAuth scopes and endpoint strategy are **TBD**. |
+| `GET /social/{platform}/callback` | **Partial** | Complete and persist the supported-platform connection. Production app approval and token lifecycle still need live verification. |
+| `POST /social/{platform}/refresh` | **Partial** | Supporting token-lifecycle operation. Refresh when officially supported; otherwise mark reconnect required. |
+| `POST /social/{platform}/sync-profile` | **Supporting** | Refresh connected identity/handle and connection health. |
+| `DELETE /social/{platform}` | **Compliant** | Disconnect an owned account without changing historical submission/view provenance. |
+
+Connection is not required at account creation. It becomes mandatory only before a Creator submits on that platform.
+
+## 3.3 Creator KYC and bank destination
+
+| Method and path | Status | Required V1 contract |
+|---|---|---|
+| `GET /creators/me/verification` | **Missing** | Return Creator KYC state and customer-safe next action. Creator may earn before KYC; only bank withdrawal is blocked. |
+| `POST /creators/me/verification/session` | **Missing / provider TBD** | Create or resume the selected provider's verification flow. Provider and exact fields remain **TBD**. |
+| `POST /webhooks/identity` | **Missing / provider TBD** | Apply verified provider events idempotently once a provider is selected. |
+| `GET /admin/creators/verifications` | **Missing** | Operator queue for Creator KYC states and requests. |
+| `GET /admin/creators/verifications/{application_id}` | **Missing** | Operator detail with minimally necessary identity/provider evidence and audit history. |
+| `POST /admin/creators/verifications/{application_id}/approve` | **Missing** | Audited manual decision only if permitted by the selected provider/policy. |
+| `POST /admin/creators/verifications/{application_id}/reject` | **Missing** | Audited rejection/needs-action decision with customer-safe reason. |
+| `GET /creators/me/bank-details`, `PUT /creators/me/bank-details` | **Compliant** | Store and return one masked Creator bank destination. The data model must continue to enforce one account per Creator. |
+| `POST /creators/me/bank-details/verify` | **Partial** | Resolve/verify the bank destination. Bank resolution is not KYC and must not mark identity as verified. |
+| `DELETE /creators/me/bank-details` | **Supporting** | Safely remove the current destination when no transfer is in flight. |
+
+## 3.4 Brand type, KYB, and individual verification
+
+| Method and path | Status | Required V1 contract |
+|---|---|---|
+| `GET /organisations/me/profile` | **Partial** | Return Individual/Company classification, verification state, and public workspace identity. Current profile has no Brand subtype. |
+| `PUT /organisations/me/profile` | **Partial** | Update allowed identity fields without allowing the Brand to self-approve verification. |
+| `GET /organisations/me/verification` | **Missing** | Return the applicable Individual verification or Company KYB state and required next action. |
+| `POST /organisations/me/verification/session` | **Missing / provider TBD** | Start/resume the applicable verification flow. Provider and exact fields remain **TBD**. |
+| `POST /webhooks/business-verification` | **Missing / provider TBD** | Apply provider events idempotently once the provider is selected. |
+| `GET /admin/organisations/verifications` | **Missing** | Queue Individual Brand verification and Company KYB applications. |
+| `GET /admin/organisations/verifications/{application_id}` | **Missing** | Secure operator detail, checks, history, and minimally necessary documents. |
+| `POST /admin/organisations/verifications/{application_id}/approve` | **Missing** | Audited approval. |
+| `POST /admin/organisations/verifications/{application_id}/reject` | **Missing** | Audited rejection/needs-action decision. |
+
+Company Brands must not complete required funding/publishing actions until KYB is satisfied. Individual Brands must have the corresponding verification path before money-moving actions that require it. The exact verification provider and provider fields are **TBD**.
+
+## 3.5 Company team and permission checks
+
+| Method and path | Status | Required V1 contract |
+|---|---|---|
+| `GET /organisations/me/team` | **Missing** | List Company teammates, status, invitation state, and effective capabilities without inventing role names. |
+| `POST /organisations/me/team/invitations` | **Missing** | Invite a teammate to a Company Brand with an allowed permission set. |
+| `POST /organisations/team-invitations/{token}/accept` | **Missing** | Accept one valid invitation into the Company workspace. |
+| `PATCH /organisations/me/team/{member_id}` | **Missing** | Change stored capabilities subject to separation-of-duty and last-owner safeguards. |
+| `DELETE /organisations/me/team/{member_id}` | **Missing** | Remove/revoke a teammate without deleting their audit history. |
+| `GET /organisations/me/permissions` | **Missing** | Return the caller's effective Company capabilities for UI and API enforcement. |
+
+Exact Company role names and the final permission matrix are **TBD**. The implementation must not hard-code an invented hierarchy; sensitive routes must check capabilities for funding, withdrawals, cancellation, Qwen overrides, team management, and campaign editing.
+
+---
+
+# 4. Wallets, fees, funding, refunds, and withdrawals
+
+## 4.1 Shared wallet and ledger reads
+
+| Method and path | Status | Required V1 contract |
+|---|---|---|
+| `GET /wallet` | **Partial** | Creator: held, available, withdrawal pending/processing, paid history. Brand: available, campaign-reserved, pending refund/settlement, withdrawal history. Current Brand response omits pending refund/settlement and is not a complete wallet ledger projection. |
+| `GET /wallet/ledger` | **Missing** | Role-scoped immutable ledger entries with gross, Clippit fee, net, type, state, and related campaign/submission/withdrawal/refund. |
+| `GET /wallet/ledger/{entry_id}` | **Missing** | One owned immutable money event with provenance. |
+
+## 4.2 Initial campaign funding
+
+| Method and path | Status | Required V1 contract |
+|---|---|---|
+| `POST /campaigns/{campaign_ref}/funding/quote` | **Partial** | Return creator pot, 15% Clippit fee, total allocation cost, currency, and locked terms/confirmation version. Existing quote calculates the fee but is not tied to an explicit immutable-rules/rate confirmation. |
+| `POST /campaigns/{campaign_ref}/funding` | **Partial** | Require explicit confirmation that rules/rate lock after launch, reserve/deduct the total through the Brand wallet/Paystack-backed ledger, and create the funding operation idempotently. Existing flow creates a direct provider collection rather than a complete Brand-wallet reservation. |
+| `GET /campaigns/{campaign_ref}/funding` | **Partial** | Return funding operation, wallet/ledger effect, Paystack state, and publish prerequisites. |
+| `POST /campaigns/{campaign_ref}/funding/confirm` | **Partial** | Confirm authoritative payment/ledger state; go live only after funds and all publish prerequisites, including KYB where required, are satisfied. Current flow does not enforce KYB. |
+| `DELETE /campaigns/{campaign_ref}/funding` | **Supporting** | Cancel only an unpaid/unconfirmed operation and release any safe reservation. |
+| `POST /webhooks/payments` | **Partial** | Verify the Paystack signature, store a unique provider event/payment record, apply idempotently, and preserve an auditable outcome. Signature handling exists; durable event-envelope deduplication does not. |
+
+## 4.3 Campaign top-up
+
+| Method and path | Status | Required V1 contract |
+|---|---|---|
+| `POST /campaigns/{campaign_ref}/top-ups/quote` | **Missing** | Quote amount added, 2.5% fee, total wallet/Paystack cost, currency, and immutable campaign rate/rules. |
+| `POST /campaigns/{campaign_ref}/top-ups` | **Missing** | Add money to a live campaign idempotently after permission and financial confirmation. Never mutate rate or content rules. |
+| `GET /campaigns/{campaign_ref}/top-ups` | **Missing** | List top-up operations and states for Brand/Admin reconciliation. |
+| `GET /campaigns/{campaign_ref}/top-ups/{top_up_id}` | **Missing** | Return one top-up, fee, ledger effects, provider state, and failure reason. |
+
+## 4.4 Campaign end and refund ordering
+
+| Method and path | Status | Required V1 contract |
+|---|---|---|
+| `POST /campaigns/{campaign_ref}/close` | **Partial** | Distinguish Brand manual end, natural end, depletion, and Admin removal. Settle/preserve valid Creator obligations before refund calculation. Current route closes but does not complete the PRD refund/fee transaction. |
+| `POST /campaigns/{campaign_ref}/refunds` | **Non-compliant** | Manual end: refund unused uncommitted balance minus 2.5% to the Brand wallet. Natural end: refund unused balance with no cancellation fee. Current service immediately credits the full unused balance and never applies `CANCELLATION_FEE_RATE`. |
+| `GET /campaigns/{campaign_ref}/refunds` | **Partial** | Return gross refundable remainder, cancellation fee if applicable, net Brand-wallet credit, protected Creator obligations, state, and ledger references. |
+| Natural-end refund job/domain command | **Missing** | Automatically return unused money after obligations when a date/condition naturally ends the campaign; do not apply the manual-cancellation fee. |
+
+## 4.5 Creator withdrawal
+
+| Method and path | Status | Required V1 contract |
+|---|---|---|
+| `POST /payouts/quote` | **Partial** | Validate at least NGN 5,000, one saved bank account, passed KYC, gross amount, 7% fee, and 93% net. Current quote does not check KYC. |
+| `POST /payouts` | **Partial** | Debit the selected gross amount, charge 7%, send 93%, require passed KYC and one verified bank account, and expose requested/processing/succeeded/failed. Current route checks email and bank resolution but has no KYC gate. |
+| `GET /payouts` | **Compliant** | Creator withdrawal history. |
+| `GET /payouts/{payout_id}` | **Compliant** | Owned withdrawal state, destination snapshot, fee/net, and earning provenance. |
+
+## 4.6 Brand withdrawal
+
+| Method and path | Status | Required V1 contract |
+|---|---|---|
+| `GET /organisations/me/bank-details`, `PUT /organisations/me/bank-details` | **Compliant** | Store one masked Brand bank destination. |
+| `POST /organisations/me/bank-details/verify` | **Partial** | Resolve/verify the destination without substituting for Individual verification or Company KYB. |
+| `POST /wallet/withdraw/quote` | **Partial** | Validate available, non-reserved Brand balance, verification/permissions, NGN 5,000 minimum, 7% fee, and 93% net. Current quote does not enforce Brand verification or Company capabilities. |
+| `POST /wallet/withdraw` | **Partial** | Debit gross, charge 7%, send 93% to saved verified bank, and enforce verification and Company permissions. |
+| `GET /wallet/withdrawals` | **Compliant** | Brand withdrawal history. |
+| `GET /wallet/withdrawals/{withdrawal_id}` | **Compliant** | Owned/Admin-visible Brand withdrawal detail. |
+
+## 4.7 Brand transaction views
+
+| Method and path | Status | Required V1 contract |
+|---|---|---|
+| `GET /organisations/me/transactions` | **Partial** | Unified Brand ledger view across wallet funding/reservations, campaign funding, 15% fees, top-ups/2.5% fees, Creator commitments, refunds/cancellation fees, withdrawals/7% fees, failures, and adjustments. Current view covers only part of this surface. |
+| `GET /organisations/me/transactions/{transaction_id}` | **Partial** | One authorized immutable ledger item with full provenance. |
+| `GET /organisations/me/transactions/export` | **Supporting** | Safe export of the same ledger truth. |
+
+---
+
+# 5. Campaign creation, discovery, analytics, and lifecycle
+
+## 5.1 Campaign builder and drafts
+
+| Method and path | Status | Required V1 contract |
+|---|---|---|
+| `POST /campaign-drafts` | **Compliant** | Create an owned resumable draft. |
+| `GET /campaign-drafts` | **Compliant** | List the Brand's drafts. |
+| `GET /campaign-drafts/{draft_id}` | **Compliant** | Return the owned canonical draft and revision. |
+| `PATCH /campaign-drafts/{draft_id}` | **Partial** | Autosave campaign identity, assets, five-platform selection, niche/filter data, public/invite access, pot, rate, minimum, caps, max submissions, rules, and end condition. Niche/filter catalogue remains **TBD**; asset ownership/lifecycle is incomplete. |
+| `DELETE /campaign-drafts/{draft_id}` | **Compliant** | Delete an incomplete owned draft. |
+| `POST /campaign-drafts/{draft_id}/finalize` | **Partial** | Validate all V1 fields and return the immutable launch preview. Funding/publishing must separately record explicit Brand confirmation that rate and content rules cannot change after launch. |
+
+## 5.2 Campaign fields and invariants
+
+| Field/behavior | Status | Required V1 contract |
+|---|---|---|
+| Campaign identity | **Compliant** | Title, description/purpose, and Brand-facing metadata. |
+| Campaign assets | **Partial** | Brand can upload owned assets Creators should use/reference; Creator detail receives safe asset access. Current campaign schema stores simple name/URL objects without a complete owned upload lifecycle. |
+| Platforms | **Partial** | Any subset of the five V1 platforms only. Generic enum/provider code still includes Threads and must not expose it as V1. |
+| Niche/Creator filters | **TBD / Partial** | Brand can define niche/filters, but exact catalogue is **TBD**. Store only approved/versioned filters once decided. |
+| Access mode | **Compliant** | Public or invite-code. |
+| Creator pot and rate | **Compliant before launch** | Pot and rate per 1,000 eligible verified views. Rate becomes immutable after launch. |
+| Minimum to earn | **Non-compliant validation** | Must be at least 1,000. Current schema accepts values below 1,000. |
+| Per-video and per-Creator caps | **Compliant** | Campaign-configurable and enforced by earnings allocation. |
+| Maximum submissions per Creator | **Compliant** | Brand-configurable and enforced. |
+| Content rules | **Compliant before launch** | Ordered must/must-not checklist; immutable after launch. |
+| End condition | **Partial** | Optional date, pot exhaustion, or configured combination; end date is not mandatory. Current model records only `duration` or `budget` as a primary label and needs an unambiguous API representation. |
+| Explicit immutable-terms confirmation | **Missing** | API must persist Brand confirmation of the warning that content rules and payout rate cannot change after launch. |
+
+No separate campaign-asset endpoints are mandatory if the draft/campaign endpoints provide secure owned upload attachment, ordering, replacement, and safe Creator access. The current URL-only asset objects do not yet satisfy that contract.
+
+## 5.3 Campaign CRUD, feed, and participation
+
+| Method and path | Status | Required V1 contract |
+|---|---|---|
+| `POST /campaigns` | **Partial** | Create the canonical pre-funding campaign with every V1 field and server-side invariant. Existing route remains as a legacy/direct create path and lacks the full confirmation/verification contract. |
+| `GET /campaigns` | **Partial** | Creator: discover public live campaigns with prominent rate/remaining pot and supported filters. Brand: portfolio including draft, funding-pending, live, both pause modes, naturally ended, depleted, cancelled, and Admin-removed. Current state model collapses several states. |
+| `GET /campaigns/{campaign_ref}` | **Partial** | Before join/submit show immutable rate, remaining pot, five-platform set, minimum, caps, max submissions, end condition, assets, complete rules, access mode, and pause behavior. Most fields exist; lifecycle state and secure asset delivery are incomplete. |
+| `PATCH /campaigns/{campaign_ref}` | **Partial** | Allow lifecycle-permitted mutable fields only. Reject any post-launch rule or rate change. Existing route enforces draft-only edits, which is safe but narrower than the PRD's allowed non-rule/rate post-launch edits. |
+| `GET /campaigns/{campaign_ref}/rules`, `PUT /campaigns/{campaign_ref}/rules` | **Compliant** | Read rules; replace only before launch. |
+| `PUT /campaigns/{campaign_ref}/payout-rule` | **Partial** | Replace only before launch; enforce minimum threshold >= 1,000 plus per-video/per-Creator caps and max submissions. |
+| `POST /campaigns/{campaign_ref}/join` | **Compliant** | Join live/public or valid invite-code campaign after supported-platform connection/capability checks. |
+| `DELETE /campaigns/{campaign_ref}/join` | **Compliant** | Leave before participation has created protected history/earnings. |
+| `GET /creators/me/campaigns` | **Compliant** | Creator participation history/status. |
+
+## 5.4 Pause, resume, end, and state
+
+| Method and path | Status | Required V1 contract |
+|---|---|---|
+| `POST /campaigns/{campaign_ref}/pause?mode=acquisition` | **Compliant** | Stop new joins/submissions while already-approved content continues earning. |
+| `POST /campaigns/{campaign_ref}/pause?mode=full` | **Compliant** | Stop new activity and freeze new campaign earnings until resume. |
+| `POST /campaigns/{campaign_ref}/resume` | **Compliant** | Restore live behavior subject to remaining pot and end conditions. |
+| `POST /campaigns/{campaign_ref}/close` | **Partial** | Record manual, natural, depleted, or Admin-removed outcome and invoke the correct fee/refund behavior. |
+| Campaign state in list/detail responses | **Partial** | Expose Draft, Funding/publish pending, Live, Paused-acquisition, Paused-full, Ended-natural, Depleted, Cancelled/manual, and Admin-removed. Current API primarily exposes draft/pending/active/closed plus secondary flags/reason. |
+
+## 5.5 Brand dashboard and analytics
+
+| Method and path | Status | Required V1 contract |
+|---|---|---|
+| `GET /brand/overview` | **Partial** | Wallet summary plus active, paused, completed, cancelled, and draft portfolio signals. Current overview does not represent every V1 lifecycle/wallet state. |
+| `GET /campaigns/{campaign_ref}/stats` | **Partial** | Current total verified views, spend, remaining pot, submissions, approvals/reviews, Creator performance, and end-condition status. Existing stats are narrower. |
+| `GET /campaigns/{campaign_ref}/analytics` | **Missing** | Official verified-view growth; spend/pot; Creator earnings committed/held/available; effective cost per 1,000; submission counts by AI/human/override/appeal state; per-Creator/per-video performance; top performers. |
+| `GET /campaigns/{campaign_ref}/submissions` | **Partial** | Brand submission list with V1 verdict/review/appeal and performance states. |
+| `GET /campaigns/{campaign_ref}/report` | **Supporting** | CSV export may remain, but it is not a substitute for the required analytics response. |
+
+---
+
+# 6. Submission, Qwen compliance, Brand review, and appeals
+
+## 6.1 Creator submission contract
+
+| Method and path | Status | Required V1 contract |
+|---|---|---|
+| `POST /submissions` | **Partial** | Accept campaign, supported platform, and live post URL only; require the matching connected account; validate context/ownership; retrieve with yt-dlp; start Qwen analysis. Current body still permits an optional manual `video_upload_id`, and Qwen is not the required production default. |
+| `GET /submissions` | **Partial** | Role-scoped list with the complete V1 state model. |
+| `GET /submissions/{submission_id}` | **Partial** | Return URL validation, retrieval, Qwen/human state, rule breakdown, evidence/timestamps, confidence, model/version, five-day deadline, appeal, fraud hold, and earning state. Current response lacks several durable fields/states. |
+| `POST /submissions/{submission_id}/withdraw` | **Supporting** | Stop future participation/tracking without deleting history or recognized earnings. |
+| `POST /submissions/{submission_id}/resubmit` | **Partial / policy TBD** | Correction chain exists. Duplicate URL/resubmission policy is **TBD** and must not be silently hard-coded beyond the Brand's max-submission rule. |
+
+The campaign-submission product must not ask the Creator to upload a second video. Generic uploads may remain for profile photos, campaign assets, KYC/KYB, or appeal evidence, but not as a required submission step.
+
+## 6.2 Qwen compliance behavior
+
+| Required behavior | Status | Current gap |
+|---|---|---|
+| yt-dlp retrieves posted video from URL | **Partial** | Implemented, but must be operated as the normal V1 path and verified for all five supported platforms. |
+| Qwen3.8-Omni-Flash receives native video including audio | **Partial** | Adapter exists; production is disabled by default and not live-proven. |
+| Overall `APPROVED`, `REJECTED`, or `HUMAN_REVIEW_REQUIRED` | **Compliant in adapter** | Persist as explicit product state, including technical failure separately. |
+| One pass/fail/uncertain result per immutable campaign rule | **Compliant in adapter** | Ensure missing model rows demote to human review and remain stored. |
+| Evidence and timestamps where possible | **Partial** | Currently combined into free-text notes instead of durable structured evidence/timestamp fields. |
+| Machine-readable confidence | **Compliant** | Stored as submission confidence; rule-level confidence is not currently retained. |
+| Human-review reason | **Partial** | Summary exists, but needs a distinct durable reason/code. |
+| Model/version metadata | **Partial** | Model is embedded into summary text rather than stored as a dedicated immutable field/version record. |
+| Technical failure/retry state | **Partial** | Correctly avoids auto-rejection, but currently collapses failure into `needs_review` rather than exposing retrieval/model failure and retry state. |
+| Automation is default | **Non-compliant configuration** | Default verifier is manual review. V1 requires Qwen to reduce Brand workload; AI-approved submissions must not require mandatory manual approval. |
+
+The PRD does not require a separate internal verification HTTP API if the monolith executes the same durable workflow. Queue/callback endpoints are an implementation choice, not a V1 product requirement.
+
+## 6.3 Brand/Admin authority and review actions
+
+| Method and path | Status | Required V1 contract |
+|---|---|---|
+| `GET /brand/reviews` | **Partial** | Include Qwen-approved submissions still inside the five-day review window, uncertain cases, rejections/appeals, deadlines, and reminder state. |
+| `GET /brand/reviews/{submission_id}` | **Partial** | Show immutable rules, Qwen evidence/timestamps/model, five-day deadline, held exposure, prior overrides, and appeal context. |
+| `POST /brand/reviews/{submission_id}/approve` | **Partial** | Brand can approve human-review/appeal cases and override an AI rejection with reason/audit. Current transition coverage is narrower. |
+| `POST /brand/reviews/{submission_id}/request-correction` | **Non-compliant transition** | Brand must be able to reject an AI-approved submission inside the five-day window and provide a reason. Current service refuses decisions on already-approved submissions. |
+| Admin override through submission review actions | **Partial** | Admin may use current review routes, but every AI approval/rejection must be overrideable within authority and record prior/new verdict, actor, reason, and timestamp. Current audit payload is incomplete. |
+| `POST /submissions/{submission_id}/appeal` | **Partial** | Support AI rejection, Brand/human rejection, and fraud-enforcement appeal where applicable. Current route only accepts content-verification rejection. |
+
+## 6.4 Five-day submission review window
+
+| Required behavior | Status | Current gap |
+|---|---|---|
+| Qwen approval starts one five-day window | **Missing as a first-class state** | No durable `review_window_ends_at` tied to Qwen approval. |
+| Views and provisional earnings accrue during the window | **Partial** | Views/earnings accrue, but the hold is modeled per earning entry. |
+| In-window Brand rejection blocks unrecognized held earnings | **Missing** | Approved submissions cannot currently be rejected through the Brand action. |
+| Window expiry recognizes held money automatically | **Partial** | Each accrual gets its own five-day `payable_at`, producing a rolling hold rather than one submission review deadline. |
+| Late Brand rejection stops future earnings only | **Missing** | No explicit late-rejection transition preserving already recognized earnings. |
+| Brand reminder before expiry | **Missing / notification provider TBD** | Required event is not fully implemented. |
+
+---
+
+# 7. Official views, earnings, fraud, and leaderboards
+
+## 7.1 Official view ingestion
+
+| Method and path | Status | Required V1 contract |
+|---|---|---|
+| `POST /internal/submissions/{submission_id}/metrics` | **Partial** | Register/poll a submission using official APIs only and store timestamped readings. Instagram, TikTok, Facebook, and YouTube adapters target official sources; X currently uses `twitterapi.io`, which violates the locked official-API-only rule. |
+| `GET /internal/submissions/{submission_id}/performance` | **Compliant structurally** | Read stored official snapshots/provenance without accepting human-entered views. Becomes V1-compliant only when every platform source is official. |
+| `GET /submissions/{submission_id}/performance` | **Compliant structurally** | Authorized customer-safe performance view over stored readings. |
+| Polling worker/domain job | **Partial / cadence TBD** | Scheduling and retention exist. Exact cadence per platform is **TBD**; provider limits/permissions must be respected. |
+
+X payable metrics must move from `twitterapi.io` to an official X API source or X must remain disabled for payable V1 campaigns until an official source is available. The PRD does not permit a third-party substitute.
+
+## 7.2 Earnings and pot allocation
+
+| Method and path | Status | Required V1 contract |
+|---|---|---|
+| Earnings settlement domain job | **Partial** | Enforces whole thousands, pot ceiling, and caps, but must adopt the submission-level five-day review window and complete wallet-ledger provenance. |
+| `GET /earnings/summary` | **Partial** | Return held, available, withdrawal pending/processing, and paid balances under the corrected review-window rules. |
+| `GET /earnings/history` | **Partial** | Immutable earning events with view basis, complete-thousand increment, rate, cap effects, pot before/after, review deadline, and wallet state. Current response is narrower. |
+| `GET /earnings/entries/{entry_id}` | **Partial** | One owned earning event with complete official-reading and ledger provenance. |
+| `GET /submissions/{submission_id}/earnings` | **Partial** | Submission earnings exposure with held/recognized/available states and the one review deadline. |
+
+## 7.3 Fraud review and appeal
+
+| Method and path | Status | Required V1 contract |
+|---|---|---|
+| `GET /admin/submissions/flagged` | **Partial** | Fraud queue with affected earnings, evidence/signals, state, and appeal. Fraud thresholds/algorithm remain **TBD**. |
+| `GET /admin/submissions/{submission_id}` | **Partial** | Full official readings, signals, earnings exposure, Qwen/Brand decisions, appeals, and audit history. |
+| `POST /admin/submissions/{submission_id}/trust/confirm` | **Partial** | Freeze affected earnings and record an auditable fraud enforcement decision without inventing thresholds. |
+| `POST /admin/submissions/{submission_id}/trust/clear` | **Partial** | Clear the fraud hold and resume eligible behavior. |
+| `POST /submissions/{submission_id}/appeal` | **Partial** | Must also accept an appeal of fraud enforcement where applicable. |
+
+Post-payout fraud recovery policy is **TBD**. Do not claw back or create debt automatically without an approved policy.
+
+## 7.4 Leaderboards
+
+| Method and path | Status | Required V1 contract |
+|---|---|---|
+| `GET /leaderboard` | **Partial** | Support `scope` values `global`, `country`, and `campaign`, plus `rank_by` values `verified_views` and `earnings`, using only official views and valid Clippit earnings. Current endpoint supports global/country plus campaign filter but ranks only by verified views. |
+
+Country context must be configured/verified. No state/city ranking belongs in V1.
+
+---
+
+# 8. Notifications
+
+V1 requires in-app, push, and email channels for major product events. Provider choice, templates, and delivery retry policy are **TBD**; the underlying event catalogue and delivery records are not TBD.
+
+## 8.1 Customer notification API
+
+| Method and path | Status | Required V1 contract |
+|---|---|---|
+| `GET /notifications` | **Partial** | Inbox for every required Creator/Brand event with channel/delivery state where customer-safe. Event coverage is incomplete. |
+| `GET /notifications/unread-count` | **Compliant** | Cheap unread badge count. |
+| `POST /notifications/{notification_id}/read` | **Compliant** | Mark one owned notification read. |
+| `POST /notifications/read-all` | **Compliant** | Mark all owned notifications read. |
+| `POST /notifications/{notification_id}/archive` | **Supporting** | Archive one owned notification. |
+| `POST /push-subscriptions` | **Partial** | Store an owned push subscription. Actual push delivery/provider integration is not implemented. |
+| `DELETE /push-subscriptions/{subscription_id}` | **Compliant structurally** | Remove an owned subscription. |
+| `GET /profile/preferences`, `PATCH /profile/preferences` | **Partial** | Channel/event preferences may vary, but required product events must still be emitted under the approved policy. |
+
+## 8.2 Required event catalogue
+
+Creator events:
+
+- submission received;
+- Qwen approved, rejected, or human review required;
+- appeal update;
+- campaign paused, resumed, ended, cancelled, or depleted;
+- earnings held and unlocked;
+- KYC state change;
+- withdrawal requested, succeeded, or failed;
+- fraud/review action.
+
+Brand events:
+
+- campaign funded/live;
+- low or empty pot;
+- new submission;
+- Qwen human-review required;
+- five-day review reminder;
+- appeal update;
+- top-up result;
+- pause/resume;
+- natural end/manual cancel/refund;
+- KYB state change;
+- Brand-wallet withdrawal state.
+
+Company teammate events are filtered by effective permission. Admin receives review queues, escalations, fraud flags, failed money movement, enforcement alerts, and operational exceptions.
+
+## 8.3 Delivery operations
+
+| Method and path | Status | Required V1 contract |
+|---|---|---|
+| `GET /admin/notifications` | **Missing** | Inspect required notification events and delivery states across in-app, email, and push. |
+| `GET /admin/notifications/{notification_id}` | **Missing** | Redacted event, recipient/channel, attempts, timestamps, and outcome. |
+
+An Admin retry command is not required until the TBD delivery retry policy is approved.
+
+---
+
+# 9. Admin application
+
+Admin has platform-wide visibility and enforcement authority. Brand remains final authority over whether content satisfies that Brand's campaign rules.
+
+| Method and path | Status | Required V1 contract |
+|---|---|---|
+| `GET /admin/overview` | **Partial** | Platform review queues, escalations, fraud, money failures, campaign/account state, and operational exceptions. |
+| `GET /admin/users` | **Partial** | All Creator/Brand accounts, account type/subtype, verification states, restrictions, and relevant activity. |
+| `GET /admin/users/{user_id}` | **Partial** | Safe account, KYC/KYB, social health, wallet summary, campaigns/submissions, restrictions, and audit history. |
+| `POST /admin/users/{user_id}/suspend` | **Compliant structurally** | Audited account restriction with scope/reason. |
+| `POST /admin/users/{user_id}/restore` | **Compliant structurally** | Audited restoration. |
+| Creator KYC queue/detail/decision routes | **Missing** | See section 3.3. |
+| Brand verification/KYB queue/detail/decision routes | **Missing** | See section 3.4. |
+| `GET /admin/campaigns` | **Partial** | All campaigns including operationally permitted drafts, every V1 lifecycle state, pots, fees, top-ups, and refunds. |
+| `GET /admin/campaigns/{campaign_ref}` | **Partial** | Terms, immutable fields, funding/wallet ledger, submissions, performance, pause history, refund state, and audit. |
+| `POST /admin/campaigns/{campaign_ref}/pause` | **Partial** | Enforcement pause with explicit behavior and audit. |
+| `POST /admin/campaigns/{campaign_ref}/remove` | **Missing** | Remove a violating campaign into the distinct Admin-removed state; preserve money/submission/audit history and apply approved settlement/refund behavior. |
+| `GET /admin/submissions` | **Partial** | Global Qwen/human/fraud/appeal queue and search. |
+| `GET /admin/submissions/{submission_id}` | **Partial** | Qwen verdict/evidence/model, override history, official views, fraud, appeals, and earnings exposure. |
+| Admin Qwen override action | **Partial** | Existing review actions are transition-limited and do not store the complete prior/new verdict audit required by V1. |
+| Fraud queue/detail/clear/confirm routes | **Partial** | See section 7.3. |
+| `GET /admin/ledger` | **Partial** | Unified immutable wallet/campaign/fee/top-up/earning/refund/withdrawal ledger. Current ledger omits parts of the V1 wallet model. |
+| `GET /admin/ledger/{entry_id}` | **Partial** | One fully reconstructable money event. |
+| `GET /admin/payouts` and payout actions | **Partial** | Inspect Creator transfers, failures, and reconciliation. Must include KYC state and immutable ledger linkage. |
+| `GET /admin/refunds` | **Partial** | Inspect natural/manual refund ordering, gross, fee, net, protected obligations, and failure state. |
+| `GET /admin/funding` | **Partial** | Inspect Brand-wallet reservation, 15% fee, Paystack collection, and campaign go-live state. |
+| `GET /admin/providers` | **Partial** | Operational state for Paystack, Qwen/yt-dlp, five official social APIs, KYC/KYB provider when selected, email, and push. Current provider response is narrower and still describes non-compliant X sourcing. |
+| `GET /admin/webhooks` | **Missing** | Inspect stored/redacted payment and verification events and handler outcomes. |
+| `GET /admin/webhooks/{event_id}` | **Missing** | One stored event with signature result, attempts, linked resource, and result. |
+| `GET /admin/audit` | **Partial** | Search sensitive Admin/Brand overrides, enforcement, compliance decisions, and money activity. Current audit records do not uniformly hold prior/new state and correlation/provenance. |
+| `GET /admin/audit/{event_id}` | **Partial** | One complete audit event. |
+
+Support tickets, generic disputes, abuse reports, legal-document management, public profiles, official PDF receipts, invoices, and account export may be valuable broader-product features, but they are not stated V1 acceptance requirements in this PRD and are not counted as PRD blockers here.
+
+---
+
+# 10. Required state models
+
+## 10.1 Campaign states
+
+API responses must expose these customer-meaningful states even if persistence uses a base state plus reason/mode fields.
+
+| State | Required meaning | Current status |
+|---|---|---|
+| Draft | Being configured; not visible or earning | Built |
+| Funding/publish pending | Waiting on finance/verification/publish prerequisites | Partial; KYB and explicit terms confirmation absent |
+| Live | Eligible participation; approved submissions can earn | Built |
+| Paused - acquisition only | No new joins/submissions; approved content keeps earning | Built via flags/mode |
+| Paused - full freeze | No new activity and no new earnings until resume | Built via flags/mode |
+| Ended - natural | Configured end condition completed | Partial; refund behavior incomplete |
+| Depleted | Pot reached zero; all future earning stops | Partial; represented as closed reason, not a full customer state |
+| Cancelled/manual | Brand ended early; 2.5% refund fee applies | Partial; fee/refund transaction incorrect |
+| Admin removed | Enforcement removal | Missing distinct state/action |
+
+## 10.2 Submission states
+
+| State | Can earn? | Can withdraw? | Current status |
+|---|---:|---:|---|
+| Submitted/processing | No | No | Built, but retrieval/Qwen sub-states need explicit fields |
+| Retrieval/model technical failure | No | No | Partial; collapsed into human review |
+| AI rejected | No | No | Built |
+| Human review required | No | No | Built |
+| Approved - five-day hold | Provisional/held only | No | Missing as a first-class submission-level window |
+| Approved - active | Yes, subject to rules/pot/caps | Available balance only after KYC for bank withdrawal | Partial |
+| Rejected after hold window | Future earnings stop | Recognized balance remains | Missing explicit transition |
+| Fraud review | Affected earning frozen | Affected amount unavailable | Partial |
+| Appeal/final resolution | Follows final authority decision | Follows recognized/held state | Partial |
+
+---
+
+# 11. Minimum data to retain
+
+| Record | Required minimum |
 |---|---|
-| Brand creates campaign details and optional source material | Campaign-studio draft lifecycle, campaign create/update, source-asset lifecycle |
-| Brief is a checklist, not an opaque paragraph | Existing campaign rules GET/PUT; draft PATCH; requirement-level submission results |
-| Brand chooses supported platforms | Product config plus campaign draft/final campaign validation |
-| Brand sets pot and rate; expected views are derived | Draft PATCH, campaign create/payout rule, funding quote; decimal server calculation |
-| Minimum views, creator cap, optional deadline/pot-only close | Payout-rule endpoint and explicit end-condition correction; earnings service invariants |
-| Campaign opens only after funds clear | Existing funding create/read/confirm plus signed payment webhook |
-| Creator browses open campaigns with rate/pot/rules visible | Existing campaign list/detail/rules/pool with creator-safe visibility |
-| Creator joins before submitting | New join/leave/list-membership endpoints |
-| Connected social account is required to earn | Existing social/account endpoints plus submission validation and token lifecycle |
-| Creator submits public link and original file | Existing upload video and submission create; production multipart media lifecycle |
-| Verdict includes requirement-level reasons | Existing submission detail and review endpoints; automated verifier contracts |
-| Creator can appeal a rejection | Existing appeal; escalated dispute endpoints preserve a second-level process |
-| Views always come from a platform, never a human field | Internal metrics registration/polling, append-only snapshots, no customer write endpoint for views |
-| Approved clips are polled on schedule | Intelligence tracking routes, durable scheduler, provider adapters |
-| Fraud signals flag suspicious growth | Existing trust result/review, new flagged/random audit queues and versioned rule management |
-| Earnings accrue but are held for five days | Existing earnings settlement and product config; immutable entry/provenance detail |
-| Partial thousands do not pay | Existing whole-thousand cumulative settlement rule; exposed in campaign and earning detail |
-| No clip/creator exceeds caps | Existing payout-rule and row-locked settlement; admin provenance view |
-| Campaign never pays more than its pot | Existing row-locked hard ceiling, pool endpoint, unified ledger/reconciliation |
-| Pot visibly drains | Existing pool/stats plus new analytics time series |
-| Campaign closes at empty pot, deadline, or authorised close | Existing close/sweep; explicit budget-only end semantics; closeout/refund contracts |
-| Payable money reaches a Nigerian bank | Banks, bank verification, creator KYC, payout quote/create/status/webhook/reconciliation |
-| Every naira traces to a platform snapshot | Earning-entry detail, payout provenance, ledger, audit, receipt verification |
-| Brand sees live submissions, views, spend and closeout | Existing stats/submissions/report plus analytics/activity/closeout/transactions |
-| Admin sees flagged submissions | Flagged/global queues, investigation detail, trust decisions, earnings holds, random audits |
-| Support can resolve customer issues without silently editing history | Tickets, disputes, reports, operator RBAC, domain commands, audit log |
+| Campaign | Owner, Brand subtype/workspace, access mode, immutable rules, immutable rate, pot, all Clippit fees, caps, max submissions, end condition, pause history, assets, mutable edit history, explicit launch confirmation |
+| Submission | Creator, campaign, platform, URL, retrieval/technical state, retained media reference/policy, Qwen model/version, structured verdict, per-rule evidence/timestamps/confidence, five-day deadline, appeals, overrides |
+| View reading | Official platform/source, post/submission, reading, timestamp, raw/reference metadata needed for reconciliation |
+| Earning event | Source reading, eligible complete-thousand increment, immutable rate, cap checks, pot before/after, submission review window, held/recognized/available state |
+| Wallet ledger | Account, debit/credit type, gross, Clippit fee, net, related campaign/submission/funding/top-up/withdrawal/refund, state, timestamps, provider references |
+| Brand/Admin override | Actor, authority/scope, prior state, new state, reason, timestamp |
+| Notification | Event type, recipient, channel, delivery state, attempts/timestamps allowed by the approved TBD policy |
+
+Current storage is **Partial** against this table. Notable gaps include Brand subtype/team permissions, KYC/KYB, top-up ledger records, correct refund fees, explicit review deadlines, structured Qwen model/evidence metadata, complete wallet ledger coverage, and complete override audit payloads.
+
+---
+
+# 12. External integrations
+
+| Integration | Locked purpose | Current status |
+|---|---|---|
+| Paystack | Collection, bank/payout rails, and wallet-related money movement | Adapter built and fixture-tested; live end-to-end movement/reconciliation still unproven |
+| yt-dlp | Retrieve creator-posted media from the submitted URL | Built; must be the normal URL-only submission path |
+| Qwen3.8-Omni-Flash / Alibaba Cloud Model Studio | Native video+audio rule evaluation | Built behind configuration; default remains manual and production path is unproven |
+| Instagram official API | Official payable view data | Built/fixture-tested; production permissions TBD |
+| TikTok official API | Official payable view data | Built/fixture-tested; production permissions TBD |
+| Facebook official API | Official payable view data | Built/fixture-tested; production permissions TBD |
+| X official API | Official payable view data | **Non-compliant**: current metrics use `twitterapi.io`, not an official X source |
+| YouTube official API | Official payable view data | Built/fixture-tested; live credentials/quota verification pending |
+| KYC/KYB provider | Verification before required money movement/publishing | **TBD and not implemented** |
+| Email/push provider | Major-event delivery | **TBD**; in-app records and subscription storage exist, full delivery does not |
+
+Cloudflare R2, Deepgram, FFmpeg, Inngest, Celery, Redis, Sentry, a particular KYC vendor, and a particular push/email vendor are not locked V1 product choices in this PRD. They may be selected as implementation architecture, but this inventory must not describe them as product-mandated endpoints or providers.
+
+---
+
+# 13. PRD acceptance checklist
+
+| Acceptance requirement | Current result |
+|---|---|
+| Creator submits a supported social URL without manually uploading the video | **Partial** - URL works, but API still accepts an optional video upload and the frontend/path must be URL-only |
+| Every Qwen verdict has rule-by-rule output; uncertainty enters human review | **Partial** - adapter supports it; structured persistence is incomplete and Qwen is not the default |
+| AI approval does not require mandatory Brand approval before the five-day hold | **Fail** - default verifier is manual, and review-window semantics are not implemented correctly |
+| Brand receives reminders; late rejection cannot remove recognized earnings | **Fail** - reminder and late-rejection transition are missing |
+| 100% of payable views originate from official APIs | **Fail** - X uses `twitterapi.io` |
+| Campaign balance cannot become negative or pay more than funded pot | **Pass in core settlement tests/design** |
+| Fees are 15% initial, 2.5% top-up, 2.5% manual-cancel remainder, 7% wallet withdrawal | **Fail** - top-up is missing and cancellation rate is unused |
+| Unused money returns to Brand wallet after Creator obligations | **Partial** - basic refund exists; fee ordering and natural-end automation are wrong/missing |
+| Creator may earn before KYC but cannot bank-withdraw until KYC passes | **Fail** - no KYC model/gate |
+| Company Brand cannot fund/publish before KYB | **Fail** - no Company subtype/KYB gate |
+| Brand chooses acquisition-only pause or full earning freeze | **Pass** |
+| Global, Country, and Campaign leaderboards rank by views and earnings | **Fail** - views only |
+| Sensitive overrides, money movement, and compliance decisions are reconstructable | **Partial** - broad audit exists, but required provenance is incomplete |
+
+The backend is not V1-complete until every **Fail**, **Missing**, and product-material **Partial** row above is resolved or an explicit PRD amendment changes the requirement.
+
+---
+
+# 14. Open implementation decisions - preserve as TBD
+
+These are the complete TBD items named by the V1 PRD. Do not silently decide them in code or documentation.
+
+| TBD item | Locked boundary around the decision |
+|---|---|
+| Company team role names and exact permission matrix | Company teams and permission checks for sensitive actions are required; only names/matrix remain open |
+| KYC/KYB vendor and exact verification fields | Creator payout KYC, Company KYB before funding/publishing, and the Individual verification path are required |
+| Exact social OAuth scopes and official API endpoint strategy | The five official platforms and official payable-view sources are fixed |
+| View polling cadence by platform | Readings must be official, timestamped, retained, and respect platform limits |
+| Fraud thresholds/detection algorithm | Fraud review, earning freeze, Admin decision, and appeal behavior are required |
+| Duplicate URL/resubmission policy | Brand-configured maximum submissions is fixed; duplicate handling remains open |
+| Notification provider, templates, and delivery retry policy | In-app, email, and push channels plus the event catalogue are fixed |
+| Post-payout fraud recovery policy | Fraud review exists, but automatic recovery after money leaves Clippit is not authorized |
+| Campaign niche/Creator filter catalogue | Brand filtering is required; exact catalogue is not defined |
+
+---
+
+# 15. Explicit V1 exclusions and non-requirements
+
+The following must not be added to the PRD checklist unless the PRD is amended:
+
+- social platforms other than Instagram, TikTok, Facebook, X, and YouTube;
+- Threads as a V1 customer platform;
+- creator-entered payable views;
+- a required manual video upload during campaign submission;
+- a state/city leaderboard;
+- one-click Creator/Brand role switching;
+- invented Company role names or permission hierarchy;
+- invented fraud thresholds;
+- invented duplicate URL/resubmission policy;
+- invented post-payout debt/clawback policy;
+- a provider other than Paystack for the locked V1 payment contract;
+- Payaza naming in API/UI contracts;
+- transcript-only compliance as a replacement for Qwen native video+audio analysis;
+- mandatory Brand approval for every Qwen-approved submission;
+- changing content rules or payout rate after launch;
+- applying the 2.5% cancellation fee to natural completion or pot depletion;
+- passing Paystack/system charges through as extra customer fees;
+- treating public profiles, help articles, generic support tickets, legal CMS, PDF receipts, invoices, 2FA, email change, privacy export, or a specific infrastructure vendor as V1 PRD acceptance requirements.
+
+Those broader features may remain implemented or planned. They must be tracked in a separate roadmap rather than represented as requirements from this PRD.
