@@ -1,0 +1,177 @@
+services:
+  - type: web
+    name: clippit-api
+    runtime: python
+    rootDir: backend
+    plan: starter
+    buildCommand: pip install -r requirements.txt && alembic upgrade head
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      # --- Core ---
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRE_MINUTES
+        value: "1440"
+      - key: INTERNAL_SERVICE_SECRET
+        sync: false
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: RATE_LIMIT_STORAGE_URI
+        value: memory://
+      - key: ENVIRONMENT
+        value: development
+
+      # --- Google Sign-In ---
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+
+      # --- TikTok ---
+      - key: TIKTOK_CLIENT_KEY
+        sync: false
+      - key: TIKTOK_CLIENT_SECRET
+        sync: false
+      - key: TIKTOK_REDIRECT_URI
+        sync: false
+
+      # --- Facebook / Instagram / Threads ---
+      - key: FACEBOOK_APP_ID
+        sync: false
+      - key: FACEBOOK_APP_SECRET
+        sync: false
+      - key: FACEBOOK_REDIRECT_URI
+        sync: false
+      - key: INSTAGRAM_APP_ID
+        sync: false
+      - key: INSTAGRAM_APP_SECRET
+        sync: false
+      - key: INSTAGRAM_REDIRECT_URI
+        sync: false
+      - key: THREADS_APP_ID
+        sync: false
+      - key: THREADS_APP_SECRET
+        sync: false
+      - key: THREADS_REDIRECT_URI
+        sync: false
+
+      # --- X / YouTube ---
+      - key: X_CLIENT_ID
+        sync: false
+      - key: X_CLIENT_SECRET
+        sync: false
+      - key: X_REDIRECT_URI
+        sync: false
+      - key: TWITTERAPI_IO_KEY
+        sync: false
+      - key: YOUTUBE_CLIENT_ID
+        sync: false
+      - key: YOUTUBE_CLIENT_SECRET
+        sync: false
+      - key: YOUTUBE_REDIRECT_URI
+        sync: false
+      - key: YOUTUBE_API_KEY
+        sync: false
+
+      # --- Intelligence polling cadence ---
+      - key: INTELLIGENCE_POLL_TICK_SECONDS
+        value: "60"
+      - key: INTELLIGENCE_CADENCE_DAY1_MINUTES
+        value: "30"
+      - key: INTELLIGENCE_CADENCE_WEEK1_HOURS
+        value: "2"
+      - key: INTELLIGENCE_CADENCE_MONTH_HOURS
+        value: "12"
+      - key: INTELLIGENCE_TRACKING_WINDOW_DAYS
+        value: "30"
+
+      # --- Environment ---
+      - key: BCRYPT_ROUNDS
+        value: "12"
+
+      # --- Email / one-time codes ---
+      - key: EMAIL_BACKEND
+        value: smtp
+      - key: EMAIL_FROM
+        value: "Clippit <no-reply@clippit.local>"
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: REQUIRE_EMAIL_VERIFICATION
+        value: "true"
+      - key: OTP_TTL_MINUTES
+        value: "10"
+      - key: OTP_MAX_ATTEMPTS
+        value: "5"
+      - key: OTP_RESEND_COOLDOWN_SECONDS
+        value: "60"
+
+      # --- Uploads ---
+      - key: STORAGE_BACKEND
+        value: cloudinary
+      - key: STORAGE_LOCAL_DIR
+        value: ./var/uploads
+      - key: PUBLIC_BASE_URL
+        sync: false
+      - key: CLOUDINARY_CLOUD_NAME
+        sync: false
+      - key: CLOUDINARY_API_KEY
+        sync: false
+      - key: CLOUDINARY_API_SECRET
+        sync: false
+
+      # --- Money ---
+      - key: PAYMENT_PROVIDER
+        value: paystack
+      - key: PAYSTACK_SECRET_KEY
+        sync: false
+      - key: PAYSTACK_BASE_URL
+        value: https://api.paystack.co
+      - key: PAYMENT_WEBHOOK_SECRET
+        sync: false
+      - key: FUNDING_FEE_RATE
+        value: "0.15"
+      - key: TOPUP_FEE_RATE
+        value: "0.025"
+      - key: CANCELLATION_FEE_RATE
+        value: "0.025"
+      - key: WITHDRAWAL_FEE_RATE
+        value: "0.07"
+      - key: EARNINGS_HOLD_DAYS
+        value: "5"
+      - key: MIN_WITHDRAWAL
+        value: "5000"
+      - key: BACKGROUND_JOBS_ENABLED
+        value: "false"
+
+      # --- Compliance (yt-dlp + Qwen3.8-Omni-Flash) ---
+      - key: COMPLIANCE_VERIFIER
+        value: manual
+      - key: DASHSCOPE_API_KEY
+        sync: false
+      - key: QWEN_API_KEY
+        sync: false
+      - key: QWEN_BASE_URL
+        value: https://dashscope-intl.aliyuncs.com/compatible-mode/v1
+      - key: QWEN_MODEL
+        value: qwen3.8-omni-flash
+      - key: COMPLIANCE_MEDIA_DIR
+        value: ./var/compliance
+      - key: COMPLIANCE_PUBLIC_MEDIA_BASE
+        sync: false
+      - key: COMPLIANCE_MAX_DURATION_SECONDS
+        value: "150"
+      - key: COMPLIANCE_MAX_FILESIZE_MB
+        value: "80"
+      - key: COMPLIANCE_KEEP_MEDIA
+        value: "true"
