@@ -140,20 +140,21 @@ class IngestionService:
                 f"A {platform_content.post_type.value} cannot be submitted — "
                 "only original posts and quotes count."
             )
-        # API-key adapters can read any public URL. Ownership must still
-        # match the connected account's platform user / channel id.
-        if (
-            not adapter.requires_creator_token
-            and credential is not None
-            and credential.platform_user_id
-            and platform_content.author_platform_user_id
-            and credential.platform_user_id != platform_content.author_platform_user_id
-        ):
-            raise ContentUnavailable(
-                f"This {submission.platform.value} post belongs to "
-                f"{platform_content.author_platform_user_id}, not the connected account "
-                f"({credential.platform_user_id})."
-            )
+        # API-key adapters can read any public URL. Ownership must be
+        # proven — fail closed if either side of the comparison is missing.
+        if not adapter.requires_creator_token:
+            connected_id = credential.platform_user_id if credential else None
+            author_id = platform_content.author_platform_user_id
+            if not connected_id or not author_id:
+                raise ContentUnavailable(
+                    f"Cannot verify {submission.platform.value} ownership — "
+                    "missing connected account id or post author id."
+                )
+            if connected_id != author_id:
+                raise ContentUnavailable(
+                    f"This {submission.platform.value} post belongs to "
+                    f"{author_id}, not the connected account ({connected_id})."
+                )
         return await repository.add_content(
             self._db, normalizer.build_content(submission, platform_content)
         )

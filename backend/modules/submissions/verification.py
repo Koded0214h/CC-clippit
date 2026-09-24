@@ -1,13 +1,14 @@
-"""Brief verification — the seam D11 (unowned) will plug into.
+"""Brief verification — the seam D11 plugs into.
 
 A `Verifier` looks at a submission against the campaign's requirements and
 returns a verdict per requirement plus an overall status. What runs behind
-it is deliberately open: today the default hands everything to a person, and
-the plan's automated checks (R2 + FFmpeg + Deepgram + an LLM reading the
-brief) become another `Verifier` — nothing else in the app changes.
+it is deliberately open: `ManualReviewVerifier` hands everything to a
+person; `QwenComplianceVerifier` (PRD V1) retrieves the posted video with
+yt-dlp and asks Qwen3.8-Omni-Flash to judge each rule.
 
 Whatever the verifier, one rule holds: **nothing earns until the submission
 is `approved`**, and only a `Verifier` or a human decision can make it so.
+Technical retrieval/model failures must not auto-reject (PRD §7.3).
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from core.config import get_settings
 from modules.campaigns.models import Campaign, CampaignRule
 
 from .models import RequirementVerdict, Submission, VerificationStatus
@@ -33,6 +35,10 @@ class Outcome:
     checks: list[RequirementCheck] = field(default_factory=list)
     confidence: float | None = None
     summary: str | None = None
+    #: Model id when an automated verifier produced this outcome.
+    model: str | None = None
+    #: Local path to retrieved media when kept for audit.
+    media_path: str | None = None
 
 
 class Verifier(Protocol):
@@ -61,4 +67,17 @@ class ManualReviewVerifier:
 
 
 def get_verifier() -> Verifier:
+    """Pick the configured verifier. Default remains manual so tests and
+    environments without DashScope keys stay deterministic."""
+    settings = get_settings()
+    mode = (settings.compliance_verifier or "manual").strip().lower()
+    if mode == "qwen":
+        key = settings.dashscope_api_key or settings.qwen_api_key
+        if not key:
+            # Misconfiguration must not silently fall through to "approve".
+            # Manual review is the safe product behaviour until keys land.
+            return ManualReviewVerifier()
+        from .qwen_verifier import QwenComplianceVerifier
+
+        return QwenComplianceVerifier()
     return ManualReviewVerifier()

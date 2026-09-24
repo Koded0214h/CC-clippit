@@ -104,8 +104,8 @@ has auth, campaigns, submissions, and creator bank-detail rows.
   `lib/brand.ts` are still fixtures). Screen → endpoint map:
   `../architecture/api-coverage.md`.
 - Align Core money/fees with PRD V1.0 (15% / 2.5% / 7% wallets) — Core lane.
-- Automated brief verification (D11): yt-dlp + Qwen3.8-Omni-Flash behind
-  the existing `Verifier` interface (Integrations / AI lane).
+- Automated brief verification (D11): enable with `COMPLIANCE_VERIFIER=qwen`
+  plus `DASHSCOPE_API_KEY` (yt-dlp + Qwen3.8-Omni-Flash are implemented).
 - Confirm D1, D18, D22 with Adam — Core implemented D18 and D22 in a way that
   needs his acknowledgement (see the register).
 - Live-smoke YouTube with a real Data API key + OAuth client.

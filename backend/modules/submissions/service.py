@@ -67,6 +67,7 @@ async def run_verification(db: AsyncSession, submission: models.Submission, camp
     audit.record(
         db, "submission.verified", submission_id=submission.id, campaign_id=campaign.id,
         status=outcome.status.value, automated=True,
+        model=outcome.model, media_path=outcome.media_path,
     )
     if outcome.status == models.VerificationStatus.needs_review:
         await notify(

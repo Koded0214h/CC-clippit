@@ -117,10 +117,26 @@ class Settings(BaseSettings):
     earnings_hold_days: int = 5
     min_withdrawal: int = 1000
 
-    # Run periodic jobs (earnings settlement, campaign expiry, payout
-    # reconciliation) inside the API process. Off by default: tests and
-    # one-off scripts must not start background loops.
+    # Run settlement / sweeps / payout reconciliation inside the API process.
     background_jobs_enabled: bool = False
+
+    # --- Compliance (yt-dlp + Qwen3.8-Omni-Flash) ---------------------------
+    # `manual` = brand review queue (default, keeps tests deterministic).
+    # `qwen` = retrieve posted media with yt-dlp and judge via Model Studio.
+    compliance_verifier: str = "manual"  # manual | qwen
+    dashscope_api_key: str = ""
+    #: Alias accepted so either env name works.
+    qwen_api_key: str = ""
+    qwen_base_url: str = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1"
+    qwen_model: str = "qwen3.8-omni-flash"
+    compliance_media_dir: str = "./var/compliance"
+    #: Public HTTPS base that can reach files under compliance_media_dir.
+    #: Required for videos too large for inline Base64 (~7MB). Leave empty
+    #: to use data URLs for small clips (localhost is not reachable by Qwen).
+    compliance_public_media_base: str = ""
+    compliance_max_duration_seconds: int = 150
+    compliance_max_filesize_mb: int = 80
+    compliance_keep_media: bool = True
 
     @property
     def sync_database_url(self) -> str:

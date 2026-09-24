@@ -55,6 +55,7 @@ class CommentingAdapter:
             platform=Platform.x,
             platform_content_id=content_id,
             url=f"https://x.com/creator/status/{content_id}",
+            author_platform_user_id="creator-x-id",
             kind=ContentKind.text,
             post_type=PostType.original,
             published_at=T0 - timedelta(days=1),
@@ -96,7 +97,10 @@ def _page(*texts: str) -> CommentPage:
 def _service(db, adapter) -> IngestionService:
     return IngestionService(
         db,
-        token_source=StaticTokenSource({(CREATOR_ID, Platform.x): "x-token"}),
+        token_source=StaticTokenSource(
+            {(CREATOR_ID, Platform.x): "x-token"},
+            platform_user_ids={(CREATOR_ID, Platform.x): "creator-x-id"},
+        ),
         adapter_lookup=lambda _platform: adapter,
     )
 
