@@ -17,6 +17,17 @@ class PayoutCreate(BaseModel):
     idempotency_key: str = Field(min_length=8, max_length=80)
 
 
+class PayoutQuoteOut(BaseModel):
+    #: The gross amount the creator chose — the wallet (earnings) is
+    #: debited by this full amount; `net_amount` (93%) is what's actually
+    #: sent to the bank (PRD V1's 7% withdrawal fee).
+    amount: Money
+    fee: Money
+    net_amount: Money
+    currency: str = "NGN"
+    valid_for_minutes: int = 5
+
+
 class BankDestination(BaseModel):
     bank_code: str
     bank_name: str

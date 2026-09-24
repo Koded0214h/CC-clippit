@@ -313,6 +313,50 @@ async def read_audit(
     ]
 
 
+@router.get("/audit/export")
+async def export_audit(
+    kind: str | None = None,
+    campaign_id: uuid.UUID | None = None,
+    limit: int = Query(5000, ge=1, le=20000),
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    import csv
+    import io
+
+    from fastapi.responses import Response
+
+    from core.csv_export import csv_safe
+
+    query = select(AuditEvent)
+    if kind:
+        query = query.where(AuditEvent.kind.like(f"{kind}%"))
+    if campaign_id:
+        query = query.where(AuditEvent.campaign_id == campaign_id)
+    rows = await db.scalars(query.order_by(AuditEvent.created_at.desc()).limit(limit))
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["id", "created_at", "kind", "actor_id", "campaign_id", "submission_id", "subject_id", "amount", "data"])
+    for e in rows:
+        writer.writerow(
+            [csv_safe(v) for v in (e.id, e.created_at.isoformat(), e.kind, e.actor_id, e.campaign_id, e.submission_id, e.subject_id, e.amount, e.data)]
+        )
+    audit.record(db, "admin.audit_exported", actor_id=admin.id, exported_kind=kind or "*")
+    await db.commit()
+    return Response(content=buffer.getvalue(), media_type="text/csv", headers={"Content-Disposition": 'attachment; filename="audit.csv"'})
+
+
+@router.get("/audit/{event_id}", response_model=schemas.AuditRow)
+async def audit_event_detail(event_id: uuid.UUID, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    event = await db.get(AuditEvent, event_id)
+    if event is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Audit event not found")
+    return schemas.AuditRow(
+        id=event.id, created_at=event.created_at, kind=event.kind, actor_id=event.actor_id, campaign_id=event.campaign_id,
+        submission_id=event.submission_id, subject_id=event.subject_id, amount=event.amount, data=event.data,
+    )
+
+
 # --- users (production-api-inventory.md §N) -------------------------------------
 
 
@@ -829,6 +873,37 @@ async def unified_ledger(
     return rows[offset : offset + limit]
 
 
+@router.get("/ledger/export")
+async def export_ledger(
+    kind: str | None = None, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)
+):
+    import csv
+    import io
+
+    from fastapi.responses import Response
+
+    from core.csv_export import csv_safe
+
+    rows = await unified_ledger(kind=kind, limit=20_000, offset=0, admin=admin, db=db)
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["id", "kind", "organisation_id", "creator_id", "campaign_id", "amount", "status", "provider", "reference", "created_at", "settled_at"])
+    for r in rows:
+        writer.writerow(
+            [
+                csv_safe(v)
+                for v in (
+                    r.id, r.kind, r.organisation_id, r.creator_id, r.campaign_id, f"{r.amount:.2f}", r.status,
+                    r.provider, r.reference, r.created_at.isoformat(), r.settled_at.isoformat() if r.settled_at else "",
+                )
+            ]
+        )
+    audit.record(db, "admin.ledger_exported", actor_id=admin.id, exported_kind=kind or "*")
+    await db.commit()
+    return Response(content=buffer.getvalue(), media_type="text/csv", headers={"Content-Disposition": 'attachment; filename="ledger.csv"'})
+
+
+
 @router.get("/ledger/{entry_id}", response_model=schemas.AdminLedgerRow)
 async def ledger_entry_detail(entry_id: uuid.UUID, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     order = await db.get(funding_models.FundingOrder, entry_id)
@@ -1026,3 +1101,75 @@ async def provider_health(admin: User = Depends(require_admin)):
         )
         rows.append(schemas.ProviderHealth(name=platform, kind="social", configured=bool(creds)))
     return rows
+
+
+# --- refunds, payout reconciliation, jobs, ledger export (scattered P1s) --------
+
+
+@router.get("/refunds", response_model=list[schemas.AdminLedgerRow])
+async def list_refunds_admin(
+    status_filter: refund_models.RefundStatus | None = Query(None, alias="status"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    query = select(refund_models.Refund)
+    if status_filter:
+        query = query.where(refund_models.Refund.status == status_filter)
+    rows = await db.scalars(query.order_by(refund_models.Refund.created_at.desc()).limit(limit).offset(offset))
+    return [
+        schemas.AdminLedgerRow(
+            id=r.id, kind="refund", organisation_id=r.organisation_id, creator_id=None, campaign_id=r.campaign_id,
+            amount=r.amount, status=r.status.value, provider=r.provider, provider_reference=r.provider_reference,
+            reference=r.reference, created_at=r.created_at, settled_at=r.processed_at,
+        )
+        for r in rows
+    ]
+
+
+@router.post("/payouts/{payout_id}/reconcile", response_model=schemas.AdminPayoutRow)
+async def reconcile_payout(payout_id: uuid.UUID, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    """Asks the provider for authoritative state on one payout right now,
+    instead of waiting for the next sweep (`payouts.jobs.reconcile_tick`)."""
+    payout = await _payout(db, payout_id)
+    if payout.status not in (payout_models.PayoutStatus.pending, payout_models.PayoutStatus.processing):
+        raise HTTPException(status.HTTP_409_CONFLICT, f"This payout is {payout.status.value}; nothing to reconcile.")
+    changed = await payout_service.reconcile_one(db, payout)
+    audit.record(db, "admin.payout_reconciled", actor_id=admin.id, subject_id=payout.creator_id, reference=payout.reference, changed=changed)
+    await db.commit()
+    await db.refresh(payout)
+    user = await db.get(User, payout.creator_id)
+    return schemas.AdminPayoutRow(
+        id=payout.id, reference=payout.reference, status=payout.status.value, amount=payout.amount,
+        creator_id=user.id, creator_email=user.email, creator_name=user.full_name, provider=payout.provider,
+        provider_reference=payout.provider_reference, failure_reason=payout.failure_reason,
+        initiated_at=payout.initiated_at, completed_at=payout.completed_at,
+    )
+
+
+@router.get("/jobs")
+async def list_jobs(admin: User = Depends(require_admin)):
+    """Only name and configured interval — no last-run/next-run/duration/
+    processed-count/last-error tracking exists (the loop in `core.jobs`
+    doesn't record any run history yet), so those fields from the
+    inventory row aren't returned."""
+    from core.jobs import registered
+
+    return [{"name": j.name, "interval_seconds": j.interval_seconds} for j in registered()]
+
+
+@router.post("/jobs/{job_name}/run", response_model=schemas.RunResult)
+async def run_job(job_name: str, admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    """Runs one allowlisted job immediately. No idempotency key is enforced
+    here (unlike money-moving POSTs) — every registered job is already
+    written to be safe to run twice (see `core.jobs`'s own docstring)."""
+    from core.jobs import registered
+
+    job = next((j for j in registered() if j.name == job_name), None)
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"No job named {job_name!r}.")
+    audit.record(db, "admin.job_run", actor_id=admin.id, job_name=job_name)
+    await db.commit()
+    await job.run()
+    return schemas.RunResult(processed=0)  # the wrapped job functions don't report a count back

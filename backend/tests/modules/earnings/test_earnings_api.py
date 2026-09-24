@@ -23,7 +23,7 @@ async def test_summary_of_a_creator_with_nothing_is_zero_not_an_error(api, intel
     creator = await make_creator(api)
     s = (await api.get("/earnings/summary", headers=auth(creator))).json()
     assert s["payable"] == 0 and s["in_hold"] == 0 and s["paid_all_time"] == 0 and s["lifetime_views"] == 0
-    assert s["hold_days"] == 5 and s["min_withdrawal"] == 1000 and s["next_clears_at"] is None
+    assert s["hold_days"] == 5 and s["min_withdrawal"] == 5000 and s["next_clears_at"] is None
 
 
 async def test_new_earnings_sit_in_the_hold_then_become_payable(api, intel):
@@ -158,3 +158,25 @@ async def test_leaderboard_can_be_limited_to_one_campaign(api, intel):
     await _clip(api, intel, org, b, two, 4000)
     lb = (await api.get(f"/leaderboard?campaign_id={two['id']}&period=all", headers=auth(a))).json()
     assert len(lb["items"]) == 1 and lb["items"][0]["views"] == 4000 and lb["me"] is None
+
+
+async def test_leaderboard_country_scope_narrows_to_the_viewers_own_country(api, intel):
+    _, org = await signup(api, "organisation")
+    campaign = await _campaign(api, org)
+    ng = await make_creator(api)
+    await api.put("/creators/me/profile", headers=auth(ng), json={"country": "ng"})
+    gh = await make_creator(api)
+    await api.put("/creators/me/profile", headers=auth(gh), json={"country": "GH"})
+    no_country = await make_creator(api)
+    await _clip(api, intel, org, ng, campaign, 9000)
+    await _clip(api, intel, org, gh, campaign, 5000)
+    await _clip(api, intel, org, no_country, campaign, 20_000)
+
+    lb = (await api.get("/leaderboard?scope=country&period=all", headers=auth(ng))).json()
+    assert lb["scope"] == "country" and [r["views"] for r in lb["items"]] == [9000]  # lowercase normalized to NG, GH excluded
+
+    empty = (await api.get("/leaderboard?scope=country&period=all", headers=auth(no_country))).json()
+    assert empty["items"] == [] and empty["me"] is None  # no country set yet: an empty board, not an error
+
+    still_global = (await api.get("/leaderboard?period=all", headers=auth(ng))).json()
+    assert still_global["scope"] == "global" and len(still_global["items"]) == 3

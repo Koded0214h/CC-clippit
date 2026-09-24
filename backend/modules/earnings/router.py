@@ -2,6 +2,7 @@ import uuid
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.deps import get_db
@@ -55,10 +56,22 @@ async def earning_entry_detail(
 @router.get("/leaderboard", response_model=schemas.Leaderboard)
 async def leaderboard(
     period: Literal["week", "all"] = "week",
+    scope: Literal["global", "country"] = "global",
     campaign_id: uuid.UUID | None = None,
     limit: int = Query(20, ge=1, le=100),
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Creators ranked by verified views. Any signed-in user may read it."""
+    """Creators ranked by verified views. Any signed-in user may read it.
+    `scope=country` narrows to the viewer's own `CreatorProfile.country` —
+    an empty board (not an error) when the viewer hasn't set one."""
+    if scope == "country":
+        from modules.creators.models import CreatorProfile
+
+        country = await db.scalar(select(CreatorProfile.country).where(CreatorProfile.user_id == user.id))
+        if not country:
+            from datetime import datetime, timezone
+
+            return schemas.Leaderboard(period=period, scope="country", updated_at=datetime.now(timezone.utc), items=[], me=None)
+        return await queries.leaderboard(db, user.id, period=period, campaign_id=campaign_id, limit=limit, country=country)
     return await queries.leaderboard(db, user.id, period=period, campaign_id=campaign_id, limit=limit)

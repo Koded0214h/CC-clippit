@@ -136,8 +136,12 @@ async def reserve(
         reference = new_reference()
 
     provider = get_provider()
+    # PRD V1: the creator chooses the gross amount; the wallet (earnings) is
+    # debited by that full amount and the creator receives 93% — `dispatch`
+    # sends `amount - fee` to the provider, `amount` is what's reserved here.
+    fee = quantize(amount * to_decimal(settings.withdrawal_fee_rate))
     payout = models.Payout(
-        creator_id=creator.id, reference=reference, idempotency_key=idempotency_key, amount=amount, fee=ZERO,
+        creator_id=creator.id, reference=reference, idempotency_key=idempotency_key, amount=amount, fee=fee,
         provider=provider.name, bank_code=bank.bank_code, bank_name=bank.bank_name,
         account_number=bank.account_number, account_name=bank.account_name,
     )
@@ -258,6 +262,26 @@ async def apply_transfer_event(db: AsyncSession, event: WebhookEvent) -> bool:
     return True
 
 
+async def reconcile_one(db: AsyncSession, payout: models.Payout) -> bool:
+    """Asks the provider for authoritative state on one in-flight payout
+    and applies it. Returns whether its status actually changed — used by
+    both the bulk sweep and `POST /admin/payouts/{id}/reconcile`."""
+    before = payout.status
+    if payout.status == models.PayoutStatus.pending:
+        await dispatch(db, payout.id)
+    elif payout.status == models.PayoutStatus.processing:
+        provider = get_provider()
+        try:
+            result = await provider.get_transfer(reference=payout.reference)
+        except ProviderError:
+            return False
+        if result.status == TransferStatus.success:
+            await succeed(db, payout)
+        elif result.status == TransferStatus.failed:
+            await fail(db, payout, result.failure_reason or "The transfer failed.")
+    return payout.status != before
+
+
 async def reconcile(db: AsyncSession, *, older_than: timedelta = timedelta(minutes=2), limit: int = 100) -> int:
     """Re-drives payouts stuck in flight: a `pending` one was never sent (we
     crashed between reserve and send) and is sent now; a `processing` one is
@@ -275,22 +299,10 @@ async def reconcile(db: AsyncSession, *, older_than: timedelta = timedelta(minut
         )
     )
     moved = 0
-    provider = get_provider()
     for payout in stuck:
-        before = payout.status
-        if payout.status == models.PayoutStatus.pending:
-            await dispatch(db, payout.id)
-        else:
-            try:
-                result = await provider.get_transfer(reference=payout.reference)
-            except ProviderError:
-                continue
-            if result.status == TransferStatus.success:
-                await succeed(db, payout)
-            elif result.status == TransferStatus.failed:
-                await fail(db, payout, result.failure_reason or "The transfer failed.")
+        changed = await reconcile_one(db, payout)
         await db.commit()
-        moved += payout.status != before
+        moved += changed
     return moved
 
 

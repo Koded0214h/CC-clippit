@@ -7,6 +7,7 @@ from core.config import get_settings
 from core.jobs import register
 from modules.earnings import jobs as earnings_jobs
 from modules.payouts import jobs as payout_jobs
+from modules.wallet import jobs as wallet_jobs
 
 
 async def _settle() -> None:
@@ -25,6 +26,10 @@ async def _reconcile() -> None:
     await payout_jobs.reconcile_tick()
 
 
+async def _wallet_reconcile() -> None:
+    await wallet_jobs.reconcile_tick()
+
+
 async def _intelligence_poll() -> None:
     """One Intelligence tick inside the API process when background jobs
     are enabled. The dedicated `python -m modules.intelligence.worker`
@@ -39,6 +44,7 @@ register("earnings.settle", 300, _settle)
 register("campaigns.sweep", 300, _sweep)
 register("earnings.notify_payable", 900, _payable)
 register("payouts.reconcile", 120, _reconcile)
+register("wallet.reconcile", 120, _wallet_reconcile)
 register(
     "intelligence.poll",
     max(get_settings().intelligence_poll_tick_seconds, 30),

@@ -55,6 +55,21 @@ class CloseReason(str, enum.Enum):
     admin = "admin"
 
 
+class AccessMode(str, enum.Enum):
+    public = "public"
+    invite = "invite"
+
+
+class EndCondition(str, enum.Enum):
+    """Which of the two things stops the campaign first — both are always
+    enforced (see `service.is_open_for_entries`/settlement's pot check);
+    this only records which one the brand picked as the *primary* stop, for
+    display (PRD V1's campaign builder asks for one)."""
+
+    duration = "duration"
+    budget = "budget"
+
+
 class Campaign(Base):
     __tablename__ = "campaigns"
     __table_args__ = (CheckConstraint("expected_views > 0", name="ck_campaigns_expected_views_positive"),)
@@ -88,6 +103,24 @@ class Campaign(Base):
     close_reason: Mapped[CloseReason | None] = mapped_column(Enum(CloseReason, name="close_reason"), nullable=True)
     #: "Pause new entries": existing submissions keep earning.
     accepting_entries: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    #: "Full freeze": also stops accrual on already-approved submissions
+    #: (see earnings.service.settle_submission) until resumed. Distinct
+    #: from `accepting_entries` — a brand can freeze payouts without also
+    #: closing the door on new joins, or vice versa.
+    payouts_frozen: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    access_mode: Mapped[AccessMode] = mapped_column(
+        Enum(AccessMode, name="campaign_access_mode"), nullable=False, server_default=AccessMode.public.value
+    )
+    #: Set only when `access_mode` is `invite`; required to join then (see
+    #: `service.join_campaign`). Never required to view the campaign itself.
+    invite_code: Mapped[str | None] = mapped_column(String(20), unique=True, nullable=True)
+    #: Reference files/links for creators — moodboards, sounds, briefs — not
+    #: the cover image (that's `cover_image_upload_id`) or the video brief
+    #: rules (those are `CampaignRule`). Each item: {name, url, kind}.
+    assets: Mapped[list[dict] | None] = mapped_column(JSONB, nullable=True)
+    end_condition: Mapped[EndCondition | None] = mapped_column(
+        Enum(EndCondition, name="campaign_end_condition"), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -112,13 +145,20 @@ class CampaignPayoutRule(Base):
         CheckConstraint("rate_per_1000_views > 0", name="ck_payout_rate_positive"),
         CheckConstraint("cap_amount IS NULL OR cap_amount > 0", name="ck_payout_cap_positive"),
         CheckConstraint("min_views_threshold >= 0", name="ck_payout_min_views_nonnegative"),
+        CheckConstraint("video_cap_amount IS NULL OR video_cap_amount > 0", name="ck_payout_video_cap_positive"),
+        CheckConstraint("max_submissions IS NULL OR max_submissions > 0", name="ck_payout_max_submissions_positive"),
     )
 
     campaign_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("campaigns.id", ondelete="CASCADE"), primary_key=True
     )
     rate_per_1000_views: Mapped[float] = mapped_column(Float, nullable=False)
+    #: The most one creator can earn from this campaign, across all their clips.
     cap_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    #: The most a *single* clip can earn, regardless of its own views.
+    video_cap_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    #: The most clips one creator may submit to this campaign.
+    max_submissions: Mapped[int | None] = mapped_column(Integer, nullable=True)
     min_views_threshold: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1000")
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

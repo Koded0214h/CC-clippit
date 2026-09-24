@@ -66,6 +66,10 @@ class CreatorProfile(Base):
         UUID(as_uuid=True), ForeignKey("uploads.id", ondelete="SET NULL"), nullable=True
     )
     interests: Mapped[list[str]] = mapped_column(ARRAY(String(40)), nullable=False, server_default="{}")
+    #: ISO-3166-1 alpha-2, e.g. "NG" — powers the country leaderboard scope.
+    #: Free text at this layer (validated at the schema layer) rather than a
+    #: native enum, same reasoning as `platforms` (D5).
+    country: Mapped[str | None] = mapped_column(String(2), nullable=True)
     # Onboarding answers — kept for product analytics and matching, not shown.
     intended_platforms: Mapped[list[str]] = mapped_column(ARRAY(String(20)), nullable=False, server_default="{}")
     discovery_source: Mapped[str | None] = mapped_column(String(60), nullable=True)

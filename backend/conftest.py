@@ -14,3 +14,9 @@ import os
 os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite://")
 # Password hashing at production cost would dominate the suite's runtime.
 os.environ.setdefault("BCRYPT_ROUNDS", "4")
+# Same reasoning as DATABASE_URL above: a real .env (SMTP/Cloudinary
+# credentials for local dev) must never let a test run send a real email
+# or upload to a real storage account.
+os.environ.setdefault("EMAIL_BACKEND", "console")
+os.environ.setdefault("STORAGE_BACKEND", "local")
+os.environ.setdefault("PAYMENT_PROVIDER", "sandbox")

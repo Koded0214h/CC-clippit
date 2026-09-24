@@ -129,7 +129,7 @@ async def test_disputing_an_old_payout_is_refused_by_the_filing_window(api, inte
     await clear_hold(creator["user"]["id"])
     await api.put("/creators/me/bank-details", headers=auth(creator), json={"bank_code": "058", "bank_name": "GTBank", "account_number": "0123456789"})
     await api.post("/creators/me/bank-details/verify", headers=auth(creator))
-    payout = (await api.post("/payouts", headers=auth(creator), json={"amount": 1000, "idempotency_key": "dispute-test-1"})).json()
+    payout = (await api.post("/payouts", headers=auth(creator), json={"amount": 5000, "idempotency_key": "dispute-test-1"})).json()
 
     async with db_session() as db:
         row = await db.get(Payout, _uuid.UUID(payout["id"]))

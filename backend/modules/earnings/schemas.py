@@ -94,6 +94,7 @@ class LeaderRow(BaseModel):
 
 class Leaderboard(BaseModel):
     period: str
+    scope: str = "global"
     updated_at: datetime
     items: list[LeaderRow]
     #: The caller's own position, even if outside the top of the list.

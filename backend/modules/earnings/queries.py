@@ -223,11 +223,20 @@ async def entry_detail(db: AsyncSession, entry_id: uuid.UUID) -> schemas.Earning
 
 
 async def leaderboard(
-    db: AsyncSession, viewer_id: uuid.UUID, *, period: str, campaign_id: uuid.UUID | None, limit: int
+    db: AsyncSession, viewer_id: uuid.UUID, *, period: str, campaign_id: uuid.UUID | None, limit: int,
+    country: str | None = None,
 ) -> schemas.Leaderboard:
     at = now()
     E = models.EarningEntry
     A = models.EarningAccount
+
+    country_ids: set[uuid.UUID] | None = None
+    if country:
+        country_ids = set(
+            await db.scalars(select(CreatorProfile.user_id).where(CreatorProfile.country == country))
+        )
+        if not country_ids:
+            return schemas.Leaderboard(period=period, scope="country" if country else "global", updated_at=at, items=[], me=None)
 
     if period == "week":
         query = select(E.creator_id, _sum(E.billable_views), _sum(E.amount)).where(E.accrued_at >= at - timedelta(days=7))
@@ -243,6 +252,9 @@ async def leaderboard(
             earned_q = earned_q.where(E.campaign_id == campaign_id)
         earned = {cid: to_decimal(v) for cid, v in await db.execute(earned_q)}
         stats = {cid: (int(v), earned.get(cid, ZERO)) for cid, v in await db.execute(views_q)}
+
+    if country_ids is not None:
+        stats = {cid: v for cid, v in stats.items() if cid in country_ids}
 
     ranked = sorted(stats.items(), key=lambda kv: (kv[1][0], kv[1][1]), reverse=True)
     ids = {cid for cid, _ in ranked}
@@ -263,4 +275,4 @@ async def leaderboard(
 
     items = [row(i + 1, cid) for i, (cid, _) in enumerate(ranked[:limit])]
     me = next((row(i + 1, cid) for i, (cid, _) in enumerate(ranked) if cid == viewer_id), None)
-    return schemas.Leaderboard(period=period, updated_at=at, items=items, me=me)
+    return schemas.Leaderboard(period=period, scope="country" if country else "global", updated_at=at, items=items, me=me)

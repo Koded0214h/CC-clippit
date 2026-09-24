@@ -67,6 +67,35 @@ async def exchange_code(code: str, code_verifier: str | None) -> NormalizedToken
     )
 
 
+async def refresh(refresh_token: str) -> NormalizedToken:
+    """TikTok's `refresh_token` grant — the only adapter here with a real
+    programmatic refresh (see production-api-inventory.md §F). The
+    others (Meta's long-lived tokens, X) have no equivalent server-side
+    refresh; `social_router.refresh_account` treats a missing `refresh`
+    attribute on a provider module as `reconnect_required`."""
+    settings = get_settings()
+    async with httpx.AsyncClient(timeout=15) as client:
+        resp = await client.post(
+            TOKEN_URL,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            data={
+                "client_key": settings.tiktok_client_key,
+                "client_secret": settings.tiktok_client_secret,
+                "grant_type": "refresh_token",
+                "refresh_token": refresh_token,
+            },
+        )
+    payload = resp.json()
+    if "access_token" not in payload:
+        raise OAuthError(f"TikTok token refresh failed: {payload}")
+    return NormalizedToken(
+        access_token=payload["access_token"],
+        platform_user_id=payload.get("open_id", ""),
+        refresh_token=payload.get("refresh_token", refresh_token),
+        expires_in=payload.get("expires_in"),
+    )
+
+
 PROFILE_URL = "https://open.tiktokapis.com/v2/user/info/"
 
 

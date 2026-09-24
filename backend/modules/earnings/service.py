@@ -139,6 +139,13 @@ async def settle_submission(
         db.add(account)
         await db.flush()
 
+    if campaign.payouts_frozen:
+        # Full freeze (campaigns.pause mode="full"): keep the reading current
+        # so nothing is lost once resumed, but book nothing while frozen.
+        account.cumulative_views = max(account.cumulative_views, views)
+        account.last_settled_at = at
+        return _skip("payouts_frozen")
+
     trust = await _trust_status(client, submission_id)
     if account.admin_trust_override is True:
         trust = "clean"  # POST /admin/submissions/{id}/trust/clear
@@ -186,6 +193,15 @@ async def settle_submission(
         if room < rate:
             account.blocked_reason = "creator_cap_reached"
             return _skip("creator_cap_reached")
+        new_thousands = min(new_thousands, int((room / rate).to_integral_value(rounding=ROUND_FLOOR)))
+
+    # Per-video cap: the same whole-thousands logic as the creator cap, but
+    # scoped to this one clip's own running total (`account.accrued_amount`).
+    if rule.video_cap_amount is not None:
+        room = to_decimal(rule.video_cap_amount) - to_decimal(account.accrued_amount)
+        if room < rate:
+            account.blocked_reason = "video_cap_reached"
+            return _skip("video_cap_reached")
         new_thousands = min(new_thousands, int((room / rate).to_integral_value(rounding=ROUND_FLOOR)))
 
     # The pot is a hard ceiling.

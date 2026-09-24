@@ -48,8 +48,8 @@ async def test_creator_liability_is_what_is_owed_and_not_yet_paid(api, intel):
     assert (await api.get("/admin/overview", headers=auth(admin))).json()["creator_liability"] == 6000
     await clear_hold(creator["user"]["id"])
     await verified_bank(api, creator)
-    await api.post("/payouts", headers=auth(creator), json={"amount": 2000, "idempotency_key": "k-liability-1"})
-    assert (await api.get("/admin/overview", headers=auth(admin))).json()["creator_liability"] == 4000
+    await api.post("/payouts", headers=auth(creator), json={"amount": 5000, "idempotency_key": "k-liability-1"})
+    assert (await api.get("/admin/overview", headers=auth(admin))).json()["creator_liability"] == 1000
 
 
 async def test_admin_can_list_and_filter_payouts(api, intel):
@@ -58,10 +58,10 @@ async def test_admin_can_list_and_filter_payouts(api, intel):
     campaign = await open_campaign(api, org, expected_views=1_000_000, payout_rule={"rate_per_1000_views": 500, "min_views_threshold": 0})
     creator = await make_creator(api)
     sid = (await submit_clip(api, creator, campaign["id"])).json()["id"]
-    await earn(api, intel, sid, 6000)
+    await earn(api, intel, sid, 12_000)  # ₦6,000
     await clear_hold(creator["user"]["id"])
     await verified_bank(api, creator)
-    await api.post("/payouts", headers=auth(creator), json={"amount": 1000, "idempotency_key": "k-admin-list-1"})
+    await api.post("/payouts", headers=auth(creator), json={"amount": 5000, "idempotency_key": "k-admin-list-1"})
 
     rows = (await api.get("/admin/payouts", headers=auth(admin))).json()
     assert len(rows) == 1 and rows[0]["status"] == "succeeded" and rows[0]["creator_email"] == creator["user"]["email"]
@@ -74,7 +74,7 @@ async def test_admin_can_retry_and_force_fail_an_in_flight_payout(api, intel, mo
     campaign = await open_campaign(api, org, expected_views=1_000_000, payout_rule={"rate_per_1000_views": 500, "min_views_threshold": 0})
     creator = await make_creator(api)
     sid = (await submit_clip(api, creator, campaign["id"])).json()["id"]
-    await earn(api, intel, sid, 12_000)  # ₦6,000
+    await earn(api, intel, sid, 24_000)  # ₦12,000
     await clear_hold(creator["user"]["id"])
     await verified_bank(api, creator)
 
@@ -82,7 +82,7 @@ async def test_admin_can_retry_and_force_fail_an_in_flight_payout(api, intel, mo
         raise ProviderError("timeout")
 
     monkeypatch.setattr(SandboxProvider, "create_transfer", down)
-    p = (await api.post("/payouts", headers=auth(creator), json={"amount": 3000, "idempotency_key": "k-admin-retry-1"})).json()
+    p = (await api.post("/payouts", headers=auth(creator), json={"amount": 5000, "idempotency_key": "k-admin-retry-1"})).json()
     assert p["status"] == "pending"
 
     monkeypatch.undo()
@@ -92,13 +92,13 @@ async def test_admin_can_retry_and_force_fail_an_in_flight_payout(api, intel, mo
 
     # A second one, this time the bank bounced it out of band.
     monkeypatch.setattr(SandboxProvider, "create_transfer", down)
-    q = (await api.post("/payouts", headers=auth(creator), json={"amount": 1000, "idempotency_key": "k-admin-fail-1"})).json()
+    q = (await api.post("/payouts", headers=auth(creator), json={"amount": 5000, "idempotency_key": "k-admin-fail-1"})).json()
     assert q["status"] == "pending"
     monkeypatch.undo()
     failed = await api.post(f"/admin/payouts/{q['id']}/fail", headers=auth(admin), json={"reason": "Bank confirmed a bounce."})
     assert failed.status_code == 200 and failed.json()["status"] == "failed"
-    # ₦6,000 earned, ₦3,000 paid by the retry; the bounced ₦1,000 is back, not lost.
-    assert (await api.get("/earnings/summary", headers=auth(creator))).json()["payable"] == 3000
+    # ₦12,000 earned, ₦5,000 paid by the retry; the bounced ₦5,000 is back, not lost.
+    assert (await api.get("/earnings/summary", headers=auth(creator))).json()["payable"] == 7000
     assert (await api.post(f"/admin/payouts/{q['id']}/fail", headers=auth(admin), json={"reason": "again, again"})).status_code == 409
     assert (await api.post(f"/admin/payouts/{uuid.uuid4()}/retry", headers=auth(admin))).status_code == 404
 

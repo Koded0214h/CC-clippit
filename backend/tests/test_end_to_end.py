@@ -46,7 +46,7 @@ async def test_a_brand_funds_a_campaign_a_creator_earns_and_is_paid(api, intel):
 
     # --- funds it: order → "I have funded the pot" → live ---------------------------------------
     order = (await api.post(f"/campaigns/{campaign['slug']}/funding", headers=auth(brand), json={"method": "bank"})).json()
-    assert order["total"] == 507_500 and order["campaign_status"] == "pending_funding"
+    assert order["total"] == 575_000 and order["campaign_status"] == "pending_funding"
     confirmed = (await api.post(f"/campaigns/{campaign['slug']}/funding/confirm", headers=auth(brand))).json()
     assert confirmed["status"] == "confirmed" and confirmed["campaign_status"] == "active"
 
@@ -92,7 +92,7 @@ async def test_a_brand_funds_a_campaign_a_creator_earns_and_is_paid(api, intel):
     await api.put("/creators/me/bank-details", headers=auth(creator), json={"bank_code": "058", "bank_name": "Guaranty Trust Bank", "account_number": "0123456789"})
     assert (await api.post("/creators/me/bank-details/verify", headers=auth(creator))).json()["verified"] is True
     payout = (await api.post("/payouts", headers=auth(creator), json={"amount": 6000, "idempotency_key": "confirm-screen-e2e"})).json()
-    assert payout["status"] == "succeeded" and payout["net"] == 6000 and payout["provenance"]["billable_views"] == 12_400
+    assert payout["status"] == "succeeded" and payout["net"] == 5580 and payout["provenance"]["billable_views"] == 12_400
 
     money = (await api.get("/earnings/summary", headers=auth(creator))).json()
     assert money["payable"] == 0 and money["paid_all_time"] == 6000 and money["completed_payouts"] == 1

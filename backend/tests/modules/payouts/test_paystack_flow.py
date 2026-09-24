@@ -50,16 +50,16 @@ async def test_funding_sends_the_brand_to_a_hosted_checkout_and_a_signed_charge_
 
     assert order["provider"] == "paystack" and order["sandbox"] is False
     assert order["checkout_url"] == "https://checkout.paystack.test/x" and order["collection"] is None
-    assert order["total"] == 507_500
+    assert order["total"] == 575_000
     sent = ps.sent("POST", "/transaction/initialize")[0][2]
-    assert sent["amount"] == 50_750_000 and sent["email"] == org["user"]["email"]
+    assert sent["amount"] == 57_500_000 and sent["email"] == org["user"]["email"]
     assert sent["reference"] == "clippit-" + order["reference"].lower()
 
     # Not paid yet: the brand's claim opens nothing.
     unpaid = await api.post(f"/campaigns/{c['id']}/funding/confirm", headers=auth(org))
     assert unpaid.json()["status"] == "awaiting_confirmation"
 
-    body, headers = _webhook({"event": "charge.success", "data": {"reference": sent["reference"], "amount": 50_750_000, "id": 77}})
+    body, headers = _webhook({"event": "charge.success", "data": {"reference": sent["reference"], "amount": 57_500_000, "id": 77}})
     r = await api.post("/webhooks/payments", content=body, headers=headers)
     assert r.status_code == 200 and r.json() == {"received": True, "handled": True, "first_time": True}
     assert (await api.get(f"/campaigns/{c['id']}", headers=auth(org))).json()["status"] == "active"
@@ -72,7 +72,7 @@ async def test_confirm_button_verifies_with_paystack_and_opens_when_paid(api, in
     c = (await api.post("/campaigns", headers=auth(org), json=campaign_body(pot=1000, expected_views=None, payout_rule={"rate_per_1000_views": 100}))).json()
     order = (await api.post(f"/campaigns/{c['id']}/funding", headers=auth(org), json={"method": "card"})).json()
     assert ps.sent("POST", "/transaction/initialize")[0][2]["channels"] == ["card"]
-    ps.on("GET", "/transaction/verify/clippit-" + order["reference"].lower(), {"status": True, "data": {"status": "success", "amount": 101_500}})
+    ps.on("GET", "/transaction/verify/clippit-" + order["reference"].lower(), {"status": True, "data": {"status": "success", "amount": 115_000}})
     done = (await api.post(f"/campaigns/{c['id']}/funding/confirm", headers=auth(org))).json()
     assert done["status"] == "confirmed" and done["campaign_status"] == "active"
 
@@ -121,24 +121,25 @@ async def _earner(api, intel):
 async def test_a_withdrawal_goes_to_paystack_in_kobo_and_settles_by_webhook(api, intel, ps):
     creator = await _earner(api, intel)
     ps.on("POST", "/transfer", {"status": True, "data": {"status": "pending", "transfer_code": "TRF_5"}})
-    p = (await api.post("/payouts", headers=auth(creator), json={"amount": 2500, "idempotency_key": "ps-key-0001"})).json()
+    p = (await api.post("/payouts", headers=auth(creator), json={"amount": 5000, "idempotency_key": "ps-key-0001"})).json()
     assert p["status"] == "processing" and p["sandbox"] is False and p["provider"] == "paystack"
 
     sent = ps.sent("POST", "/transfer")[0][2]
-    assert sent["amount"] == 250_000 and sent["reference"] == "clippit-" + p["reference"].lower()
+    # 5,000 gross, 7% withdrawal fee: Paystack is sent the net, in kobo.
+    assert sent["amount"] == 465_000 and sent["reference"] == "clippit-" + p["reference"].lower()
     assert sent["recipient"] == "RCP_1"
     assert ps.sent("POST", "/transferrecipient")[0][2]["name"] == "TOBI ADEYEMI"  # the verified name, not what the creator typed
 
     body, headers = _webhook({"event": "transfer.success", "data": {"reference": sent["reference"], "transfer_code": "TRF_5"}})
     assert (await api.post("/webhooks/payments", content=body, headers=headers)).json()["handled"] is True
     assert (await api.get(f"/payouts/{p['id']}", headers=auth(creator))).json()["status"] == "succeeded"
-    assert (await api.get("/earnings/summary", headers=auth(creator))).json()["paid_all_time"] == 2500
+    assert (await api.get("/earnings/summary", headers=auth(creator))).json()["paid_all_time"] == 5000
 
 
 async def test_a_reversal_webhook_releases_a_pending_payout_but_only_flags_a_settled_one(api, intel, ps):
     creator = await _earner(api, intel)
     ps.on("POST", "/transfer", {"status": True, "data": {"status": "pending", "transfer_code": "TRF_6"}})
-    pending = (await api.post("/payouts", headers=auth(creator), json={"amount": 1000, "idempotency_key": "ps-key-0002"})).json()
+    pending = (await api.post("/payouts", headers=auth(creator), json={"amount": 5000, "idempotency_key": "ps-key-0002"})).json()
     ref = "clippit-" + pending["reference"].lower()
     body, headers = _webhook({"event": "transfer.reversed", "data": {"reference": ref, "transfer_code": "TRF_6", "reason": "Account closed"}})
     await api.post("/webhooks/payments", content=body, headers=headers)
@@ -147,7 +148,7 @@ async def test_a_reversal_webhook_releases_a_pending_payout_but_only_flags_a_set
     assert (await api.get("/earnings/summary", headers=auth(creator))).json()["payable"] == 6000  # released
 
     ps.on("POST", "/transfer", {"status": True, "data": {"status": "success", "transfer_code": "TRF_7"}})
-    done = (await api.post("/payouts", headers=auth(creator), json={"amount": 1000, "idempotency_key": "ps-key-0003"})).json()
+    done = (await api.post("/payouts", headers=auth(creator), json={"amount": 5000, "idempotency_key": "ps-key-0003"})).json()
     assert done["status"] == "succeeded"
     body, headers = _webhook({"event": "transfer.reversed", "data": {"reference": "clippit-" + done["reference"].lower(), "reason": "Bank reversal"}})
     await api.post("/webhooks/payments", content=body, headers=headers)
@@ -165,9 +166,9 @@ async def test_a_reversal_webhook_releases_a_pending_payout_but_only_flags_a_set
 async def test_paystack_needing_balance_leaves_the_payout_pending_not_failed(api, intel, ps):
     creator = await _earner(api, intel)
     ps.on("POST", "/transfer", httpx.Response(400, json={"status": False, "message": "Your balance is not enough to fulfil this request"}))
-    p = (await api.post("/payouts", headers=auth(creator), json={"amount": 1000, "idempotency_key": "ps-key-0004"})).json()
+    p = (await api.post("/payouts", headers=auth(creator), json={"amount": 5000, "idempotency_key": "ps-key-0004"})).json()
     assert p["status"] == "pending"
-    assert (await api.get("/earnings/summary", headers=auth(creator))).json()["processing"] == 1000  # still reserved
+    assert (await api.get("/earnings/summary", headers=auth(creator))).json()["processing"] == 5000  # still reserved
 
 
 def test_production_needs_a_live_paystack_key(monkeypatch):

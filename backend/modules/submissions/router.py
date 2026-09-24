@@ -83,6 +83,22 @@ async def _register(
     if platform.value not in campaign.platforms:
         raise HTTPException(422, f"This campaign doesn't accept {platform.value} submissions")
 
+    max_submissions = campaign.payout_rule.max_submissions if campaign.payout_rule else None
+    if max_submissions is not None and resubmitted_from_id is None:
+        existing = await db.scalar(
+            select(func.count()).select_from(models.Submission).where(
+                models.Submission.campaign_id == campaign.id,
+                models.Submission.creator_id == user.id,
+                models.Submission.status != models.SubmissionStatus.rejected,
+                models.Submission.resubmitted_from_id.is_(None),
+            )
+        )
+        if (existing or 0) >= max_submissions:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"You've reached this campaign's limit of {max_submissions} submission(s).",
+            )
+
     has_account = (
         await db.scalar(
             select(SocialAccount.id).where(

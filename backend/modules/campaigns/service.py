@@ -61,6 +61,13 @@ async def unique_slug(db: AsyncSession, title: str) -> str:
     return candidate
 
 
+async def unique_invite_code(db: AsyncSession) -> str:
+    while True:
+        candidate = secrets.token_hex(4).upper()
+        if not await db.scalar(select(models.Campaign.id).where(models.Campaign.invite_code == candidate)):
+            return candidate
+
+
 async def create_campaign(db: AsyncSession, owner: User, payload: schemas.CampaignCreate) -> models.Campaign:
     """The one place a `Campaign` row gets created — used by `POST
     /campaigns` directly and by `POST /campaign-drafts/{id}/finalize`
@@ -70,6 +77,9 @@ async def create_campaign(db: AsyncSession, owner: User, payload: schemas.Campai
     pot, expected_views = derive_budget(
         pot=payload.pot, expected_views=payload.expected_views, rate=payload.payout_rule.rate_per_1000_views
     )
+    invite_code = None
+    if payload.access_mode == models.AccessMode.invite:
+        invite_code = await unique_invite_code(db)
     campaign = models.Campaign(
         event_manager_id=owner.id,
         slug=await unique_slug(db, payload.title),
@@ -83,6 +93,10 @@ async def create_campaign(db: AsyncSession, owner: User, payload: schemas.Campai
         pot_amount=pot,
         duration_days=payload.duration_days,
         platforms=[p.value for p in payload.platforms],
+        access_mode=payload.access_mode,
+        invite_code=invite_code,
+        assets=[a.model_dump() for a in payload.assets] if payload.assets else None,
+        end_condition=payload.end_condition or (models.EndCondition.duration if payload.duration_days else models.EndCondition.budget),
     )
     db.add(campaign)
     await db.flush()
@@ -268,7 +282,7 @@ async def active_membership(
 
 
 async def join_campaign(
-    db: AsyncSession, campaign: models.Campaign, creator: User
+    db: AsyncSession, campaign: models.Campaign, creator: User, *, invite_code: str | None = None
 ) -> models.CampaignMembership:
     """Idempotent: joining twice returns the existing membership rather
     than erroring, since the frontend can't always tell whether a click
@@ -278,6 +292,11 @@ async def join_campaign(
     existing = await active_membership(db, campaign.id, creator.id)
     if existing:
         return existing
+
+    if campaign.access_mode == models.AccessMode.invite and (
+        not invite_code or invite_code.strip().upper() != campaign.invite_code
+    ):
+        raise MembershipError("This campaign needs an invite code to join.", status_code=403)
 
     has_account = await db.scalar(
         select(SocialAccount.id).where(
@@ -375,6 +394,13 @@ async def build_outs(
             status=c.status,
             phase=PHASE[c.status],
             accepting_entries=c.accepting_entries,
+            payouts_frozen=c.payouts_frozen,
+            access_mode=c.access_mode,
+            invite_code=c.invite_code if (viewer.role == Role.admin or c.event_manager_id == viewer.id) else None,
+            assets=[schemas.AssetOut(**a) for a in (c.assets or [])],
+            end_condition=c.end_condition,
+            video_cap=c.payout_rule.video_cap_amount if c.payout_rule else None,
+            max_submissions=c.payout_rule.max_submissions if c.payout_rule else None,
             duration_days=c.duration_days,
             ends_at=c.ends_at,
             time_left=time_left(c.ends_at, at) if c.status == models.CampaignStatus.active else None,

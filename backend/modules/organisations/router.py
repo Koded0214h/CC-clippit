@@ -220,6 +220,41 @@ async def my_transactions(
     return schemas.TransactionsOut(items=[_tx_out(r) for r in rows], total=total)
 
 
+@router.get("/me/transactions/export")
+async def export_transactions(
+    campaign_id: uuid.UUID | None = None,
+    kind: str | None = None,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    import csv
+    import io
+
+    from fastapi.responses import Response
+
+    from core.csv_export import csv_safe
+
+    _require_organisation(user)
+    rows, _ = await ledger.list_transactions(db, user.id, campaign_id=campaign_id, kind=kind, limit=10_000, offset=0)
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow(["id", "kind", "campaign_id", "campaign_title", "amount", "fee", "status", "provider", "reference", "created_at", "settled_at"])
+    for r in rows:
+        writer.writerow(
+            [
+                csv_safe(v)
+                for v in (
+                    r.id, r.kind, r.campaign_id, r.campaign_title, f"{r.amount:.2f}", f"{r.fee:.2f}" if r.fee is not None else "",
+                    r.status, r.provider, r.reference, r.created_at.isoformat(), r.settled_at.isoformat() if r.settled_at else "",
+                )
+            ]
+        )
+    return Response(
+        content=buffer.getvalue(), media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="transactions.csv"'},
+    )
+
+
 @router.get("/me/transactions/{transaction_id}", response_model=schemas.TransactionOut)
 async def my_transaction_detail(
     transaction_id: uuid.UUID, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)

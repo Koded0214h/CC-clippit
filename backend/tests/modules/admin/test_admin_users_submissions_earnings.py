@@ -211,7 +211,7 @@ async def test_earnings_hold_blocks_reservation_and_release_restores_it(api, int
     summary = (await api.get("/earnings/summary", headers=auth(creator))).json()
     assert summary["payable"] == 0
 
-    blocked_payout = await api.post("/payouts", headers=auth(creator), json={"amount": 1000, "idempotency_key": "hold-key-01"})
+    blocked_payout = await api.post("/payouts", headers=auth(creator), json={"amount": 5000, "idempotency_key": "hold-key-01"})
     assert blocked_payout.status_code == 409
 
     released = await api.post(f"/admin/earnings/{sid}/release", headers=auth(admin))

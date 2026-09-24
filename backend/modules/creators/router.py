@@ -12,6 +12,7 @@ from core.deps import get_db
 from modules.auth.deps import get_current_user
 from core.money import ZERO
 from core.platforms import Platform as CorePlatform
+from modules.auth import schemas as auth_schemas
 from modules.auth.models import Role, SocialAccount, User
 from modules.auth.providers import REGISTRY as OAUTH_PROVIDERS
 from modules.campaigns import models as campaign_models
@@ -56,6 +57,39 @@ async def set_bank_details(
     await db.commit()
     await db.refresh(account)
     return schemas.BankAccountOut.from_model(account)
+
+
+@router.delete("/me/bank-details", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_bank_details(
+    payload: auth_schemas.StepUpOnly,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Removes the saved destination. A masked snapshot survives on any
+    existing payout receipt (those store their own copy at send time —
+    see `Payout.bank_code`/`account_number`, never a live join to this
+    table), so deleting it here never breaks past provenance."""
+    from modules.auth.router import consume_step_up
+
+    if user.role != Role.creator:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only a creator account has bank details")
+    account = await db.get(models.CreatorBankAccount, user.id)
+    if account is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No bank details on file yet")
+
+    from modules.payouts.models import Payout, PayoutStatus
+
+    pending = await db.scalar(
+        select(Payout.id).where(
+            Payout.creator_id == user.id, Payout.status.in_((PayoutStatus.pending, PayoutStatus.processing))
+        )
+    )
+    if pending:
+        raise HTTPException(status.HTTP_409_CONFLICT, "A payout is still in flight — wait for it to finish first.")
+
+    await consume_step_up(db, payload.step_up_token, "delete_bank_details", user.id)
+    await db.delete(account)
+    await db.commit()
 
 
 @router.get("/me/bank-details", response_model=schemas.BankAccountOut)
@@ -111,6 +145,7 @@ async def _profile_out(user: User, profile: models.CreatorProfile, db: AsyncSess
         discovery_source=profile.discovery_source,
         experience=profile.experience,
         goals=list(profile.goals or []),
+        country=profile.country,
         onboarding_completed=user.onboarding_completed,
         updated_at=profile.updated_at,
     )
@@ -176,6 +211,7 @@ async def complete_onboarding(
     profile.discovery_source = payload.discovery_source
     profile.experience = payload.experience
     profile.goals = payload.goals
+    profile.country = payload.country
     if user.onboarded_at is None:
         user.onboarded_at = datetime.now(timezone.utc)
     await db.commit()

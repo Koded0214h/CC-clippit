@@ -25,6 +25,7 @@ import modules.reports.models  # noqa: E402,F401
 import modules.submissions.models  # noqa: E402,F401
 import modules.support.models  # noqa: E402,F401
 import modules.uploads.models  # noqa: E402,F401
+import modules.wallet.models  # noqa: E402,F401
 
 config = context.config
 if config.config_file_name is not None:

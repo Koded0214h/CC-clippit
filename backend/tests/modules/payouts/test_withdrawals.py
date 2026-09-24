@@ -83,7 +83,7 @@ async def test_a_withdrawal_reserves_sends_and_settles(api, intel):
     r = await _withdraw(api, creator, 6000)
     assert r.status_code == 201, r.text
     p = r.json()
-    assert p["status"] == "succeeded" and p["amount"] == 6000 and p["fee"] == 0 and p["net"] == 6000
+    assert p["status"] == "succeeded" and p["amount"] == 6000 and p["fee"] == 420 and p["net"] == 5580
     assert p["reference"].startswith("CLP-") and p["sandbox"] is True
     assert p["destination"] == {"bank_code": "058", "bank_name": "Guaranty Trust Bank", "account_number_masked": "******6789", "account_name": "SANDBOX ACCOUNT 6789"}
     assert p["completed_at"] and p["creator_name"] == "Test creator"
@@ -102,11 +102,11 @@ async def test_the_receipt_says_where_the_money_came_from(api, intel):
 
 
 async def test_a_partial_withdrawal_leaves_the_rest_payable(api, intel):
-    _, creator, _ = await _earner(api, intel)
-    assert (await _withdraw(api, creator, 2500)).json()["status"] == "succeeded"
+    _, creator, _ = await _earner(api, intel, views=20_000)  # ₦10,000 payable
+    assert (await _withdraw(api, creator, 5000)).json()["status"] == "succeeded"
     b = await _balance(api, creator)
-    assert b["payable"] == 3500 and b["paid_all_time"] == 2500
-    assert (await _withdraw(api, creator, 3500)).status_code == 201
+    assert b["payable"] == 5000 and b["paid_all_time"] == 5000
+    assert (await _withdraw(api, creator, 5000)).status_code == 201
     assert (await _balance(api, creator))["payable"] == 0
 
 
@@ -122,9 +122,9 @@ async def test_earnings_still_in_the_hold_cannot_be_withdrawn(api, intel):
     campaign = await open_campaign(api, org, expected_views=1_000_000, payout_rule={"rate_per_1000_views": 500, "min_views_threshold": 0})
     creator = await make_creator(api)
     sid = (await submit_clip(api, creator, campaign["id"])).json()["id"]
-    await earn(api, intel, sid, 5000)
+    await earn(api, intel, sid, 12_000)  # ₦6,000, still in the hold
     await verified_bank(api, creator)
-    r = await _withdraw(api, creator, 1000)
+    r = await _withdraw(api, creator, 6000)
     assert r.status_code == 409 and r.json()["detail"]["code"] == "insufficient_payable"
 
 
@@ -140,12 +140,12 @@ async def test_an_unverified_bank_account_cannot_receive_money(api, intel):
     campaign = await open_campaign(api, org, expected_views=1_000_000, payout_rule={"rate_per_1000_views": 500, "min_views_threshold": 0})
     creator = await make_creator(api)
     sid = (await submit_clip(api, creator, campaign["id"])).json()["id"]
-    await earn(api, intel, sid, 5000)
+    await earn(api, intel, sid, 12_000)  # ₦6,000
     await clear_hold(creator["user"]["id"])
-    r = await _withdraw(api, creator, 1000)
+    r = await _withdraw(api, creator, 6000)
     assert r.status_code == 409 and r.json()["detail"]["code"] == "bank_not_verified"
     await api.put("/creators/me/bank-details", headers=auth(creator), json={"bank_code": "058", "bank_name": "GTBank", "account_number": "0123456789"})
-    assert (await _withdraw(api, creator, 1000)).json()["detail"]["code"] == "bank_not_verified"  # saved, not verified
+    assert (await _withdraw(api, creator, 6000)).json()["detail"]["code"] == "bank_not_verified"  # saved, not verified
 
 
 async def test_only_creators_withdraw_and_only_verified_ones(api, intel):
@@ -161,28 +161,28 @@ async def test_only_creators_withdraw_and_only_verified_ones(api, intel):
 
 async def test_a_repeated_request_key_is_one_payout(api, intel):
     _, creator, _ = await _earner(api, intel)
-    first = (await _withdraw(api, creator, 3000, key="confirm-screen-1")).json()
-    second = await _withdraw(api, creator, 3000, key="confirm-screen-1")
+    first = (await _withdraw(api, creator, 6000, key="confirm-screen-1")).json()
+    second = await _withdraw(api, creator, 6000, key="confirm-screen-1")
     assert second.status_code == 201 and second.json()["id"] == first["id"]
-    assert (await _balance(api, creator))["paid_all_time"] == 3000  # not 6000
+    assert (await _balance(api, creator))["paid_all_time"] == 6000  # not 12000
     listed = (await api.get("/payouts", headers=auth(creator))).json()
     assert listed["total"] == 1
 
 
 async def test_reusing_a_key_for_a_different_amount_is_refused(api, intel):
     _, creator, _ = await _earner(api, intel)
-    await _withdraw(api, creator, 3000, key="same-key-1")
-    r = await _withdraw(api, creator, 1000, key="same-key-1")
+    await _withdraw(api, creator, 5000, key="same-key-1")
+    r = await _withdraw(api, creator, 6000, key="same-key-1")
     assert r.status_code == 409 and r.json()["detail"]["code"] == "idempotency_conflict"
 
 
 async def test_two_simultaneous_withdrawals_cannot_spend_the_same_money(api, intel):
     _, creator, _ = await _earner(api, intel)  # ₦6,000 payable
-    results = await asyncio.gather(_withdraw(api, creator, 4000), _withdraw(api, creator, 4000))
+    results = await asyncio.gather(_withdraw(api, creator, 5000), _withdraw(api, creator, 5000))
     codes = sorted(r.status_code for r in results)
     assert codes == [201, 409], [r.text for r in results]
     b = await _balance(api, creator)
-    assert b["paid_all_time"] == 4000 and b["payable"] == 2000
+    assert b["paid_all_time"] == 5000 and b["payable"] == 1000
 
 
 # --- when the transfer doesn't go through ----------------------------------------------------------------------------
@@ -217,7 +217,7 @@ async def test_an_unreachable_provider_leaves_the_payout_pending_and_the_money_r
     assert p["status"] == "pending"
     b = await _balance(api, creator)
     assert b["payable"] == 0 and b["processing"] == 6000  # reserved: can't be spent twice while unknown
-    assert (await _withdraw(api, creator, 1000)).status_code == 409
+    assert (await _withdraw(api, creator, 5000)).status_code == 409
 
 
 async def test_reconciliation_sends_a_payout_that_was_reserved_but_never_sent(api, intel, monkeypatch):
@@ -247,13 +247,13 @@ async def test_a_transfer_that_settles_later_completes_by_webhook(api, intel):
     campaign = await open_campaign(api, org, expected_views=1_000_000, payout_rule={"rate_per_1000_views": 500, "min_views_threshold": 0})
     creator = await make_creator(api)
     sid = (await submit_clip(api, creator, campaign["id"])).json()["id"]
-    await earn(api, intel, sid, 6000)
+    await earn(api, intel, sid, 12_000)  # ₦6,000
     await clear_hold(creator["user"]["id"])
     await verified_bank(api, creator, number="0123459999")  # the sandbox settles this one asynchronously
 
-    p = (await _withdraw(api, creator, 3000)).json()
+    p = (await _withdraw(api, creator, 6000)).json()
     assert p["status"] == "processing"
-    assert (await _balance(api, creator))["processing"] == 3000
+    assert (await _balance(api, creator))["processing"] == 6000
 
     body = json.dumps({"event": "transfer.success", "reference": p["reference"], "provider_reference": "SBX-1"}).encode()
     headers = {"X-Signature": sign(get_settings().payment_webhook_secret, body)}
@@ -261,7 +261,7 @@ async def test_a_transfer_that_settles_later_completes_by_webhook(api, intel):
     assert r.status_code == 200 and r.json()["handled"] is True
     assert (await api.get(f"/payouts/{p['id']}", headers=auth(creator))).json()["status"] == "succeeded"
     b = await _balance(api, creator)
-    assert b["paid_all_time"] == 3000 and b["processing"] == 0
+    assert b["paid_all_time"] == 6000 and b["processing"] == 0
 
 
 async def test_a_failed_transfer_webhook_releases_the_money_and_a_replay_is_harmless(api, intel):
@@ -269,10 +269,10 @@ async def test_a_failed_transfer_webhook_releases_the_money_and_a_replay_is_harm
     campaign = await open_campaign(api, org, expected_views=1_000_000, payout_rule={"rate_per_1000_views": 500, "min_views_threshold": 0})
     creator = await make_creator(api)
     sid = (await submit_clip(api, creator, campaign["id"])).json()["id"]
-    await earn(api, intel, sid, 6000)
+    await earn(api, intel, sid, 12_000)  # ₦6,000
     await clear_hold(creator["user"]["id"])
     await verified_bank(api, creator, number="0123459999")
-    p = (await _withdraw(api, creator, 3000)).json()
+    p = (await _withdraw(api, creator, 6000)).json()
 
     body = json.dumps({"event": "transfer.failed", "reference": p["reference"], "failure_reason": "Account closed."}).encode()
     headers = {"X-Signature": sign(get_settings().payment_webhook_secret, body)}
@@ -280,7 +280,7 @@ async def test_a_failed_transfer_webhook_releases_the_money_and_a_replay_is_harm
     assert (await api.post("/webhooks/payments", content=body, headers=headers)).json()["handled"] is True  # replay: acknowledged, no effect
     got = (await api.get(f"/payouts/{p['id']}", headers=auth(creator))).json()
     assert got["status"] == "failed" and got["failure_reason"] == "Account closed."
-    assert (await _balance(api, creator))["payable"] == 3000  # 6,000 views = ₦3,000, all of it back
+    assert (await _balance(api, creator))["payable"] == 6000  # 12,000 views = ₦6,000, all of it back
 
 
 async def test_a_late_success_cannot_flip_a_payout_that_already_failed(api, intel, monkeypatch):
@@ -301,13 +301,13 @@ async def test_a_late_success_cannot_flip_a_payout_that_already_failed(api, inte
 
 
 async def test_the_oldest_earnings_are_paid_out_first(api, intel):
-    _, creator, sid = await _earner(api, intel, views=3000)  # ₦1,500
-    await earn(api, intel, sid, 7000)  # another ₦2,000, accrued later
+    _, creator, sid = await _earner(api, intel, views=12_000)  # ₦6,000
+    await earn(api, intel, sid, 28_000)  # another ₦8,000, accrued later
     await clear_hold(creator["user"]["id"])
-    await _withdraw(api, creator, 1500)
+    await _withdraw(api, creator, 6000)
     history = (await api.get("/earnings/history", headers=auth(creator))).json()["items"]
     states = {row["amount"]: row["state"] for row in history}
-    assert states == {1500: "Paid", 2000: "Payable"}  # the older entry left first
+    assert states == {6000: "Paid", 8000: "Payable"}  # the older entry left first
 
 
 async def test_a_partly_withdrawn_entry_shows_as_processing_not_payable(api, intel, monkeypatch):
@@ -317,19 +317,19 @@ async def test_a_partly_withdrawn_entry_shows_as_processing_not_payable(api, int
         raise ProviderError("timeout")
 
     monkeypatch.setattr(SandboxProvider, "create_transfer", down)
-    await _withdraw(api, creator, 1000)
+    await _withdraw(api, creator, 6000)
     row = (await api.get("/earnings/history", headers=auth(creator))).json()["items"][0]
     assert row["state"] == "Processing"
 
 
 async def test_allocations_always_sum_to_the_payout(api, intel):
-    _, creator, sid = await _earner(api, intel, views=3000)
-    await earn(api, intel, sid, 7000)
+    _, creator, sid = await _earner(api, intel, views=12_000)  # ₦6,000
+    await earn(api, intel, sid, 28_000)  # another ₦8,000, accrued later
     await clear_hold(creator["user"]["id"])
-    p = (await _withdraw(api, creator, 2750)).json()
+    p = (await _withdraw(api, creator, 10_000)).json()  # spans both entries
     async with db_session() as db:
         total = sum(a.amount for a in await db.scalars(select(payout_models.PayoutAllocation).where(payout_models.PayoutAllocation.payout_id == p["id"])))
-    assert total == Decimal("2750.00")
+    assert total == Decimal("10000.00")
 
 
 # --- visibility ----------------------------------------------------------------------------------------------------------
@@ -338,15 +338,15 @@ async def test_allocations_always_sum_to_the_payout(api, intel):
 async def test_a_payout_is_visible_to_its_creator_and_admin_only(api, intel):
     _, creator, _ = await _earner(api, intel)
     other = await make_creator(api)
-    p = (await _withdraw(api, creator, 1000)).json()
+    p = (await _withdraw(api, creator, 5000)).json()
     assert (await api.get(f"/payouts/{p['id']}", headers=auth(other))).status_code == 404
     assert (await api.get("/payouts", headers=auth(other))).json() == {"items": [], "total": 0}
 
 
 async def test_payouts_list_newest_first(api, intel):
-    _, creator, _ = await _earner(api, intel)
-    a = (await _withdraw(api, creator, 1000)).json()
-    b = (await _withdraw(api, creator, 1000)).json()
+    _, creator, _ = await _earner(api, intel, views=24_000)  # ₦12,000
+    a = (await _withdraw(api, creator, 5000)).json()
+    b = (await _withdraw(api, creator, 5000)).json()
     ids = [p["id"] for p in (await api.get("/payouts", headers=auth(creator))).json()["items"]]
     assert ids == [b["id"], a["id"]]
 

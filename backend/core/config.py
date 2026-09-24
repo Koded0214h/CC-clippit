@@ -94,8 +94,9 @@ class Settings(BaseSettings):
     otp_resend_cooldown_seconds: int = 60
 
     # --- Uploads -----------------------------------------------------------
-    # `local` writes under storage_local_dir and serves it at /media. R2 is
-    # the plan's production target and slots in behind core.storage.
+    # `local` writes under storage_local_dir and serves it at /media.
+    # `cloudinary` stages the same way, then uploads to Cloudinary and
+    # serves its CDN URL directly — see core.storage.CloudinaryStorage.
     storage_backend: str = "local"
     storage_local_dir: str = "./var/uploads"
     public_base_url: str = "http://localhost:8000"
@@ -103,19 +104,29 @@ class Settings(BaseSettings):
     max_video_bytes: int = 250 * 1024 * 1024
     max_evidence_bytes: int = 25 * 1024 * 1024
 
+    cloudinary_cloud_name: str = ""
+    cloudinary_api_key: str = ""
+    cloudinary_api_secret: str = ""
+
     # --- Money -------------------------------------------------------------
-    # `sandbox` is deterministic and never touches a network. A real
-    # provider (Squad / Paystack / Payaza — plan §26, undecided) is an
-    # adapter behind integrations.payments.PaymentProvider.
+    # `sandbox` is deterministic and never touches a network. Paystack is
+    # the PRD V1 locked provider (integrations.payments.PaymentProvider).
     payment_provider: str = "sandbox"  # sandbox | paystack
     # Paystack: the secret key is also the webhook signing key. Use an
     # sk_test_ key while developing; production requires sk_live_.
     paystack_secret_key: str = ""
     paystack_base_url: str = "https://api.paystack.co"
     payment_webhook_secret: str = "dev-only-not-secret"
-    funding_fee_rate: float = 0.015
+    # PRD V1 §"Locked platform decisions": 15% on the initial campaign pot
+    # (non-refundable), 2.5% on a top-up (wallet or live-campaign), 2.5% on
+    # the refundable remainder of a manual cancellation, 7% on a wallet
+    # withdrawal — the same rate for both a creator and a brand withdrawal.
+    funding_fee_rate: float = 0.15
+    topup_fee_rate: float = 0.025
+    cancellation_fee_rate: float = 0.025
+    withdrawal_fee_rate: float = 0.07
     earnings_hold_days: int = 5
-    min_withdrawal: int = 1000
+    min_withdrawal: int = 5000
 
     # Run settlement / sweeps / payout reconciliation inside the API process.
     background_jobs_enabled: bool = False

@@ -70,6 +70,12 @@ class CreatorProfileUpdate(BaseModel):
     bio: str | None = Field(default=None, max_length=240)
     photo_upload_id: uuid.UUID | None = None
     interests: list[str] | None = Field(default=None, max_length=12)
+    country: str | None = Field(default=None, min_length=2, max_length=2)
+
+    @field_validator("country")
+    @classmethod
+    def upper_country(cls, value: str | None) -> str | None:
+        return value.upper() if value else None
 
     @field_validator("display_name", "bio")
     @classmethod
@@ -105,6 +111,12 @@ class CreatorOnboarding(BaseModel):
     discovery_source: str | None = Field(default=None, max_length=60)
     experience: str | None = Field(default=None, max_length=80)
     goals: list[str] = Field(default_factory=list, max_length=8)
+    country: str | None = Field(default=None, min_length=2, max_length=2)
+
+    @field_validator("country")
+    @classmethod
+    def upper_country(cls, value: str | None) -> str | None:
+        return value.upper() if value else None
 
     @field_validator("display_name")
     @classmethod
@@ -137,6 +149,7 @@ class CreatorProfileOut(BaseModel):
     discovery_source: str | None
     experience: str | None
     goals: list[str]
+    country: str | None = None
     onboarding_completed: bool
     updated_at: datetime
 
@@ -215,6 +228,7 @@ class OnboardingDraftPatch(BaseModel):
     discovery_source: str | None = Field(default=None, max_length=60)
     experience: str | None = Field(default=None, max_length=80)
     goals: list[str] | None = Field(default=None, max_length=8)
+    country: str | None = Field(default=None, min_length=2, max_length=2)
 
 
 class OnboardingDraftOut(BaseModel):

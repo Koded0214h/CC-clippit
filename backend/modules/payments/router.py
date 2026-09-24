@@ -66,8 +66,12 @@ async def payments_webhook(request: Request, db: AsyncSession = Depends(get_db))
         await db.commit()
         return {"received": True, "handled": True, "first_time": first_time}
 
-    from modules.payouts import service as payout_service  # imported here: payouts depends on this package's provider edge
+    # imported here: payouts/wallet depend on this package's provider edge
+    from modules.payouts import service as payout_service
+    from modules.wallet import service as wallet_service
 
     handled = await payout_service.apply_transfer_event(db, event)
+    if not handled:
+        handled = await wallet_service.apply_transfer_event(db, event)
     await db.commit()
     return {"received": True, "handled": handled}

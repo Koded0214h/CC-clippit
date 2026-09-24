@@ -22,7 +22,7 @@ from modules.auth.internal_router import router as auth_internal_router
 from modules.auth.profile_router import router as auth_profile_router
 from modules.auth.google_router import router as auth_google_router
 from modules.auth.router import router as auth_router
-from modules.auth.social_router import router as auth_social_router
+from modules.auth.social_router import router as auth_social_router, webhook_router as auth_social_webhook_router
 from modules.campaigns.brand_router import router as brand_router
 from modules.campaigns.drafts_router import router as campaign_drafts_router
 from modules.campaigns.router import router as campaigns_router
@@ -45,6 +45,7 @@ from modules.submissions.router import router as submissions_router
 from modules.support.admin_router import router as support_admin_router
 from modules.support.router import router as support_router
 from modules.uploads.router import media_router, router as uploads_router
+from modules.wallet.router import router as wallet_router
 
 import modules.scheduled  # noqa: F401  (registers the periodic jobs)
 
@@ -73,6 +74,7 @@ def rate_limit_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse
 app.include_router(auth_router)
 app.include_router(auth_google_router)
 app.include_router(auth_social_router)
+app.include_router(auth_social_webhook_router)
 app.include_router(auth_profile_router)
 app.include_router(auth_internal_router)
 
@@ -89,6 +91,7 @@ app.include_router(funding_router)
 app.include_router(brand_router)
 app.include_router(payments_router)
 app.include_router(payouts_router)
+app.include_router(wallet_router)
 app.include_router(earnings_router)
 app.include_router(reviews_router)
 app.include_router(admin_router)

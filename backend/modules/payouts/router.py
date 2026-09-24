@@ -4,8 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from core.config import get_settings
 from core.deps import get_db
-from core.money import to_decimal
+from core.money import quantize, to_decimal
 from core.rate_limit import limiter
 from integrations.payments import get_provider
 from integrations.payments.base import AccountNotFound, ProviderError
@@ -74,6 +75,21 @@ async def verify_bank_details(request: Request, user: User = Depends(get_current
 
 
 # --- withdrawals ----------------------------------------------------------------------------
+
+
+@router.post("/payouts/quote", response_model=schemas.PayoutQuoteOut)
+@limiter.limit("30/minute")
+async def quote_payout(request: Request, payload: schemas.PayoutCreate, user: User = Depends(get_current_user)):
+    """Validates amount and destination and previews the fee/net amount —
+    doesn't reserve anything. `idempotency_key` is accepted for shape
+    parity with `POST /payouts` but unused here; nothing is created."""
+    _creator(user)
+    amount = quantize(to_decimal(payload.amount))
+    settings = get_settings()
+    if amount < settings.min_withdrawal:
+        raise HTTPException(422, f"The minimum withdrawal is ₦{settings.min_withdrawal:,}.")
+    fee = quantize(amount * to_decimal(settings.withdrawal_fee_rate))
+    return schemas.PayoutQuoteOut(amount=amount, fee=fee, net_amount=amount - fee)
 
 
 @router.post("/payouts", response_model=schemas.PayoutOut, status_code=status.HTTP_201_CREATED)

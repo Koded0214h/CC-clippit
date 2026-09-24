@@ -124,7 +124,7 @@ async def test_funding_order_quotes_pot_fee_and_total(api):
     r = await api.post(f"/campaigns/{c['id']}/funding", headers=auth(org), json={"method": "bank"})
     assert r.status_code == 201
     order = r.json()
-    assert order["pot"] == 500000 and order["fee"] == 7500 and order["total"] == 507500  # 1.5% fee
+    assert order["pot"] == 500000 and order["fee"] == 75000 and order["total"] == 575000  # 15% fee
     assert order["status"] == "awaiting_payment" and order["sandbox"] is True
     assert order["reference"].startswith("CLP-")
     assert order["collection"]["account_number"] and len(order["collection"]["account_number"]) == 10

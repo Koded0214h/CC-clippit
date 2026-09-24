@@ -188,17 +188,19 @@ async def read_pool(
 @router.post("/{campaign_ref}/join", response_model=schemas.MembershipOut, status_code=status.HTTP_201_CREATED)
 async def join_campaign(
     campaign_ref: str,
+    invite_code: str | None = None,
     user: User = Depends(get_verified_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Join before submitting — powers the Joined badge and capacity checks
-    even for a creator who hasn't posted a clip yet."""
+    even for a creator who hasn't posted a clip yet. `invite_code` is only
+    checked for an invite-mode campaign — see `service.join_campaign`."""
     if user.role != Role.creator:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Only a creator account can join a campaign")
     campaign = await _load(campaign_ref, db)
     service.ensure_visible(campaign, user)
     try:
-        membership = await service.join_campaign(db, campaign, user)
+        membership = await service.join_campaign(db, campaign, user, invite_code=invite_code)
     except service.MembershipError as exc:
         raise HTTPException(exc.status_code, exc.message) from exc
     await db.commit()
@@ -264,6 +266,10 @@ async def update_campaign(
         await owned_upload(db, changes["cover_image_upload_id"], user.id, kinds=("image",))
     if "platforms" in changes:
         changes["platforms"] = [p.value if hasattr(p, "value") else p for p in changes["platforms"]]
+    if "assets" in changes and changes["assets"] is not None:
+        changes["assets"] = [a if isinstance(a, dict) else a.model_dump() for a in changes["assets"]]
+    if changes.get("access_mode") == models.AccessMode.invite and campaign.invite_code is None:
+        changes["invite_code"] = await service.unique_invite_code(db)
     for field, value in changes.items():
         setattr(campaign, field, value)
 
@@ -356,14 +362,22 @@ async def activate_campaign(
 
 
 @router.post("/{campaign_ref}/pause", response_model=schemas.CampaignOut)
-async def pause_entries(campaign_ref: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    """Stop new submissions. Clips already in keep earning."""
+async def pause_entries(
+    campaign_ref: str,
+    mode: Literal["acquisition", "full"] = "acquisition",
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """`acquisition` (the default): stop new joins/submissions, clips
+    already in keep earning. `full`: also freeze accrual on already-approved
+    submissions (see earnings.service.settle_submission) until resumed."""
     campaign = await _load(campaign_ref, db)
     service.ensure_can_manage(campaign, user)
     if campaign.status != models.CampaignStatus.active:
         raise HTTPException(status.HTTP_409_CONFLICT, "Only a live campaign can be paused.")
     campaign.accepting_entries = False
-    audit.record(db, "campaign.paused", actor_id=user.id, campaign_id=campaign.id)
+    campaign.payouts_frozen = mode == "full"
+    audit.record(db, "campaign.paused", actor_id=user.id, campaign_id=campaign.id, mode=mode)
     await db.commit()
     return await _out(db, await _load(str(campaign.id), db), user)
 
@@ -375,6 +389,7 @@ async def resume_entries(campaign_ref: str, user: User = Depends(get_current_use
     if campaign.status != models.CampaignStatus.active:
         raise HTTPException(status.HTTP_409_CONFLICT, "Only a live campaign can be resumed.")
     campaign.accepting_entries = True
+    campaign.payouts_frozen = False
     audit.record(db, "campaign.resumed", actor_id=user.id, campaign_id=campaign.id)
     await db.commit()
     return await _out(db, await _load(str(campaign.id), db), user)

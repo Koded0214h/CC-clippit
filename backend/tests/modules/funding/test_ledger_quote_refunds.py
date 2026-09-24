@@ -13,7 +13,7 @@ async def test_funding_quote_matches_what_the_order_actually_charges(api):
     campaign = (await api.post("/campaigns", headers=auth(org), json=campaign_body(pot=100_000, expected_views=None))).json()
 
     quote = (await api.post(f"/campaigns/{campaign['id']}/funding/quote", headers=auth(org))).json()
-    assert quote["pot"] == 100_000 and quote["fee"] == 1500 and quote["total"] == 101_500
+    assert quote["pot"] == 100_000 and quote["fee"] == 15_000 and quote["total"] == 115_000
     assert "bank" in quote["methods"] and "card" in quote["methods"]
 
     order = (await api.post(f"/campaigns/{campaign['id']}/funding", headers=auth(org), json={"method": "bank"})).json()
@@ -37,7 +37,7 @@ async def test_the_brand_ledger_lists_a_funded_campaigns_order(api, intel):
     assert ledger["total"] == 1
     row = ledger["items"][0]
     assert row["kind"] == "funding" and row["campaign_id"] == campaign["id"] and row["status"] == "confirmed"
-    assert row["amount"] == 50_750 and row["fee"] == 750
+    assert row["amount"] == 57_500 and row["fee"] == 7_500
 
     detail = await api.get(f"/organisations/me/transactions/{row['id']}", headers=auth(org))
     assert detail.status_code == 200 and detail.json() == row

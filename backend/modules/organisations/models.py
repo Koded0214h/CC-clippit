@@ -49,3 +49,25 @@ class OrganisationProfile(Base):
     draft_answers: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     draft_step: Mapped[str | None] = mapped_column(String(40), nullable=True)
     draft_revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+
+
+class OrganisationBankAccount(Base):
+    """The brand's own withdrawal destination — see `CreatorBankAccount`'s
+    docstring for why this is a one-account-at-a-time, re-verify-on-change
+    model. PRD V1's brand wallet withdrawal (7% fee) pays out here."""
+
+    __tablename__ = "organisation_bank_accounts"
+
+    organisation_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    bank_code: Mapped[str] = mapped_column(String(10), nullable=False)
+    bank_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    account_number: Mapped[str] = mapped_column(String(20), nullable=False)
+    account_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    verified: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

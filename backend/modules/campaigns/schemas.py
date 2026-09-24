@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from core.money import Money
 from core.platforms import Platform
 
-from .models import CampaignStatus, RuleKind
+from .models import AccessMode, CampaignStatus, EndCondition, RuleKind
 
 
 class PayoutRuleIn(BaseModel):
@@ -16,6 +16,8 @@ class PayoutRuleIn(BaseModel):
         gt=0,
         description="The most one creator can earn from this campaign, across all their clips",
     )
+    video_cap_amount: float | None = Field(default=None, gt=0, description="The most a single clip can earn")
+    max_submissions: int | None = Field(default=None, gt=0, description="The most clips one creator may submit")
     min_views_threshold: int = Field(default=1000, ge=0, description="Views required before anything is owed")
 
 
@@ -49,6 +51,16 @@ class RulesReplace(BaseModel):
     rules: list[RuleIn] = Field(max_length=20)
 
 
+class AssetIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    url: str = Field(min_length=1, max_length=2048)
+    kind: str | None = Field(default=None, max_length=40)
+
+
+class AssetOut(AssetIn):
+    pass
+
+
 class CampaignCreate(BaseModel):
     """`pot` (what the brand budgets) and `expected_views` (what that buys)
     are two views of one number. Send either; if both are sent, `pot` wins and
@@ -66,6 +78,9 @@ class CampaignCreate(BaseModel):
     duration_days: int | None = Field(default=None, ge=1, le=90)
     cover_image_upload_id: uuid.UUID | None = None
     rules: list[RuleIn] = Field(default_factory=list, max_length=20)
+    access_mode: AccessMode = AccessMode.public
+    assets: list[AssetIn] | None = Field(default=None, max_length=20)
+    end_condition: EndCondition | None = None
 
     @field_validator("platforms")
     @classmethod
@@ -100,6 +115,9 @@ class CampaignUpdate(BaseModel):
     platforms: list[Platform] | None = Field(default=None, min_length=1)
     duration_days: int | None = Field(default=None, ge=1, le=90)
     cover_image_upload_id: uuid.UUID | None = None
+    access_mode: AccessMode | None = None
+    assets: list[AssetIn] | None = Field(default=None, max_length=20)
+    end_condition: EndCondition | None = None
 
 
 class PoolOut(BaseModel):
@@ -163,6 +181,13 @@ class CampaignOut(BaseModel):
     #: The brand-facing word for `status`: Funding / Draft / Live / Completed.
     phase: str
     accepting_entries: bool
+    payouts_frozen: bool
+    access_mode: AccessMode
+    invite_code: str | None = None
+    assets: list[AssetOut] = []
+    end_condition: EndCondition | None = None
+    video_cap: float | None = None
+    max_submissions: int | None = None
     duration_days: int | None = None
     ends_at: datetime | None = None
     time_left: TimeLeft | None = None
@@ -274,6 +299,9 @@ class CampaignDraftPatch(BaseModel):
     duration_days: int | None = Field(default=None, ge=1, le=90)
     cover_image_upload_id: uuid.UUID | None = None
     rules: list[RuleIn] | None = Field(default=None, max_length=20)
+    access_mode: AccessMode | None = None
+    assets: list[AssetIn] | None = Field(default=None, max_length=20)
+    end_condition: EndCondition | None = None
 
 
 class CampaignDraftOut(BaseModel):
