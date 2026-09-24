@@ -1,4 +1,4 @@
-from . import facebook, instagram, threads, tiktok, x
+from . import facebook, instagram, threads, tiktok, x, youtube
 
 REGISTRY = {
     tiktok.PLATFORM: tiktok,
@@ -6,6 +6,7 @@ REGISTRY = {
     instagram.PLATFORM: instagram,
     threads.PLATFORM: threads,
     x.PLATFORM: x,
+    youtube.PLATFORM: youtube,
 }
 
 

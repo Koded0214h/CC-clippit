@@ -15,6 +15,7 @@ from .instagram import InstagramAdapter
 from .threads import ThreadsAdapter
 from .tiktok import TikTokAdapter
 from .x import XAdapter
+from .youtube import YouTubeAdapter
 
 REGISTRY: dict[Platform, SocialPlatformAdapter] = {
     Platform.tiktok: TikTokAdapter(),
@@ -22,6 +23,7 @@ REGISTRY: dict[Platform, SocialPlatformAdapter] = {
     Platform.facebook: FacebookAdapter(),
     Platform.threads: ThreadsAdapter(),
     Platform.x: XAdapter(),
+    Platform.youtube: YouTubeAdapter(),
 }
 
 

@@ -144,7 +144,13 @@ class FacebookAdapter:
                 resp = await client.get(
                     f"{GRAPH}/{post_id}/insights",
                     params={
-                        "metric": "post_impressions,post_impressions_unique,post_clicks",
+                        # post_video_views is Meta's official video-view
+                        # metric (3s+). Impressions/reach stay as secondary
+                        # signals for trust; earnings bill on `views`.
+                        "metric": (
+                            "post_impressions,post_impressions_unique,"
+                            "post_clicks,post_video_views"
+                        ),
                         "access_token": access_token or "",
                     },
                 )
@@ -185,11 +191,14 @@ class FacebookAdapter:
         likes = (post.get("likes") or {}).get("summary", {}).get("total_count")
         comments = (post.get("comments") or {}).get("summary", {}).get("total_count")
         shares = (post.get("shares") or {}).get("count")
+        # Prefer official video views. Never invent 0 from missing data;
+        # non-video posts typically have no view metric on Graph.
+        views = insights.get("post_video_views")
         return PlatformMetrics(
             platform=Platform.facebook,
             platform_content_id=str(post.get("id", "")),
             observed_at=datetime.now(timezone.utc),
-            views=None,
+            views=views,
             likes=likes,
             comments=comments,
             shares=shares,

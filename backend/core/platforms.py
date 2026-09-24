@@ -22,3 +22,22 @@ class Platform(str, enum.Enum):
     threads = "threads"
     x = "x"
     youtube = "youtube"
+
+
+#: PRD V1.0 locked set. Threads remains in the enum/adapters for already-
+#: built code paths, but product surfaces that gate "supported platforms"
+#: should use this frozenset rather than every Platform member.
+V1_PLATFORMS: frozenset[Platform] = frozenset(
+    {
+        Platform.instagram,
+        Platform.tiktok,
+        Platform.facebook,
+        Platform.x,
+        Platform.youtube,
+    }
+)
+
+
+def is_v1_platform(platform: Platform | str) -> bool:
+    value = platform if isinstance(platform, Platform) else Platform(platform)
+    return value in V1_PLATFORMS

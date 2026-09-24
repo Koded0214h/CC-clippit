@@ -32,14 +32,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.platforms import Platform
 from integrations.social import get_adapter
-from integrations.social.base import PostType, SocialPlatformAdapter
+from integrations.social.base import ContentUnavailable, PostType, SocialPlatformAdapter
 
 from . import comments, normalizer, repository
 from .contracts import SubmissionRef
 from .errors import IneligibleContent, UrlNotRecognized
 from .models import MetricSnapshot, SocialContent
 from .timeutils import as_utc
-from .tokens import TokenSource
+from .tokens import CreatorCredential, TokenSource
 
 #: How close to the previous observation a *numerically identical* reading
 #: has to be before we treat it as a duplicate write rather than a real
@@ -80,15 +80,20 @@ class IngestionService:
         content = await repository.content_for_submission(self._db, submission.submission_id)
         created_content = content is None
 
-        # One token lookup per ingest, shared by both adapter calls below.
-        token = (
-            await self._tokens.token_for(submission.creator_id, submission.platform)
-            if adapter.requires_creator_token
-            else None
-        )
+        # Token platforms need the creator OAuth token for every poll.
+        # API-key platforms (YouTube, X) only need the connected-account
+        # identity on first resolve, to prove the post belongs to them.
+        credential: CreatorCredential | None = None
+        if adapter.requires_creator_token or content is None:
+            credential = await self._tokens.credential_for(
+                submission.creator_id, submission.platform
+            )
+        token = credential.access_token if credential and adapter.requires_creator_token else None
 
         if content is None:
-            content = await self._resolve_and_store(submission, adapter, token)
+            content = await self._resolve_and_store(
+                submission, adapter, token, credential=credential
+            )
 
         metrics = await adapter.get_metrics(content.platform_content_id, access_token=token)
 
@@ -120,6 +125,8 @@ class IngestionService:
         submission: SubmissionRef,
         adapter: SocialPlatformAdapter,
         token: str | None,
+        *,
+        credential: CreatorCredential | None = None,
     ) -> SocialContent:
         content_id = await adapter.resolve_url(submission.url)
         if not content_id:
@@ -132,6 +139,20 @@ class IngestionService:
             raise IneligibleContent(
                 f"A {platform_content.post_type.value} cannot be submitted — "
                 "only original posts and quotes count."
+            )
+        # API-key adapters can read any public URL. Ownership must still
+        # match the connected account's platform user / channel id.
+        if (
+            not adapter.requires_creator_token
+            and credential is not None
+            and credential.platform_user_id
+            and platform_content.author_platform_user_id
+            and credential.platform_user_id != platform_content.author_platform_user_id
+        ):
+            raise ContentUnavailable(
+                f"This {submission.platform.value} post belongs to "
+                f"{platform_content.author_platform_user_id}, not the connected account "
+                f"({credential.platform_user_id})."
             )
         return await repository.add_content(
             self._db, normalizer.build_content(submission, platform_content)

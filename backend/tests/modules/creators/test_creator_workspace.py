@@ -61,8 +61,8 @@ async def test_connected_accounts_list_every_platform_and_what_can_be_connected(
     t = accounts["tiktok"]
     assert t["connected"] is True and t["handle"] == "@tobioncam" and t["connectable"] is True and t["connected_at"]
     assert accounts["instagram"]["connected"] is False and accounts["instagram"]["connectable"] is True
-    # YouTube has no sign-in flow yet, and the API says so instead of pretending.
-    assert accounts["youtube"]["connectable"] is False and accounts["youtube"]["connected"] is False
+    # YouTube is connectable once the OAuth provider is registered.
+    assert accounts["youtube"]["connectable"] is True and accounts["youtube"]["connected"] is False
 
 
 async def test_last_checked_is_when_clippit_last_read_a_post_on_that_platform(api, intel):

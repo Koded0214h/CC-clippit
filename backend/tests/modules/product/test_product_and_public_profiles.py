@@ -14,7 +14,7 @@ async def test_product_config_is_public_and_shapes_the_client_needs(api):
     body = r.json()
     assert body["hold_days"] == 5 and body["currency"] == "NGN"
     assert any(p["platform"] == "tiktok" and p["connectable"] for p in body["platforms"])
-    assert any(p["platform"] == "youtube" and not p["connectable"] for p in body["platforms"])
+    assert any(p["platform"] == "youtube" and p["connectable"] for p in body["platforms"])
     assert body["campaign_limits"]["max_duration_days"] == 90
     assert {d["slug"] for d in body["legal"]} >= {"terms", "privacy"}
 

@@ -46,6 +46,22 @@ async def test_returns_the_token_and_calls_the_documented_route():
     assert seen["secret"] == "shhh"
 
 
+async def test_credential_for_includes_platform_user_id():
+    source = _source(
+        lambda request: httpx.Response(
+            200,
+            json={
+                "access_token": "act.yt",
+                "platform_user_id": "UCchannel",
+                "expires_at": None,
+            },
+        )
+    )
+    cred = await source.credential_for(CREATOR_ID, Platform.youtube)
+    assert cred.access_token == "act.yt"
+    assert cred.platform_user_id == "UCchannel"
+
+
 @pytest.mark.parametrize("status", [404, 409])
 async def test_creator_problems_are_not_retryable(status):
     """404: never connected. 409: expired beyond refresh. Either way the

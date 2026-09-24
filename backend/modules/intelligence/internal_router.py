@@ -38,7 +38,13 @@ from integrations.social.base import (
 )
 
 from . import performance, repository, trust
-from .contracts import PerformanceResult, SubmissionRef, TrustResult, TrustReviewIn
+from .contracts import (
+    IntelligenceResult,
+    PerformanceResult,
+    SubmissionRef,
+    TrustResult,
+    TrustReviewIn,
+)
 from .errors import IneligibleContent, MissingCreatorToken, TokenLookupFailed, UrlNotRecognized
 from .models import TrustReview
 from .polling import PollingCoordinator
@@ -207,6 +213,54 @@ async def read_trust(submission_id: uuid.UUID, db: AsyncSession = Depends(get_db
             },
         )
     return result
+
+
+@router.get("/submissions/{submission_id}/intelligence", response_model=IntelligenceResult)
+async def read_intelligence(
+    submission_id: uuid.UUID,
+    since_snapshot_id: uuid.UUID | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """Performance + trust in one round trip (contracts.IntelligenceResult).
+
+    Billing still uses `/performance` alone so a trust outage cannot block
+    settlement reads; this combined shape is for dashboards and admin.
+    """
+    perf = await performance.performance_for_submission(
+        db, submission_id, since_snapshot_id=since_snapshot_id
+    )
+    if perf is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail={
+                "code": "no_observations",
+                "message": "No observations recorded for this submission.",
+            },
+        )
+    trust_result = await TrustService(db).result_for_submission(submission_id)
+    if trust_result is None:
+        # Still return performance; fabricate an insufficient_data trust
+        # block so callers always get both halves of the contract shape.
+        from datetime import datetime, timezone
+
+        from .contracts import TrustStatus
+
+        trust_result = TrustResult(
+            submission_id=submission_id,
+            status=TrustStatus.insufficient_data,
+            anomaly_score=0.0,
+            signals=[],
+            evaluated_at=datetime.now(timezone.utc),
+            comments_sampled=0,
+        )
+    return IntelligenceResult(
+        submission_id=submission_id,
+        platform=perf.content.platform,
+        metrics=perf.metrics,
+        features=perf.features,
+        trust=trust_result,
+        provenance=perf.provenance,
+    )
 
 
 @router.post("/submissions/{submission_id}/trust/review", status_code=status.HTTP_201_CREATED)

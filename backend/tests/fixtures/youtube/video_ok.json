@@ -1,0 +1,25 @@
+{
+  "items": [
+    {
+      "id": "dQw4w9WgXcQ",
+      "snippet": {
+        "publishedAt": "2026-09-01T12:00:00Z",
+        "channelId": "UCclippitchannel01",
+        "title": "Clippit campaign cut",
+        "description": "Must say the app is free.",
+        "channelTitle": "Clippit Creator"
+      },
+      "statistics": {
+        "viewCount": "12500",
+        "likeCount": "840",
+        "commentCount": "62"
+      },
+      "contentDetails": {
+        "duration": "PT45S"
+      },
+      "status": {
+        "privacyStatus": "public"
+      }
+    }
+  ]
+}

@@ -36,6 +36,34 @@ from integrations.social.base import (
 from .errors import MissingCreatorToken, TokenLookupFailed, UrlNotRecognized
 
 
+def cadence_from_settings() -> tuple[CadenceTier, ...]:
+    """Build the polling tiers from Settings so cadence is env-tunable
+    without editing this file (PRD: exact intervals TBD)."""
+    from core.config import get_settings
+
+    s = get_settings()
+    return (
+        CadenceTier(
+            max_age=timedelta(hours=24),
+            interval=timedelta(minutes=s.intelligence_cadence_day1_minutes),
+        ),
+        CadenceTier(
+            max_age=timedelta(days=7),
+            interval=timedelta(hours=s.intelligence_cadence_week1_hours),
+        ),
+        CadenceTier(
+            max_age=timedelta(days=s.intelligence_tracking_window_days),
+            interval=timedelta(hours=s.intelligence_cadence_month_hours),
+        ),
+    )
+
+
+def tracking_window_from_settings() -> timedelta:
+    from core.config import get_settings
+
+    return timedelta(days=get_settings().intelligence_tracking_window_days)
+
+
 class TrackingStatus(str, enum.Enum):
     """Lives here rather than next to the table so the policy layer stays
     free of SQLAlchemy; `models.py` imports it."""

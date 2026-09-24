@@ -19,6 +19,7 @@ poking at a real platform from a script without running the whole app.
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from typing import Protocol
 
 import httpx
@@ -31,9 +32,26 @@ from .errors import MissingCreatorToken, TokenLookupFailed
 DEFAULT_INTERNAL_BASE_URL = "http://127.0.0.1:8000"
 
 
+@dataclass(frozen=True)
+class CreatorCredential:
+    """Access token plus the platform's own user/channel id.
+
+    `platform_user_id` is required for ownership checks on API-key
+    platforms (YouTube, X) where metrics don't need the creator token but
+    submissions must still belong to the connected account.
+    """
+
+    access_token: str
+    platform_user_id: str | None = None
+
+
 class TokenSource(Protocol):
     async def token_for(self, creator_id: uuid.UUID, platform: Platform) -> str:
         """Return a usable access token, or raise `MissingCreatorToken`."""
+        ...
+
+    async def credential_for(self, creator_id: uuid.UUID, platform: Platform) -> CreatorCredential:
+        """Token plus platform user id, for ownership checks."""
         ...
 
 
@@ -59,6 +77,9 @@ class InternalApiTokenSource:
         self._timeout = timeout
 
     async def token_for(self, creator_id: uuid.UUID, platform: Platform) -> str:
+        return (await self.credential_for(creator_id, platform)).access_token
+
+    async def credential_for(self, creator_id: uuid.UUID, platform: Platform) -> CreatorCredential:
         url = f"{self._base_url}/internal/social-accounts/{creator_id}/{platform.value}/token"
         try:
             async with httpx.AsyncClient(timeout=self._timeout, transport=self._transport) as client:
@@ -91,7 +112,9 @@ class InternalApiTokenSource:
             )
 
         try:
-            token = (resp.json() or {}).get("access_token")
+            body = resp.json() or {}
+            token = body.get("access_token")
+            platform_user_id = body.get("platform_user_id")
         except ValueError as exc:
             raise TokenLookupFailed("The auth module returned a non-JSON token response.") from exc
 
@@ -99,22 +122,46 @@ class InternalApiTokenSource:
             raise MissingCreatorToken(
                 f"Auth returned an empty {platform.value} token for creator {creator_id}."
             )
-        return token
+        return CreatorCredential(
+            access_token=token,
+            platform_user_id=str(platform_user_id) if platform_user_id else None,
+        )
 
 
 class StaticTokenSource:
     """A dict pretending to be the auth module."""
 
-    def __init__(self, tokens: dict[tuple[uuid.UUID, Platform], str] | None = None) -> None:
+    def __init__(
+        self,
+        tokens: dict[tuple[uuid.UUID, Platform], str] | None = None,
+        *,
+        platform_user_ids: dict[tuple[uuid.UUID, Platform], str] | None = None,
+    ) -> None:
         self._tokens = tokens or {}
+        self._platform_user_ids = platform_user_ids or {}
 
-    def set(self, creator_id: uuid.UUID, platform: Platform, token: str) -> None:
+    def set(
+        self,
+        creator_id: uuid.UUID,
+        platform: Platform,
+        token: str,
+        *,
+        platform_user_id: str | None = None,
+    ) -> None:
         self._tokens[(creator_id, platform)] = token
+        if platform_user_id is not None:
+            self._platform_user_ids[(creator_id, platform)] = platform_user_id
 
     async def token_for(self, creator_id: uuid.UUID, platform: Platform) -> str:
+        return (await self.credential_for(creator_id, platform)).access_token
+
+    async def credential_for(self, creator_id: uuid.UUID, platform: Platform) -> CreatorCredential:
         token = self._tokens.get((creator_id, platform))
         if not token:
             raise MissingCreatorToken(
                 f"No token configured for creator {creator_id} on {platform.value}."
             )
-        return token
+        return CreatorCredential(
+            access_token=token,
+            platform_user_id=self._platform_user_ids.get((creator_id, platform)),
+        )

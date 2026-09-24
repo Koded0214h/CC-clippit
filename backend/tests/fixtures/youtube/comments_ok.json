@@ -1,0 +1,22 @@
+{
+  "items": [
+    {
+      "id": "thread1",
+      "snippet": {
+        "totalReplyCount": 0,
+        "topLevelComment": {
+          "id": "comment1",
+          "snippet": {
+            "textDisplay": "Fire edit",
+            "textOriginal": "Fire edit",
+            "authorDisplayName": "Ada",
+            "authorChannelId": {"value": "UCviewer1"},
+            "likeCount": 3,
+            "publishedAt": "2026-09-02T10:00:00Z"
+          }
+        }
+      }
+    }
+  ],
+  "nextPageToken": null
+}

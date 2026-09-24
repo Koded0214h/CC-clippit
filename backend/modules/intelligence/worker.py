@@ -28,8 +28,10 @@ from datetime import timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.database import AsyncSessionLocal
+from core.config import get_settings
 from .ingestion import IngestionService
 from .polling import PollingCoordinator
+from .scheduling import cadence_from_settings, tracking_window_from_settings
 from .tokens import InternalApiTokenSource
 
 logger = logging.getLogger(__name__)
@@ -43,16 +45,23 @@ def build_coordinator() -> PollingCoordinator:
     def ingestion_factory(session: AsyncSession) -> IngestionService:
         return IngestionService(session, token_source=token_source)
 
-    return PollingCoordinator(AsyncSessionLocal, ingestion_factory=ingestion_factory)
+    return PollingCoordinator(
+        AsyncSessionLocal,
+        ingestion_factory=ingestion_factory,
+        cadence=cadence_from_settings(),
+        tracking_window=tracking_window_from_settings(),
+    )
 
 
 async def run_forever(
     coordinator: PollingCoordinator,
     *,
-    tick: timedelta = DEFAULT_TICK,
+    tick: timedelta | None = None,
     stop: asyncio.Event | None = None,
 ) -> None:
     stop = stop or asyncio.Event()
+    if tick is None:
+        tick = timedelta(seconds=get_settings().intelligence_poll_tick_seconds)
     seconds = tick.total_seconds()
 
     while not stop.is_set():

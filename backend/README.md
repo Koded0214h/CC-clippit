@@ -73,9 +73,9 @@ has auth, campaigns, submissions, and creator bank-detail rows.
 
 **Done (Adam, live-proven unless noted)**
 
-- Adapters: TikTok, Instagram, Facebook, Threads, X. YouTube is on the
-  enum only — no adapter, no OAuth.
-- OAuth for those five. Callback lands on
+- Adapters: TikTok, Instagram, Facebook, Threads, X, **YouTube**.
+- OAuth for all six (YouTube = Google OAuth + channel identity; metrics
+  use `YOUTUBE_API_KEY`). Callback lands on
   `{FRONTEND_ORIGIN}/dashboard/settings?social=…&status=ok|error`
   (first origin if the env var is a CORS list). Default origin is
   `http://localhost:5174`.
@@ -88,7 +88,8 @@ has auth, campaigns, submissions, and creator bank-detail rows.
   `percent_given`, `percent_remaining`. Not a transfer and not a ledger.
 - Live against real accounts: TikTok, Instagram, Threads, X. Facebook
   login works; we only read **Page** posts, so a user with no Pages has
-  nothing to ingest.
+  nothing to ingest. YouTube is fixture-tested; needs a real API key +
+  OAuth client to live-prove.
 
 **Done (Koded) — see "Core product API" below**
 
@@ -102,12 +103,12 @@ has auth, campaigns, submissions, and creator bank-detail rows.
 - Wire the Next.js app to these endpoints (`frontend/lib/product.ts` and
   `lib/brand.ts` are still fixtures). Screen → endpoint map:
   `../architecture/api-coverage.md`.
-- Pick and write a real payment provider (D23) — nothing real moves until then.
-- Automated brief verification (D11): R2 + FFmpeg + Deepgram + an LLM behind
-  the existing `Verifier` interface. Today every clip needs a human.
-- YouTube adapter + OAuth (no sign-in flow, so no creator can connect it yet).
+- Align Core money/fees with PRD V1.0 (15% / 2.5% / 7% wallets) — Core lane.
+- Automated brief verification (D11): yt-dlp + Qwen3.8-Omni-Flash behind
+  the existing `Verifier` interface (Integrations / AI lane).
 - Confirm D1, D18, D22 with Adam — Core implemented D18 and D22 in a way that
   needs his acknowledgement (see the register).
+- Live-smoke YouTube with a real Data API key + OAuth client.
 
 Contracts and the decision register:
 `../architecture/intelligence-contracts.md`. Endpoint detail is in the
@@ -362,7 +363,7 @@ audit event naming the admin.
 |---|---|
 | `PUT /creators/me/onboarding` · `GET/PUT /creators/me/profile` | name, content lanes, platforms, discovery/experience/goals, photo |
 | `PUT /organisations/me/onboarding` · `GET/PUT /organisations/me/profile` | org identity, funding contact; `business_verified` is read-only here |
-| `GET /creators/me/accounts` | every platform, connected or not, with handle and when its views were last read. `connectable: false` for YouTube (no sign-in flow yet) |
+| `GET /creators/me/accounts` | every platform, connected or not, with handle and when its views were last read |
 | `GET /creators/me/overview` | dashboard home: closest-to-closing campaign, new lane matches, earnings |
 | `POST /uploads/images\|videos\|evidence` | streamed, size-capped, type sniffed from bytes; media served at `/media/…` |
 | `GET /notifications` · `POST …/{id}/read` · `POST …/read-all` | the inbox. `notify()` honours the toggles in `PATCH /profile/preferences`; money outcomes ignore them |
@@ -383,7 +384,8 @@ inbox), SMTP with `EMAIL_BACKEND=smtp`.
 `BACKGROUND_JOBS_ENABLED=true` starts, inside the API process:
 `earnings.settle` (5 min), `campaigns.sweep` (5 min — books final views, then
 closes on the deadline), `earnings.notify_payable` (15 min), `payouts.reconcile`
-(2 min). All are idempotent and safe to skip; each settles one clip per
+(2 min), `intelligence.poll` (tick from `INTELLIGENCE_POLL_TICK_SECONDS`).
+All are idempotent and safe to skip; each settles one clip per
 transaction so a bad clip stops nothing. It is the same shape as
 Intelligence's worker: replace the runner (decision D4) and the functions stay.
 
@@ -414,6 +416,10 @@ boundary, the canonical data model, and the decisions register.
 | facebook | `integrations/social/facebook.py` | yes | yes |
 | threads | `integrations/social/threads.py` | yes | yes |
 | x | `integrations/social/x.py` | no (twitterapi.io key) | yes |
+| youtube | `integrations/social/youtube.py` | no (Data API key) | yes |
+
+PRD V1 platforms are `core.platforms.V1_PLATFORMS` (Instagram, TikTok,
+Facebook, X, YouTube). Threads remains implemented but is outside V1.
 
 Ingestion (`modules/intelligence/ingestion.py`) turns a submission into
 stored observations:
@@ -473,6 +479,7 @@ scheduler's handler body is `await coordinator.run_due()`.
 | `POST /internal/submissions/{id}/metrics` | Register a submission (`SubmissionRef` body → 201) or force a fresh reading | yes |
 | `GET /internal/submissions/{id}/performance` | Everything we know, from our tables | never |
 | `GET /internal/submissions/{id}/trust` | Latest trust verdict | never |
+| `GET /internal/submissions/{id}/intelligence` | Performance + trust in one response | never |
 | `POST /internal/submissions/{id}/trust/review` | Record a human label | never |
 | `GET /internal/trust/rules` | Thresholds currently in force | never |
 | `POST /internal/submissions/{id}/tracking/stop` | Campaign closed or creator withdrew | never |

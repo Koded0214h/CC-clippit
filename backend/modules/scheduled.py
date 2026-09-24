@@ -3,6 +3,7 @@
 — settlement cadence in particular should follow Intelligence's polling tiers
 (decision D16), which are also untuned."""
 
+from core.config import get_settings
 from core.jobs import register
 from modules.earnings import jobs as earnings_jobs
 from modules.payouts import jobs as payout_jobs
@@ -24,7 +25,22 @@ async def _reconcile() -> None:
     await payout_jobs.reconcile_tick()
 
 
+async def _intelligence_poll() -> None:
+    """One Intelligence tick inside the API process when background jobs
+    are enabled. The dedicated `python -m modules.intelligence.worker`
+    process remains the preferred production path; this is the same
+    `run_due()` body so either runtime is enough for Stage 3."""
+    from modules.intelligence.worker import build_coordinator
+
+    await build_coordinator().run_due()
+
+
 register("earnings.settle", 300, _settle)
 register("campaigns.sweep", 300, _sweep)
 register("earnings.notify_payable", 900, _payable)
 register("payouts.reconcile", 120, _reconcile)
+register(
+    "intelligence.poll",
+    max(get_settings().intelligence_poll_tick_seconds, 30),
+    _intelligence_poll,
+)

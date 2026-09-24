@@ -183,9 +183,9 @@ than calling a method and catching an exception.
 | **TikTok** | No — creator token, own videos only | yes | yes | yes | **no** | `service-test/tt` |
 | X | Yes — service key (twitterapi.io) | yes | yes | yes | yes | `service-test/X` |
 | Instagram | No — creator token | yes | yes | yes | yes | `service-test/meta_insta` |
-| Facebook | No — page token | impressions/reach | yes | yes | yes | `service-test/meta_fb` |
-| Threads | No — creator token | yes | yes | yes | yes | `service-test/meta_threads` |
-| YouTube | Yes — API key, no OAuth | yes | yes | yes | yes | not yet |
+| Facebook | No — page token | **post_video_views** (+ impressions/reach) | yes | yes | yes | `service-test/meta_fb` |
+| Threads | No — creator token | yes | yes | yes | yes | `service-test/meta_threads` (extra vs PRD V1) |
+| YouTube | Yes — Data API key; OAuth for channel identity | yes | yes | yes | yes | adapter + fixtures ✅ |
 
 TikTok's constraint shapes Stage 1 and is worth stating plainly: the Display
 API only returns the **authorized creator's own** videos. A submitted URL
@@ -193,12 +193,18 @@ that doesn't appear in that creator's video list cannot be read at all —
 which means ownership verification is implicit for TikTok, and there is no
 comment-text pipeline for it. Exact query semantics to confirm in Stage 1.
 
+YouTube / X use a service key for metrics; creators still connect via OAuth
+so Core can require a connected account and Intelligence can verify
+`author_platform_user_id` against `social_accounts.platform_user_id` on
+first ingest.
+
 ## 5. Internal API contract
 
 ```
 POST /internal/submissions/{id}/metrics       trigger an observation now   ✅
 GET  /internal/submissions/{id}/performance   -> PerformanceResult         ✅
 GET  /internal/submissions/{id}/trust         -> TrustResult               ✅
+GET  /internal/submissions/{id}/intelligence  -> IntelligenceResult        ✅
 POST /internal/submissions/{id}/trust/review  record a human's verdict     ✅
 POST /internal/submissions/{id}/tracking/stop    Core closes / creator withdraws  ✅
 POST /internal/submissions/{id}/tracking/resume  reopen after a mistaken close   ✅

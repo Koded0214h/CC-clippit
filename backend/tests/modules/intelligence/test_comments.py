@@ -96,7 +96,7 @@ def _page(*texts: str) -> CommentPage:
 def _service(db, adapter) -> IngestionService:
     return IngestionService(
         db,
-        token_source=StaticTokenSource({}),
+        token_source=StaticTokenSource({(CREATOR_ID, Platform.x): "x-token"}),
         adapter_lookup=lambda _platform: adapter,
     )
 

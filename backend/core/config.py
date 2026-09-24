@@ -54,6 +54,13 @@ class Settings(BaseSettings):
     x_redirect_uri: str = "http://localhost:8000/social/x/callback"
     twitterapi_io_key: str = ""
 
+    # YouTube: OAuth for channel identity; Data API key for public metrics
+    # (same split as X / twitterapi.io — see integrations/social/youtube.py).
+    youtube_client_id: str = ""
+    youtube_client_secret: str = ""
+    youtube_redirect_uri: str = "http://localhost:8000/social/youtube/callback"
+    youtube_api_key: str = ""
+
     # Google Sign-In (identity, not a connected social account — see
     # modules/auth/google.py). Verifies id_tokens via Google's tokeninfo
     # endpoint rather than local JWKS/RS256 verification: this environment
@@ -63,6 +70,14 @@ class Settings(BaseSettings):
     google_client_id: str = ""
     google_client_secret: str = ""
     google_redirect_uri: str = "http://localhost:8000/auth/google/callback"
+
+    # --- Intelligence polling cadence (env-tunable; PRD leaves exact
+    # intervals TBD — these are the defaults documented in scheduling.py) ---
+    intelligence_poll_tick_seconds: int = 60
+    intelligence_cadence_day1_minutes: int = 30
+    intelligence_cadence_week1_hours: int = 2
+    intelligence_cadence_month_hours: int = 12
+    intelligence_tracking_window_days: int = 30
 
     # --- Email / one-time codes -------------------------------------------
     # `console` logs the message (and keeps the last few in memory so dev

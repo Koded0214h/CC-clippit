@@ -80,13 +80,24 @@ async def test_facebook_metrics_and_comments() -> None:
         FacebookAdapter,
         {
             "/111_222": (200, fx("facebook", "post_ok.json")),
-            "/insights": (200, {"data": []}),
+            "/insights": (
+                200,
+                {
+                    "data": [
+                        {"name": "post_video_views", "values": [{"value": 3200}]},
+                        {"name": "post_impressions", "values": [{"value": 9000}]},
+                        {"name": "post_impressions_unique", "values": [{"value": 4100}]},
+                    ]
+                },
+            ),
             "/comments": (200, fx("facebook", "comments_ok.json")),
         },
     )
     metrics = await adapter.get_metrics("111_222", access_token=TOKEN)
     assert metrics.likes == 50
     assert metrics.comments == 7
+    assert metrics.views == 3200
+    assert metrics.impressions == 9000
     page = await adapter.get_comments("111_222", access_token=TOKEN)
     assert page.comments[0].author_username == "Ada"
 
@@ -144,7 +155,14 @@ async def test_x_comments() -> None:
 
 @pytest.mark.parametrize(
     "platform",
-    [Platform.instagram, Platform.facebook, Platform.threads, Platform.x, Platform.tiktok],
+    [
+        Platform.instagram,
+        Platform.facebook,
+        Platform.threads,
+        Platform.x,
+        Platform.tiktok,
+        Platform.youtube,
+    ],
 )
 def test_registry_has_every_mvp_adapter(platform: Platform) -> None:
     adapter = get_adapter(platform)
