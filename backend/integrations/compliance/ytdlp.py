@@ -35,11 +35,12 @@ def retrieve_video(
     *,
     max_duration_s: int = DEFAULT_MAX_DURATION_S,
     max_filesize_mb: int = DEFAULT_MAX_FILESIZE_MB,
+    cookies_from_browser: str | None = None,
 ) -> RetrievedMedia:
     """Download the best short MP4 for `url` into `dest_dir`.
 
     Runs yt-dlp in-process. Raises `MediaRetrievalError` on any failure —
-    never invents a path.
+    never invents a path. The file is scratch — callers must delete it.
     """
     try:
         import yt_dlp
@@ -47,6 +48,14 @@ def retrieve_video(
         raise MediaRetrievalError(
             "yt-dlp is not installed. Add yt-dlp to the environment."
         ) from exc
+
+    if cookies_from_browser is None:
+        try:
+            from core.config import get_settings
+
+            cookies_from_browser = get_settings().ytdlp_cookies_from_browser or None
+        except Exception:  # noqa: BLE001
+            cookies_from_browser = None
 
     dest_dir.mkdir(parents=True, exist_ok=True)
     outtmpl = str(dest_dir / "%(id)s.%(ext)s")
@@ -68,6 +77,10 @@ def retrieve_video(
     }
     if max_filesize_mb:
         opts["max_filesize"] = max_bytes
+    if cookies_from_browser:
+        # YouTube often bot-checks datacenter / fresh IPs. Local smoke tests
+        # can pass the logged-in browser profile: chrome, safari, firefox, edge.
+        opts["cookiesfrombrowser"] = (cookies_from_browser.strip().lower(),)
 
     info: dict | None = None
     try:

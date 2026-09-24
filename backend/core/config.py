@@ -155,7 +155,11 @@ class Settings(BaseSettings):
     compliance_public_media_base: str = ""
     compliance_max_duration_seconds: int = 150
     compliance_max_filesize_mb: int = 80
-    compliance_keep_media: bool = True
+    #: Optional browser name for yt-dlp cookie export when YouTube bot-checks
+    #: local downloads (chrome | safari | firefox | edge). Empty = none.
+    ytdlp_cookies_from_browser: str = ""
+    #: Scratch only — download, send to Qwen, delete. Never a media library.
+    compliance_keep_media: bool = False
 
     @property
     def sync_database_url(self) -> str:
