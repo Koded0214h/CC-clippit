@@ -4,7 +4,7 @@
 
 An oversized typographic poster beside social cards, annotated with handwritten notes, a lime orbit, a payday receipt, and a smiley stamp. The visual language continues through miniature product demonstrations, campaign artwork, a calculator receipt, and a creator-powered brand campaign board.
 
-The supplied design system informs the lime actions (`#B8FF38`), gold money (`#EFC884`), paper (`#F7F8F2`), white surfaces, and Geist/Kalam pairing. The user's instruction overrides the original dark-surface direction: all page sections, navigation, footer, and the phone-throw stage are light.
+The supplied design system informs the lime actions (`#B8FF38`) gold money (`#EFC884`), paper (`#F7F8F2`), white surfaces, and Geist/Kalam pairing. The user's instruction overrides the original dark-surface direction: all page sections, navigation, footer, and the phone-throw stage are light.
 
 The first typography plan used marker lettering throughout. The final design uses oversized Geist for the main hierarchy and Kalam for handwritten annotations, preserving their contrast and keeping dense product details readable.
 
