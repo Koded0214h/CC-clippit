@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     # Shared secret used between internal modules/services if any of this
     # backend is ever split out later. Not exposed to the browser.
     internal_service_secret: str = "dev-only-not-secret"
-    frontend_origin: str = "http://localhost:5174,http://127.0.0.1:5174,https://clippit.click,https://www.clippit.click"
+    frontend_origin: str = "http://localhost,http://localhost:5174,http://127.0.0.1:5174,https://clippit.click,https://www.clippit.click"
 
     # In-memory by default (fine for one process/dev). Point this at Redis
     # (e.g. redis://localhost:6379) once this runs as more than one worker,
