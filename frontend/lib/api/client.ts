@@ -1,3 +1,5 @@
+import { AUTH_PROTECTION_ENABLED } from "@/lib/auth-protection";
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://clippit-5b5j.onrender.com";
 
 export class ApiError extends Error {
@@ -59,7 +61,7 @@ async function request<T>(path: string, init: RequestInit = {}, isRetry = false)
       if (typeof window !== "undefined") {
         localStorage.removeItem("clippit:access-token");
         localStorage.removeItem("clippit:refresh-token");
-        window.location.href = "/auth/sign-in";
+        if (AUTH_PROTECTION_ENABLED) window.location.href = "/auth/sign-in";
       }
       throw new ApiError(401, "Session expired");
     }

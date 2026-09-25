@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
+import { ClippitLoader } from "@/components/ui/ClippitLoader";
 import { ProfileAvatar, ProfilePhotoPicker, saveStoredProfile, useStoredProfile, type StoredProfile } from "@/components/ui/ProfilePhotoPicker";
 import { campaigns, leaderboard, type Campaign } from "@/lib/product";
 import { campaignsApi, type CampaignOut } from "@/lib/api/campaigns";
@@ -299,9 +300,10 @@ export function DashboardHome() {
   const [feature, setFeature] = useState<Campaign>(campaigns[0]);
   const [earnings, setEarnings] = useState({ total: 42850, payable: 18400, inHold: 24450, paidAllTime: 126700, addedThisWeek: 6200, activeClips: 3 });
   const [tapeCampaigns, setTapeCampaigns] = useState<Campaign[]>(campaigns.slice(1));
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    creatorApi.overview().then((data) => {
+    const overviewRequest = creatorApi.overview().then((data) => {
       if (data.closing_soon) setFeature(campaignOutToLocal(data.closing_soon));
       setEarnings({
         total: data.earnings.total_accrued,
@@ -312,10 +314,13 @@ export function DashboardHome() {
         activeClips: data.earnings.active_clips,
       });
     }).catch(() => undefined);
-    campaignsApi.list({ feed: "all", page_size: 6 }).then((data) => {
+    const campaignsRequest = campaignsApi.list({ feed: "all", page_size: 6 }).then((data) => {
       if (data.items.length > 0) setTapeCampaigns(data.items.map(campaignOutToLocal));
     }).catch(() => undefined);
+    Promise.allSettled([overviewRequest, campaignsRequest]).finally(() => setLoading(false));
   }, []);
+
+  if (loading) return <div className="dashboard-page"><ClippitLoader contained label="Bringing your dashboard up to date" note="Checking your campaigns, verified views and available money." /></div>;
 
   return (
     <div className="dashboard-page dashboard-home">
@@ -438,12 +443,14 @@ export function CampaignDirectory() {
   const [filter, setFilter] = useState("All");
   const [query, setQuery] = useState("");
   const [allCampaigns, setAllCampaigns] = useState<Campaign[]>(campaigns);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setLoading(true);
     const feed = feedMap[filter] ?? "all";
     campaignsApi.list({ feed }).then((data) => {
       if (data.items.length > 0) setAllCampaigns(data.items.map(campaignOutToLocal));
-    }).catch(() => undefined);
+    }).catch(() => undefined).finally(() => setLoading(false));
   }, [filter]);
 
   const visible = useMemo(() => {
@@ -474,7 +481,7 @@ export function CampaignDirectory() {
         </label>
       </div>
 
-      <div className="campaign-ledger">
+      {loading ? <ClippitLoader contained compact label="Finding campaigns for you" note="Comparing live rates, available money and campaign status." /> : <div className="campaign-ledger">
         <div className="campaign-ledger__header">
           <span>Campaign</span><span>Rate</span><span>Available money</span><span>Closes</span><span />
         </div>
@@ -497,7 +504,7 @@ export function CampaignDirectory() {
             <p>Try another title, brand or category.</p>
           </div>
         )}
-      </div>
+      </div>}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import "../styles/product.css";
 import "../styles/creator.css";
 import "../styles/customer.css";
 import "../styles/completion.css";
+import "../styles/loading.css";
 
 const geist = Geist({
   subsets: ["latin"],

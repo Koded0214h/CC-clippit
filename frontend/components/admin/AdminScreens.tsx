@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from "re
 import { useRouter } from "next/navigation";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
+import { ButtonLoader, ClippitLoader } from "@/components/ui/ClippitLoader";
 import { money } from "@/lib/product";
 import { authApi, clearTokens, storeTokens } from "@/lib/api/auth";
 import {
@@ -72,7 +73,7 @@ function AdminHeading({ title, copy, eyebrow, action, back }: { title: string; c
 }
 
 function AdminButton({ children, tone = "lime", onClick, type = "button", disabled }: { children: ReactNode; tone?: "lime" | "ink" | "gold"; onClick?: () => void; type?: "button" | "submit"; disabled?: boolean }) {
-  return <button className={`admin-button admin-button--${tone}`} type={type} onClick={onClick} disabled={disabled}>{children}<ProductIcon name="arrow" /></button>;
+  return <button className={`admin-button admin-button--${tone}`} type={type} onClick={onClick} disabled={disabled} aria-busy={disabled}>{disabled ? <ButtonLoader label="Opening operations" /> : <>{children}<ProductIcon name="arrow" /></>}</button>;
 }
 
 const queueMeta: Record<QueueKind, { title: string; copy: string; eyebrow: string; metric: string; unit: string; icon: ProductIconName; rows: Array<{ id: string; name: string; meta: string; value: string; status: string; tone: Tone; age: string; href: string }> }> = {
@@ -160,7 +161,9 @@ export function AdminLoginScreen() {
 
 export function AdminCommandCentreScreen() {
   const [overview, setOverview] = useState<AdminOverview | null>(null);
-  useEffect(() => { adminApi.overview().then(setOverview).catch(() => undefined); }, []);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => { adminApi.overview().then(setOverview).catch(() => undefined).finally(() => setLoading(false)); }, []);
+  if (loading) return <div className="admin-page"><ClippitLoader contained tone="ink" label="Opening the operations desk" note="Checking live queues, money movement and service health." /></div>;
   const pulse = [
     { label: "Money moving", value: overview?.creator_liability ?? 4820000, suffix: "", format: "money" as const, tone: "lime" as Tone, href: "/admin/payouts" },
     { label: "Decisions due", value: overview?.submissions_needing_review ?? 23, suffix: "", format: "number" as const, tone: "gold" as Tone, href: "/admin/submissions" },
@@ -180,18 +183,23 @@ export function AdminQueueScreen({ kind }: { kind: QueueKind }) {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("All");
   const [sourceRows, setSourceRows] = useState(config.rows);
+  const [loading, setLoading] = useState(true);
   useEffect(() => {
+    setLoading(true);
     setSourceRows(config.rows);
     const apply = (items: typeof config.rows) => { if (items.length) setSourceRows(items); };
-    if (kind === "users") adminApi.listUsers().then((items) => apply(items.map((item) => ({ id: item.id, name: item.full_name, meta: `${titleCase(item.role)} · ${item.email}`, value: item.email_verified ? "Email verified" : "Email unverified", status: item.suspended ? "Suspended" : "Active", tone: item.suspended ? "red" : "lime", age: relativeTime(item.created_at), href: `/admin/users/${item.id}` })))).catch(() => undefined);
-    if (kind === "campaigns") adminApi.listCampaigns().then((items) => apply(items.map((item) => ({ id: item.id, name: item.title, meta: `${item.organisation_name} · Campaign`, value: money(item.pot - item.spent), status: titleCase(item.status), tone: item.status === "active" ? "lime" : "gold", age: relativeTime(item.created_at), href: `/admin/campaigns/${item.slug}` })))).catch(() => undefined);
-    if (kind === "submissions") adminApi.allSubmissions().then((items) => apply(items.map((item) => ({ id: item.id, name: item.campaign_title, meta: `${item.creator_name} · ${titleCase(item.platform)}`, value: `${item.cumulative_views.toLocaleString()} views`, status: titleCase(item.verification_status), tone: item.flagged ? "red" : item.verification_status === "needs_review" ? "gold" : "lime", age: relativeTime(item.created_at), href: `/admin/submissions/${item.id}` })))).catch(() => undefined);
-    if (kind === "support") adminApi.supportQueue().then((items) => apply(items.map((item) => ({ id: item.id, name: item.subject, meta: titleCase(item.category), value: titleCase(item.priority), status: titleCase(item.status), tone: item.priority === "urgent" ? "red" : item.status === "open" ? "gold" : "lime", age: relativeTime(item.updated_at), href: `/admin/support/${item.id}` })))).catch(() => undefined);
-    if (kind === "disputes") adminApi.disputeQueue().then((items) => apply(items.map((item) => ({ id: item.id, name: titleCase(item.type), meta: item.reason, value: item.amount_at_risk === null ? "No money held" : money(item.amount_at_risk), status: titleCase(item.status), tone: item.status === "open" ? "gold" : "lime", age: untilTime(item.deadline_at), href: `/admin/disputes/${item.id}` })))).catch(() => undefined);
-    if (kind === "payouts") adminApi.listPayouts().then((items) => apply(items.map((item) => ({ id: item.id, name: item.creator_name, meta: `${item.provider} · ${item.reference}`, value: money(item.amount), status: titleCase(item.status), tone: item.status === "failed" ? "red" : item.status === "processing" ? "blue" : "gold", age: relativeTime(item.initiated_at), href: `/admin/payouts/${item.id}` })))).catch(() => undefined);
+    const finish = () => setLoading(false);
+    if (kind === "users") adminApi.listUsers().then((items) => apply(items.map((item) => ({ id: item.id, name: item.full_name, meta: `${titleCase(item.role)} · ${item.email}`, value: item.email_verified ? "Email verified" : "Email unverified", status: item.suspended ? "Suspended" : "Active", tone: item.suspended ? "red" : "lime", age: relativeTime(item.created_at), href: `/admin/users/${item.id}` })))).catch(() => undefined).finally(finish);
+    if (kind === "campaigns") adminApi.listCampaigns().then((items) => apply(items.map((item) => ({ id: item.id, name: item.title, meta: `${item.organisation_name} · Campaign`, value: money(item.pot - item.spent), status: titleCase(item.status), tone: item.status === "active" ? "lime" : "gold", age: relativeTime(item.created_at), href: `/admin/campaigns/${item.slug}` })))).catch(() => undefined).finally(finish);
+    if (kind === "submissions") adminApi.allSubmissions().then((items) => apply(items.map((item) => ({ id: item.id, name: item.campaign_title, meta: `${item.creator_name} · ${titleCase(item.platform)}`, value: `${item.cumulative_views.toLocaleString()} views`, status: titleCase(item.verification_status), tone: item.flagged ? "red" : item.verification_status === "needs_review" ? "gold" : "lime", age: relativeTime(item.created_at), href: `/admin/submissions/${item.id}` })))).catch(() => undefined).finally(finish);
+    if (kind === "support") adminApi.supportQueue().then((items) => apply(items.map((item) => ({ id: item.id, name: item.subject, meta: titleCase(item.category), value: titleCase(item.priority), status: titleCase(item.status), tone: item.priority === "urgent" ? "red" : item.status === "open" ? "gold" : "lime", age: relativeTime(item.updated_at), href: `/admin/support/${item.id}` })))).catch(() => undefined).finally(finish);
+    if (kind === "disputes") adminApi.disputeQueue().then((items) => apply(items.map((item) => ({ id: item.id, name: titleCase(item.type), meta: item.reason, value: item.amount_at_risk === null ? "No money held" : money(item.amount_at_risk), status: titleCase(item.status), tone: item.status === "open" ? "gold" : "lime", age: untilTime(item.deadline_at), href: `/admin/disputes/${item.id}` })))).catch(() => undefined).finally(finish);
+    if (kind === "payouts") adminApi.listPayouts().then((items) => apply(items.map((item) => ({ id: item.id, name: item.creator_name, meta: `${item.provider} · ${item.reference}`, value: money(item.amount), status: titleCase(item.status), tone: item.status === "failed" ? "red" : item.status === "processing" ? "blue" : "gold", age: relativeTime(item.initiated_at), href: `/admin/payouts/${item.id}` })))).catch(() => undefined).finally(finish);
+    if (!["users", "campaigns", "submissions", "support", "disputes", "payouts"].includes(kind)) finish();
   }, [config.rows, kind]);
   const rows = useMemo(() => sourceRows.filter((row) => `${row.name} ${row.id} ${row.meta}`.toLowerCase().includes(query.toLowerCase()) && (filter === "All" || row.status === filter)), [filter, query, sourceRows]);
   const statuses = ["All", ...new Set(sourceRows.map((row) => row.status))];
+  if (loading) return <div className="admin-page"><ClippitLoader contained tone="ink" label="Preparing this queue" note="Checking the latest cases and account activity." /></div>;
   return <div className="admin-page"><AdminHeading eyebrow={config.eyebrow} title={config.title} copy={config.copy} action={<div className="admin-queue-count"><ProductIcon name={config.icon} /><span><strong>{config.metric}</strong><small>{config.unit}</small></span></div>} /><section className="admin-queue-tools"><label><ProductIcon name="search" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`Search ${config.title.toLowerCase()}`} /></label><div>{statuses.map((status) => <button type="button" className={filter === status ? "is-active" : ""} onClick={() => setFilter(status)} key={status}>{status}</button>)}</div></section><section className="admin-queue"><header><span>Case</span><span>Account or subject</span><span>Value</span><span>Status</span><span>Age</span></header>{rows.map((row) => <Link href={row.href} key={row.id}><code>{row.id}</code><p><strong>{row.name}</strong><small>{row.meta}</small></p><b>{row.value}</b><AdminStatus tone={row.tone}>{row.status}</AdminStatus><time>{row.age}</time><ProductIcon name="arrow" /></Link>)}{rows.length === 0 && <div className="admin-queue-empty"><ProductIcon name="search" /><strong>No matching cases</strong><span>Clear the search or choose another status.</span></div>}</section></div>;
 }
 

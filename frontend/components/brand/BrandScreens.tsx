@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
+import { ClippitLoader } from "@/components/ui/ClippitLoader";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
 import { ProfileAvatar, ProfilePhotoPicker, saveStoredProfile, useStoredProfile, type StoredProfile } from "@/components/ui/ProfilePhotoPicker";
 import { ReceiptHeader } from "@/components/ui/ReceiptHeader";
@@ -81,11 +82,14 @@ function PotBar({ campaign }: { campaign: BrandCampaign }) {
 
 export function BrandOverviewScreen() {
   const [overview, setOverview] = useState<BrandOverviewOut | null>(null);
+  const [loading, setLoading] = useState(true);
   const live = brandCampaigns[0];
 
   useEffect(() => {
-    brandApi.overview().then((data) => setOverview(data)).catch(() => undefined);
+    brandApi.overview().then((data) => setOverview(data)).catch(() => undefined).finally(() => setLoading(false));
   }, []);
+
+  if (loading) return <div className="brand-page"><ClippitLoader contained tone="gold" label="Opening your brand workspace" note="Checking campaigns, reviews and wallet activity." /></div>;
 
   const pendingReviews = overview?.pending_reviews ?? live.review;
   const orgName = overview?.organisation_name ?? "Gbedu Records";
@@ -146,15 +150,16 @@ function campaignOutToBrand(c: CampaignOut): BrandCampaign {
 export function BrandCampaignsScreen() {
   const [filter, setFilter] = useState<"All" | BrandCampaign["state"]>("All");
   const [allCampaigns, setAllCampaigns] = useState<BrandCampaign[]>(brandCampaigns);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     campaignsApi.list().then((data) => {
       if (data.items.length > 0) setAllCampaigns(data.items.map(campaignOutToBrand));
-    }).catch(() => undefined);
+    }).catch(() => undefined).finally(() => setLoading(false));
   }, []);
 
   const visible = allCampaigns.filter((campaign) => filter === "All" || campaign.state === filter);
-  return <div className="brand-page"><PageHeading title="Campaigns" copy="Create a campaign or open one that is already running." action={<ActionLink href="/brand/campaigns/new">Create campaign</ActionLink>} /><div className="brand-filter-row">{["All", "Live", "Paused", "Funding", "Draft", "Completed", "Cancelled"].map((item) => <button type="button" key={item} className={filter === item ? "is-active" : ""} onClick={() => setFilter(item as typeof filter)}>{item}{item === "Live" && <i />}</button>)}</div><section className="brand-campaign-grid">{visible.map((campaign) => <CampaignCard campaign={campaign} key={campaign.slug} />)}</section></div>;
+  return <div className="brand-page"><PageHeading title="Campaigns" copy="Create a campaign or open one that is already running." action={<ActionLink href="/brand/campaigns/new">Create campaign</ActionLink>} /><div className="brand-filter-row">{["All", "Live", "Paused", "Funding", "Draft", "Completed", "Cancelled"].map((item) => <button type="button" key={item} className={filter === item ? "is-active" : ""} onClick={() => setFilter(item as typeof filter)}>{item}{item === "Live" && <i />}</button>)}</div>{loading ? <ClippitLoader contained compact tone="gold" label="Gathering your campaigns" note="Checking current pots, submissions and campaign status." /> : <section className="brand-campaign-grid">{visible.map((campaign) => <CampaignCard campaign={campaign} key={campaign.slug} />)}</section>}</div>;
 }
 
 export function CampaignBasicsScreen() {
@@ -331,22 +336,24 @@ export function BrandReviewQueueScreen() {
   const [filter, setFilter] = useState("Needs review");
   const [reviews, setReviews] = useState<BrandReview[]>(brandReviews);
   const [counts, setCounts] = useState({ needs_review: 7, appeals: 0, resolved: 0 });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setLoading(true);
     const tab = tabMap[filter] ?? "needs_review";
     brandApi.reviews(tab).then((data) => {
       setCounts(data.counts);
       if (tab === "needs_review") {
         setReviews(data.items.length > 0 ? data.items.map(apiReviewToBrand) : brandReviews);
       }
-    }).catch(() => undefined);
+    }).catch(() => undefined).finally(() => setLoading(false));
   }, [filter]);
 
   const needsCount = counts.needs_review;
   return <div className="brand-page review-queue-page">
     <PageHeading title={`${needsCount} submission${needsCount !== 1 ? "s" : ""} need review.`} copy="Approve a submission or request a correction. These clips are not earning yet." action={<div className="review-count"><AnimatedNumber value={needsCount} padStart={2} /><span>waiting<br />for review</span></div>} />
     <div className="brand-filter-row">{["Needs review", "Appeals", "Resolved"].map((item) => <button type="button" key={item} onClick={() => setFilter(item)} className={filter === item ? "is-active" : ""}>{item}{item === "Needs review" && <b>{needsCount}</b>}</button>)}</div>
-    {filter === "Needs review" ? <section className="review-list">{reviews.map((review) => <ReviewCard review={review} key={review.id} />)}</section> : <section className="review-empty"><BrandArt src={filter === "Appeals" ? art.review : art.proof} label={filter === "Appeals" ? "No appeals waiting" : "Queue cleared"} tone="lime" compact /><h2>{filter === "Appeals" ? "Nothing has been appealed." : "No resolved submissions yet."}</h2><p>{filter === "Appeals" ? "Creator appeals will arrive here with the original verdict and supporting evidence." : "Resolved submissions will appear here with the decision and evidence."}</p></section>}
+    {loading ? <ClippitLoader contained compact tone="gold" label="Opening the review queue" note="Bringing in the latest submissions and decisions." /> : filter === "Needs review" ? <section className="review-list">{reviews.map((review) => <ReviewCard review={review} key={review.id} />)}</section> : <section className="review-empty"><BrandArt src={filter === "Appeals" ? art.review : art.proof} label={filter === "Appeals" ? "No appeals waiting" : "Queue cleared"} tone="lime" compact /><h2>{filter === "Appeals" ? "Nothing has been appealed." : "No resolved submissions yet."}</h2><p>{filter === "Appeals" ? "Creator appeals will arrive here with the original verdict and supporting evidence." : "Resolved submissions will appear here with the decision and evidence."}</p></section>}
   </div>;
 }
 
@@ -355,6 +362,8 @@ export function BrandReviewDetailScreen({ id = "submission-1042" }: { id?: strin
   const [review, setReview] = useState<BrandReview>(mockReview);
   const [decision, setDecision] = useState<"approve" | "changes" | null>(null);
   const [acting, setActing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [activeAction, setActiveAction] = useState<"approve" | "changes" | null>(null);
 
   useEffect(() => {
     brandApi.getReview(id).then((data) => {
@@ -367,20 +376,24 @@ export function BrandReviewDetailScreen({ id = "submission-1042" }: { id?: strin
         confidence: data.confidence ?? current.confidence,
         issue: data.issue ?? current.issue,
       }));
-    }).catch(() => undefined);
+    }).catch(() => undefined).finally(() => setLoading(false));
   }, [id]);
 
   const approve = async () => {
     setActing(true);
+    setActiveAction("approve");
     brandApi.approveReview(id).catch(() => undefined).finally(() => setActing(false));
     setDecision("approve");
   };
 
   const requestCorrection = async () => {
     setActing(true);
+    setActiveAction("changes");
     brandApi.requestCorrection(id, review.issue ?? "Please review this submission.").catch(() => undefined).finally(() => setActing(false));
     setDecision("changes");
   };
+
+  if (loading || acting) return <div className="brand-page"><ClippitLoader contained tone="gold" label={loading ? "Preparing the submission" : activeAction === "approve" ? "Approving this clip" : "Saving your correction request"} note={loading ? "Loading the clip, evidence and campaign requirements." : "Recording your decision and updating the creator."} /></div>;
 
   if (decision) return <div className="brand-page review-resolved"><BrandArt src={decision === "approve" ? art.proof : art.review} label={decision === "approve" ? "Approved" : "Correction requested"} tone={decision === "approve" ? "lime" : "gold"} /><Status tone={decision === "approve" ? "lime" : "gold"}>{decision === "approve" ? "Approved" : "Changes requested"}</Status><h1>{decision === "approve" ? "Clip approved." : "Correction requested."}</h1><p>{decision === "approve" ? "New verified views can now earn from the No long thing campaign." : "The creator received the failed requirement and can submit a corrected post."}</p><ActionLink href="/brand/reviews">Review the next clip</ActionLink></div>;
   return <div className="brand-page review-detail-page"><Link className="brand-back" href="/brand/reviews"><ProductIcon name="chevron" />Back to review queue</Link><header><div><Status tone="gold">Needs review</Status><h1>{review.title}</h1><p>{review.creator} <span>{review.handle}</span> · {review.platform}</p></div><div className="confidence-ticket"><span>Your decision</span><strong>Review</strong><small>One campaign requirement needs a closer look.</small></div></header><div className="review-detail-grid"><section className="submission-player"><div><Image src={review.image} alt="Submission preview" fill sizes="(max-width: 900px) 100vw, 50vw" /><button type="button" aria-label="Play submission"><ProductIcon name="play" /></button><span>00:24</span></div><p><span><i>KM</i><strong>{review.creator}</strong><small>Connected {review.platform} account</small></span><a href="#public-post">Open public post<ProductIcon name="link" /></a></p></section><aside className="review-evidence"><BrandArt src={art.review} label="Review point" tone="gold" compact /><div><small>Flagged requirement</small><h2>{review.issue}</h2><p>The product appears between 00:11 and 00:13. The pack is visible, but another object covers part of the brand mark.</p></div></aside></div><section className="decision-sheet"><header><div><h2>Requirements</h2><p>Check each requirement before deciding.</p></div><Status tone="paper">4 requirements</Status></header><ol><li className="is-pass"><span><ProductIcon name="check" /></span><p><strong>Show the prepared noodles clearly on screen.</strong><small>Found at 00:08 and 00:19</small></p><b>Pass</b></li><li className="is-review"><span><ProductIcon name="eye" /></span><p><strong>Show the product pack clearly on screen.</strong><small>Partly visible at 00:11. Brand mark may be obscured.</small></p><b>Review</b></li><li className="is-pass"><span><ProductIcon name="check" /></span><p><strong>Say or display: No long thing.</strong><small>Transcript match at 00:17</small></p><b>Pass</b></li><li className="is-pass"><span><ProductIcon name="check" /></span><p><strong>Tag @indomie_nigeria and use #NoLongThing.</strong><small>Both found in the public caption</small></p><b>Pass</b></li></ol><div className="decision-actions"><button type="button" className="brand-button brand-button--dark" disabled={acting} onClick={requestCorrection}>Request a correction<ProductIcon name="arrow" /></button><button type="button" className="brand-button" disabled={acting} onClick={approve}>Approve this clip<ProductIcon name="check" /></button></div></section></div>;

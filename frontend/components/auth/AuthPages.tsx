@@ -318,8 +318,8 @@ export function SignUpDetails({ role }: { role: AccountRole }) {
           error={errors.password}
         />
         <ApiErrorMessage message={apiError} />
-        <AuthButton disabled={isLoading}>
-          {isLoading ? "Creating account…" : `Create my ${organisation ? "organisation" : "creator"} account`}
+        <AuthButton loading={isLoading} loadingLabel="Creating your account">
+          {`Create my ${organisation ? "organisation" : "creator"} account`}
         </AuthButton>
       </form>
     </section>
@@ -428,8 +428,8 @@ export function SignIn() {
           Keep me signed in on this device
         </label>
         <ApiErrorMessage message={apiError} />
-        <AuthButton disabled={isLoading}>
-          {isLoading ? "Signing in…" : "Sign in to Clippit"}
+        <AuthButton loading={isLoading} loadingLabel="Opening your Clippit">
+          Sign in to Clippit
         </AuthButton>
       </form>
       <p className="switch-line">
@@ -503,8 +503,8 @@ export function ForgotPassword() {
           error={error}
         />
         <ApiErrorMessage message={apiError} />
-        <AuthButton disabled={isLoading}>
-          {isLoading ? "Sending…" : "Send recovery code"}
+        <AuthButton loading={isLoading} loadingLabel="Sending your code">
+          Send recovery code
         </AuthButton>
       </form>
     </section>
@@ -676,12 +676,8 @@ export function OtpPage({ recovery = false }: { recovery?: boolean }) {
           </small>
         </fieldset>
         <ApiErrorMessage message={apiError} />
-        <AuthButton disabled={isLoading}>
-          {isLoading
-            ? "Checking…"
-            : recovery
-              ? "Check the code"
-              : "Verify my email"}
+        <AuthButton loading={isLoading} loadingLabel="Checking your code">
+          {recovery ? "Check the code" : "Verify my email"}
         </AuthButton>
       </form>
       <p className="resend-line">
@@ -792,8 +788,8 @@ export function ResetPassword() {
           </li>
         </ul>
         <ApiErrorMessage message={apiError} />
-        <AuthButton disabled={isLoading}>
-          {isLoading ? "Saving…" : "Save my new password"}
+        <AuthButton loading={isLoading} loadingLabel="Securing your password">
+          Save my new password
         </AuthButton>
       </form>
     </section>

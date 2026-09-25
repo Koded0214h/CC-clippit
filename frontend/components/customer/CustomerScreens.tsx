@@ -8,6 +8,7 @@ import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
 import { ProfileAvatar, useStoredProfile, type StoredProfile } from "@/components/ui/ProfilePhotoPicker";
 import { ReceiptHeader } from "@/components/ui/ReceiptHeader";
+import { ButtonLoader, ClippitLoader, ClippitMarkMotion } from "@/components/ui/ClippitLoader";
 import { BRAND_CAMPAIGN_FEE_RATE, calculateFee } from "@/lib/fees";
 import { money } from "@/lib/product";
 import { authApi } from "@/lib/api/auth";
@@ -94,6 +95,7 @@ function relativeTimeFromDate(dateStr: string): string {
 export function NotificationsScreen() {
   const [filter, setFilter] = useState("All");
   const [notices, setNotices] = useState(initialNotices);
+  const [loading, setLoading] = useState(true);
   const visible = notices.filter((notice) => filter === "All" || notice.kind === filter);
   const unread = notices.filter((notice) => notice.unread).length;
 
@@ -111,7 +113,7 @@ export function NotificationsScreen() {
           unread: !n.read,
         })));
       }
-    }).catch(() => undefined);
+    }).catch(() => undefined).finally(() => setLoading(false));
   }, []);
 
   const markAllRead = () => {
@@ -122,6 +124,8 @@ export function NotificationsScreen() {
   const markOneRead = (id: number) => {
     setNotices((current) => current.map((item) => item.id === id ? { ...item, unread: false } : item));
   };
+
+  if (loading) return <div className="dashboard-page"><ClippitLoader contained label="Checking your notifications" note="Bringing in campaign decisions, money updates and account activity." /></div>;
 
   return <div className="dashboard-page customer-page notifications-page">
     <ScreenHead title="Notifications" copy="Campaign decisions, money movement and account checks." action={<button className="customer-text-button" type="button" onClick={markAllRead} disabled={!unread}>Mark all as read</button>} />
@@ -143,6 +147,7 @@ function saveBrandRead(notices: Notice[]) {
 export function BrandNotificationsScreen() {
   const [filter, setFilter] = useState("All");
   const [notices, setNotices] = useState(initialBrandNotices);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     notificationsApi.list().then((data) => {
@@ -174,12 +179,14 @@ export function BrandNotificationsScreen() {
         } catch { /* keep default */ }
       }, 0);
       return () => window.clearTimeout(timer);
-    });
+    }).finally(() => setLoading(false));
   }, []);
 
   const visible = notices.filter((notice) => filter === "All" || notice.kind === filter);
   const unread = notices.filter((notice) => notice.unread).length;
   const updateNotices = (next: Notice[]) => { setNotices(next); saveBrandRead(next); };
+
+  if (loading) return <div className="brand-page"><ClippitLoader contained tone="gold" label="Checking brand notifications" note="Bringing in reviews, campaign updates and money movement." /></div>;
 
   return <div className="brand-page customer-page notifications-page brand-notifications-page">
     <ScreenHead title="Notifications" copy="Reviews, campaign updates, money movement and account checks." action={<button className="customer-text-button" type="button" onClick={() => updateNotices(notices.map((notice) => ({ ...notice, unread: false })))} disabled={!unread}>Mark all as read</button>} />
@@ -249,13 +256,13 @@ export function PayoutAccountScreen() {
 
   const maskedAccount = account.length >= 4 ? `•••• ••${account.slice(-4)}` : account;
   const canSubmit = account.length === 10 && !resolving && (resolvedName !== null);
-  const displayName = resolvedName ?? (resolving ? "Checking…" : "Enter all 10 digits to resolve the name");
+  const displayName = resolvedName ?? (resolving ? "Checking account" : "Enter all 10 digits to resolve the name");
 
   return <div className="dashboard-page customer-page payout-account-page">
     <ScreenHead title={step === 2 ? "Bank account verified" : "Payout account"} copy={step === 2 ? "Payable earnings can now move to this account." : "Add the Nigerian bank account where your withdrawals should land."} back="/dashboard/settings" />
     <div className="bank-setup-layout">
       <aside className="bank-setup-rail"><div>{["Account", "Confirm", "Verified"].map((item, index) => <span className={index <= step ? "is-done" : ""} key={item}><i>{index < step ? <ProductIcon name="check" /> : index + 1}</i><b>{item}</b></span>)}</div><Image src="/assets/illustrations/clippit-icons/withdraw-bank.webp" alt="" width={520} height={520} /></aside>
-      {step === 0 && <form className="bank-setup-sheet" onSubmit={submitDetails}><header><span><ProductIcon name="bank" /></span><div><h2>Where should your money land?</h2><p>The account name must match your verified identity.</p></div></header><label><span>Bank</span><select value={selectedBank.code} onChange={(event) => { const found = bankList.find((b) => b.code === event.target.value); if (found) setSelectedBank(found); }}>{bankList.map((b) => <option key={b.code} value={b.code}>{b.name}</option>)}</select></label><label><span>Account number</span><input value={account} onChange={(event) => setAccount(event.target.value.replace(/\D/g, "").slice(0, 10))} inputMode="numeric" placeholder="10-digit account number" /><small>{account.length}/10</small></label><div className={`account-resolution${resolvedName ? " is-resolved" : ""}`}><span>{resolvedName ? <ProductIcon name="check" /> : <ProductIcon name="person" />}</span><p><small>Account holder</small><strong>{displayName}</strong></p></div><button className="lime-button" type="submit" disabled={!canSubmit || saving}>{saving ? "Saving…" : <>Confirm this account<ProductIcon name="arrow" /></>}</button></form>}
+      {step === 0 && <form className="bank-setup-sheet" onSubmit={submitDetails}><header><span><ProductIcon name="bank" /></span><div><h2>Where should your money land?</h2><p>The account name must match your verified identity.</p></div></header><label><span>Bank</span><select value={selectedBank.code} onChange={(event) => { const found = bankList.find((b) => b.code === event.target.value); if (found) setSelectedBank(found); }}>{bankList.map((b) => <option key={b.code} value={b.code}>{b.name}</option>)}</select></label><label><span>Account number</span><input value={account} onChange={(event) => setAccount(event.target.value.replace(/\D/g, "").slice(0, 10))} inputMode="numeric" placeholder="10-digit account number" /><small>{account.length}/10</small></label><div className={`account-resolution${resolvedName ? " is-resolved" : ""}${resolving ? " is-loading" : ""}`}><span>{resolvedName ? <ProductIcon name="check" /> : resolving ? <ClippitMarkMotion compact /> : <ProductIcon name="person" />}</span><p><small>Account holder</small><strong>{displayName}</strong></p></div><button className="lime-button" type="submit" disabled={!canSubmit || saving} aria-busy={saving}>{saving ? <ButtonLoader label="Saving payout account" /> : <>Confirm this account<ProductIcon name="arrow" /></>}</button></form>}
       {step === 1 && <form className="bank-setup-sheet bank-confirm-sheet" onSubmit={verify}><header><span><ProductIcon name="shield" /></span><div><h2>Confirm it is you</h2><p>Enter the six-digit code sent to your phone ending 2041.</p></div></header><div className="bank-confirm-card"><small>New payout account</small><strong>{selectedBank.name}</strong><b>{maskedAccount}</b><span>{resolvedName}</span></div><label><span>Verification code</span><input value={otp} onChange={(event) => setOtp(event.target.value.replace(/\D/g, "").slice(0, 6))} inputMode="numeric" autoComplete="one-time-code" placeholder="000000" /><small>{otp.length}/6</small></label><button className="lime-button" type="submit" disabled={otp.length !== 6}>Verify payout account<ProductIcon name="arrow" /></button><button className="customer-text-button" type="button" onClick={() => setStep(0)}>Use a different account</button></form>}
       {step === 2 && <section className="bank-verified-sheet"><div className="bank-verified-seal"><ProductIcon name="check" /><i /><i /></div><small>Verified payout destination</small><h2>{selectedBank.name}</h2><strong>{maskedAccount}</strong><p>{resolvedName}</p><dl><div><dt>Currency</dt><dd>Nigerian naira</dd></div><div><dt>Transfer time</dt><dd>Within 24 hours</dd></div><div><dt>Security</dt><dd>Identity matched</dd></div></dl><Link className="lime-button" href="/dashboard/withdraw">Withdraw money<ProductIcon name="arrow" /></Link></section>}
     </div>
@@ -338,7 +345,7 @@ export function SecurityScreen() {
     <ScreenHead title="Security" copy="Manage your password, verification method and signed-in devices." back="/dashboard/settings" />
     <div className="security-layout">
       <section className="security-sheet security-score"><div className="security-orbit"><strong><AnimatedNumber value={twoFactor ? 100 : 72} suffix="%" /></strong><span>Account protection</span><i /><i /><i /></div><div><h2>{twoFactor ? "Protection is complete" : "Add one more layer"}</h2><p>Turn on two-step verification before changing payout details.</p><label className="security-toggle"><span><ProductIcon name="shield" /><b>Two-step verification</b><small>Use a code when a new device signs in.</small></span><input type="checkbox" checked={twoFactor} onChange={() => setTwoFactor((value) => !value)} /><i /></label></div></section>
-      <form className="security-sheet password-sheet" onSubmit={changePassword}><header><span><ProductIcon name="settings" /></span><div><h2>Change password</h2><p>Use at least eight characters including a number.</p></div></header><label><span>Current password</span><input type="password" value={passwords.current} onChange={(event) => update("current", event.target.value)} /></label><label><span>New password</span><input type="password" value={passwords.next} onChange={(event) => update("next", event.target.value)} /></label><label><span>Confirm new password</span><input type="password" value={passwords.confirm} onChange={(event) => update("confirm", event.target.value)} /></label>{passwordError && <p className="auth-error" role="alert">{passwordError}</p>}<button className="lime-button" type="submit" disabled={!valid || passwordLoading}>{saved ? "Password changed" : passwordLoading ? "Saving…" : "Change password"}<ProductIcon name={saved ? "check" : "arrow"} /></button></form>
+      <form className="security-sheet password-sheet" onSubmit={changePassword}><header><span><ProductIcon name="settings" /></span><div><h2>Change password</h2><p>Use at least eight characters including a number.</p></div></header><label><span>Current password</span><input type="password" value={passwords.current} onChange={(event) => update("current", event.target.value)} /></label><label><span>New password</span><input type="password" value={passwords.next} onChange={(event) => update("next", event.target.value)} /></label><label><span>Confirm new password</span><input type="password" value={passwords.confirm} onChange={(event) => update("confirm", event.target.value)} /></label>{passwordError && <p className="auth-error" role="alert">{passwordError}</p>}<button className="lime-button" type="submit" disabled={!valid || passwordLoading} aria-busy={passwordLoading}>{passwordLoading ? <ButtonLoader label="Securing your password" /> : <>{saved ? "Password changed" : "Change password"}<ProductIcon name={saved ? "check" : "arrow"} /></>}</button></form>
       <section className="security-sheet sessions-sheet"><header><div><h2>Signed-in devices</h2><p>Remove any session you do not recognise.</p></div><button className="customer-text-button" type="button" onClick={signOutOthers} disabled={sessions.length === 1}>Sign out other devices</button></header>{sessions.map((session) => <article key={session.id}><span><ProductIcon name={session.device.includes("Android") || session.device.includes("iPhone") ? "phone" : "tech"} /></span><p><strong>{session.device}{session.current && <i>Current</i>}</strong><small>{session.place} · {session.seen}</small></p>{!session.current && <button type="button" onClick={() => removeSession(session.id)}>Remove</button>}</article>)}</section>
     </div>
   </div>;

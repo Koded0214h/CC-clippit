@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { ReceiptHeader } from "@/components/ui/ReceiptHeader";
+import { ButtonLoader, ClippitLoader } from "@/components/ui/ClippitLoader";
 import { CREATOR_WITHDRAWAL_FEE_RATE, MINIMUM_WALLET_WITHDRAWAL, calculateFee, feePercentage } from "@/lib/fees";
 import { campaigns, money } from "@/lib/product";
 import { earningsApi, type EarningRow } from "@/lib/api/earnings";
@@ -64,6 +65,7 @@ function clipStatusTone(status: string): Tone {
 export function MyClipsScreen() {
   const [clips, setClips] = useState(MOCK_CREATOR_CLIPS);
   const [totals, setTotals] = useState({ active: 3, views: 312600, earned: 42850 });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     creatorApi.clips().then((data) => {
@@ -80,8 +82,10 @@ export function MyClipsScreen() {
           link: c.link,
         })));
       }
-    }).catch(() => undefined);
+    }).catch(() => undefined).finally(() => setLoading(false));
   }, []);
+
+  if (loading) return <div className="dashboard-page"><ClippitLoader contained label="Gathering your clips" note="Checking submission status, verified views and earnings." /></div>;
 
   return <div className="dashboard-page creator-flow-page">
     <CreatorHeading title="My clips" copy="Check submission status, verified views and earnings." action={<PrimaryLink href="/dashboard/campaigns/indomie-no-long-thing/submit">Submit a clip</PrimaryLink>} />
@@ -125,6 +129,7 @@ function formatLastChecked(dateStr: string | null): string {
 
 export function ConnectedAccountsScreen() {
   const [accounts, setAccounts] = useState<Social[]>(MOCK_SOCIAL_ACCOUNTS);
+  const [loading, setLoading] = useState(true);
   const connected = accounts.filter((account) => account.connected).length;
 
   useEffect(() => {
@@ -138,7 +143,7 @@ export function ConnectedAccountsScreen() {
           note: a.connected ? formatLastChecked(a.last_checked_at) : (a.connectable ? "Connect to join briefs" : "Coming soon"),
         })));
       }
-    }).catch(() => undefined);
+    }).catch(() => undefined).finally(() => setLoading(false));
   }, []);
 
   const toggle = (name: string) => {
@@ -148,6 +153,7 @@ export function ConnectedAccountsScreen() {
     }
     setAccounts((current) => current.map((a) => a.name === name ? { ...a, connected: !a.connected, handle: a.handle || "@tobioncam", note: a.connected ? "Required for this platform" : "Connection ready for demo" } : a));
   };
+  if (loading) return <div className="dashboard-page"><ClippitLoader contained label="Checking your connected accounts" note="Confirming which platforms are ready for submissions." /></div>;
   return <div className="dashboard-page creator-flow-page">
     <CreatorHeading title="Connected accounts" copy="Connect a platform when you are ready to submit there. It is not required to browse campaigns." action={<PrimaryLink href="/dashboard/campaigns/indomie-no-long-thing/submit">Continue to submission</PrimaryLink>} />
     <div className="creator-split creator-split--connect"><section className="connect-stage"><ArtTile src={art.connect} label="Connected accounts" tone="lime" large /><div className="connect-score"><span><AnimatedNumber value={connected} suffix="/5" duration={650} /></span><p><strong>connected accounts</strong><small>Instagram, TikTok, Facebook, X and YouTube are supported.</small></p></div><div className="connect-meter"><i style={{ width: `${(connected / 5) * 100}%` }} /></div></section>
@@ -218,7 +224,7 @@ export function SubmitClipScreen({ campaignSlug = "indomie-no-long-thing" }: { c
       <fieldset><legend>Where did you post it?</legend><div className="platform-select">{campaign.platforms.map((item) => <button type="button" className={platform === item ? "is-selected" : ""} onClick={() => setPlatform(item)} key={item}><ProductIcon name={socialIcon(item)} />{item}<i><ProductIcon name="check" /></i></button>)}</div></fieldset>
       <label className="creator-field"><span>Public post link</span><div><ProductIcon name="link" /><input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://www.tiktok.com/@you/video/..." inputMode="url" /></div></label>
       <div className="url-retrieval-note"><ProductIcon name="play" /><span><strong>No video upload needed</strong><small>Keep the post public while Clippit checks it against the campaign requirements.</small></span></div>
-      <p className="creator-error" role="alert">{error}</p><button className="lime-button submission-submit" type="submit" disabled={submitting}>{submitting ? "Sending…" : "Send for verification"}<ProductIcon name="arrow" /></button></form>
+      <p className="creator-error" role="alert">{error}</p><button className="lime-button submission-submit" type="submit" disabled={submitting} aria-busy={submitting}>{submitting ? <ButtonLoader label="Sending for verification" /> : <>Send for verification<ProductIcon name="arrow" /></>}</button></form>
       <aside className="submission-proof"><ArtTile src={art.submit} label="Submission" tone="gold" large /><h2>What happens next</h2><ol><li><span>01</span><p><strong>We match the post.</strong><small>The connected account must own the link.</small></p></li><li><span>02</span><p><strong>We check the brief.</strong><small>Every must-do gets a reasoned verdict.</small></p></li><li><span>03</span><p><strong>We start reading.</strong><small>Approved clips enter scheduled view checks.</small></p></li></ol></aside>
     </div>
   </div>;
@@ -300,9 +306,10 @@ function mapEarningRow(r: EarningRow) {
 export function EarningsScreen() {
   const [summary, setSummary] = useState({ payable: 18400, inHold: 6000, processing: 0, paidAllTime: 184450, completedPayouts: 8, lifetimeViews: 492800 });
   const [rows, setRows] = useState(MOCK_EARNING_ROWS);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    earningsApi.summary().then((data) => {
+    const summaryRequest = earningsApi.summary().then((data) => {
       setSummary({
         payable: data.payable,
         inHold: data.in_hold,
@@ -312,10 +319,13 @@ export function EarningsScreen() {
         lifetimeViews: data.lifetime_views,
       });
     }).catch(() => undefined);
-    earningsApi.history().then((data) => {
+    const historyRequest = earningsApi.history().then((data) => {
       if (data.items.length > 0) setRows(data.items.map(mapEarningRow));
     }).catch(() => undefined);
+    Promise.allSettled([summaryRequest, historyRequest]).finally(() => setLoading(false));
   }, []);
+
+  if (loading) return <div className="dashboard-page"><ClippitLoader contained label="Counting every earning" note="Checking payable money, held earnings and payout history." /></div>;
 
   return <div className="dashboard-page creator-flow-page earnings-page"><CreatorHeading title="Earnings" copy="See what is accrued, payable and already paid." action={<PrimaryLink href="/dashboard/withdraw">Withdraw money</PrimaryLink>} />
     <section className="earnings-stage"><div className="earnings-total"><StatusPill tone="lime">Ready now</StatusPill><small>Available to withdraw</small><strong><AnimatedMoney value={summary.payable} /></strong><p>From <AnimatedNumber value={summary.lifetimeViews} /> verified, billable views.</p><div className="money-wave" aria-hidden="true"><i /><i /><i /><i /><i /><i /><i /></div></div><ArtTile src={art.wallet} label="Available balance" tone="gold" large /><div className="earnings-buckets"><article><span>Held</span><strong><AnimatedMoney value={summary.inHold} /></strong><small>In the five-day review window</small></article><article><span>Processing</span><strong><AnimatedMoney value={summary.processing} delay={80} /></strong><small>Withdrawal on the way</small></article><article><span>Paid</span><strong><AnimatedMoney value={summary.paidAllTime} delay={140} /></strong><small><AnimatedNumber value={summary.completedPayouts} /> completed payouts</small></article><article><span>Lifetime views</span><strong><AnimatedNumber value={summary.lifetimeViews} format="compact" delay={200} /></strong><small>Official verified views</small></article></div></section>
@@ -329,14 +339,18 @@ export function WithdrawScreen() {
   const [balance, setBalance] = useState(18400);
   const [bankDetail, setBankDetail] = useState<BankAccountOut | null>(null);
   const [amount, setAmount] = useState("18400");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    earningsApi.summary().then((data) => {
+    const summaryRequest = earningsApi.summary().then((data) => {
       setBalance(data.payable);
       setAmount(String(data.payable));
     }).catch(() => undefined);
-    bankDetailsApi.get().then(setBankDetail).catch(() => undefined);
+    const bankRequest = bankDetailsApi.get().then(setBankDetail).catch(() => undefined);
+    Promise.allSettled([summaryRequest, bankRequest]).finally(() => setLoading(false));
   }, []);
+
+  if (loading) return <div className="dashboard-page"><ClippitLoader contained label="Preparing your withdrawal" note="Confirming your available balance and payout account." /></div>;
 
   const number = Math.min(balance, Math.max(0, Number(amount) || 0));
   const fee = calculateFee(number, CREATOR_WITHDRAWAL_FEE_RATE);

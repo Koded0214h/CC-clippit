@@ -1,22 +1,35 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { getAccessToken } from "@/lib/api/auth";
+import { ClippitLoader } from "@/components/ui/ClippitLoader";
+import { AUTH_PROTECTION_ENABLED } from "@/lib/auth-protection";
 
 export function AuthGuard({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [allowed, setAllowed] = useState(false);
 
   useEffect(() => {
-    if (getAccessToken()) {
+    if (!AUTH_PROTECTION_ENABLED) {
+      setAllowed(true);
+      return;
+    }
+    if (pathname === "/admin/login" || getAccessToken()) {
       setAllowed(true);
     } else {
+      setAllowed(false);
       router.replace("/auth/sign-in");
     }
-  }, [router]);
+  }, [pathname, router]);
 
-  // Keep protected content hidden while the local session is checked.
-  if (!allowed) return null;
+  if (!AUTH_PROTECTION_ENABLED) return <>{children}</>;
+
+  if (!allowed) {
+    const admin = pathname.startsWith("/admin");
+    const brand = pathname.startsWith("/brand");
+    return <ClippitLoader tone={admin ? "ink" : brand ? "gold" : "paper"} label="Checking your session" note="Opening the right Clippit workspace for you." />;
+  }
   return <>{children}</>;
 }

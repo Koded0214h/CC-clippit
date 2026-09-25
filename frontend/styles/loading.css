@@ -1,0 +1,208 @@
+/* Clippit loading system: the logo itself writes on, holds, and resets. */
+.clippit-loader {
+  --load-bg: #f7f8f2;
+  --load-ink: #151713;
+  --load-accent: #aaff20;
+  --load-muted: rgba(21, 23, 19, .58);
+  position: relative;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 0;
+  width: 100%;
+  min-height: 100svh;
+  padding: clamp(28px, 6vw, 72px);
+  overflow: hidden;
+  color: var(--load-ink);
+  background:
+    radial-gradient(circle at 50% 46%, color-mix(in srgb, var(--load-accent) 7%, transparent) 0, transparent 30%),
+    var(--load-bg);
+  text-align: center;
+  isolation: isolate;
+}
+
+.clippit-loader--ink {
+  --load-bg: #151713;
+  --load-ink: #f7f8f2;
+  --load-accent: #b8ff38;
+  --load-muted: rgba(247, 248, 242, .62);
+}
+.clippit-loader--gold { --load-bg: #efc884; --load-ink: #151713; --load-accent: #9cf414; }
+.clippit-loader--lime { --load-bg: #b8ff38; --load-ink: #151713; --load-accent: #151713; }
+.clippit-loader--contained { min-height: min(720px, calc(100svh - 88px)); border-radius: 18px; }
+.clippit-loader--compact { min-height: 226px; padding: 24px; }
+
+.clippit-loader__stage {
+  position: relative;
+  z-index: 0;
+  display: grid;
+  width: max-content;
+  padding: 20px 24px 28px;
+  place-items: center;
+}
+.clippit-loader__stage::before {
+  position: absolute;
+  z-index: -1;
+  right: 19%;
+  bottom: 14px;
+  left: 19%;
+  height: 13px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--load-ink) 25%, transparent);
+  filter: blur(10px);
+  content: "";
+  transform-origin: center;
+  animation: clippit-contact-shadow 3.2s cubic-bezier(.45, 0, .2, 1) infinite;
+}
+.clippit-loader__stage::after {
+  position: absolute;
+  z-index: -2;
+  inset: 8% 4% 0;
+  border-radius: 50%;
+  background: radial-gradient(circle, color-mix(in srgb, var(--load-accent) 21%, transparent), transparent 68%);
+  content: "";
+  filter: blur(12px);
+  animation: clippit-underlight 3.2s ease-in-out infinite;
+}
+
+.clippit-mark-motion {
+  position: relative;
+  display: block;
+  width: clamp(108px, 12vw, 138px);
+  aspect-ratio: 1;
+  filter: drop-shadow(0 8px 7px rgba(21, 23, 19, .12)) drop-shadow(0 17px 22px rgba(21, 23, 19, .08));
+  transform-origin: 50% 76%;
+  animation: clippit-logo-hover 3.2s cubic-bezier(.45, 0, .2, 1) infinite;
+}
+
+.clippit-mark-motion svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.clippit-logo-path {
+  fill: none;
+  stroke: #fff;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+.clippit-logo-path--c {
+  stroke-width: 34;
+  animation: clippit-write-c 3.2s cubic-bezier(.45, 0, .2, 1) infinite;
+}
+.clippit-logo-path--play {
+  fill: #fff;
+  stroke: none;
+  opacity: 0;
+  animation: clippit-write-play 3.2s ease-in-out infinite;
+}
+.clippit-logo-path--arrow,
+.clippit-logo-path--arrow-head {
+  stroke-width: 22;
+  animation: clippit-write-arrow 3.2s cubic-bezier(.45, 0, .2, 1) infinite;
+}
+.clippit-logo-path--arrow-head {
+  stroke-width: 21;
+  animation-name: clippit-write-arrow-head;
+}
+
+.clippit-mark-motion--compact {
+  width: 27px;
+  height: 27px;
+  aspect-ratio: 1;
+  flex: 0 0 27px;
+  filter: none;
+  animation: none;
+}
+
+.clippit-loader--compact .clippit-mark-motion {
+  width: 82px;
+  height: 82px;
+  flex-basis: 82px;
+  filter: drop-shadow(0 6px 6px rgba(21, 23, 19, .11)) drop-shadow(0 13px 17px rgba(21, 23, 19, .07));
+  animation: clippit-logo-hover 3.2s cubic-bezier(.45, 0, .2, 1) infinite;
+}
+
+.clippit-button-loader,
+.clippit-inline-loader {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  min-width: 0;
+}
+.clippit-inline-loader {
+  padding: 3px;
+}
+
+.auth-button[aria-busy="true"],
+.lime-button[aria-busy="true"],
+.brand-button[aria-busy="true"],
+.admin-button[aria-busy="true"],
+.completion-submit[aria-busy="true"] { justify-content: center; }
+.auth-button[aria-busy="true"] .clippit-button-loader,
+.lime-button[aria-busy="true"] .clippit-button-loader,
+.brand-button[aria-busy="true"] .clippit-button-loader,
+.admin-button[aria-busy="true"] .clippit-button-loader,
+.completion-submit[aria-busy="true"] .clippit-button-loader { width: 100%; }
+
+@keyframes clippit-write-c {
+  0%, 4% { stroke-dashoffset: 1; }
+  30%, 82% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: 1; }
+}
+
+@keyframes clippit-write-play {
+  0%, 17%, 96%, 100% { opacity: 0; }
+  28%, 89% { opacity: 1; }
+}
+
+@keyframes clippit-write-arrow {
+  0%, 29% { stroke-dashoffset: 1; }
+  48%, 72% { stroke-dashoffset: 0; }
+  86%, 100% { stroke-dashoffset: 1; }
+}
+
+@keyframes clippit-write-arrow-head {
+  0%, 40% { stroke-dashoffset: 1; }
+  52%, 68% { stroke-dashoffset: 0; }
+  78%, 100% { stroke-dashoffset: 1; }
+}
+
+@keyframes clippit-logo-hover {
+  0%, 7%, 100% { transform: translate3d(0, 2px, 0) scale(.995); }
+  32%, 68% { transform: translate3d(0, -2px, 0) scale(1); }
+  84% { transform: translate3d(0, -1px, 0) scale(.998); }
+}
+
+@keyframes clippit-contact-shadow {
+  0%, 7%, 100% { opacity: .32; transform: scaleX(.78) scaleY(.82); }
+  32%, 68% { opacity: .19; transform: scaleX(.94) scaleY(.68); }
+  84% { opacity: .24; transform: scaleX(.87) scaleY(.74); }
+}
+
+@keyframes clippit-underlight {
+  0%, 8%, 100% { opacity: .18; transform: scale(.88); }
+  48%, 69% { opacity: .48; transform: scale(1.04); }
+  86% { opacity: .28; transform: scale(.96); }
+}
+
+@media (max-width: 700px) {
+  .clippit-loader { min-height: 100svh; padding: 24px 18px; }
+  .clippit-loader--contained { min-height: calc(100svh - 145px); border-radius: 14px; }
+  .clippit-loader--compact { min-height: 200px; }
+  .clippit-mark-motion { width: min(118px, 32vw); }
+  .clippit-loader--compact .clippit-mark-motion { width: 76px; height: 76px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clippit-logo-path { animation: none; stroke-dashoffset: 0; }
+  .clippit-logo-path--play { opacity: 1; }
+  .clippit-mark-motion,
+  .clippit-loader__stage::before,
+  .clippit-loader__stage::after { animation: none; }
+}

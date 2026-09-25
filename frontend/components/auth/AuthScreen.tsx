@@ -2,6 +2,7 @@
 
 import { useState, type InputHTMLAttributes, type ReactNode } from "react";
 import { Icon } from "@/components/ui/Icon";
+import { ButtonLoader } from "@/components/ui/ClippitLoader";
 
 type FieldIcon = "building" | "lock" | "mail";
 
@@ -65,14 +66,17 @@ export function PasswordField({
 export function AuthButton({
   children,
   disabled,
+  loading = false,
+  loadingLabel = "Working on it",
 }: {
   children: ReactNode;
   disabled?: boolean;
+  loading?: boolean;
+  loadingLabel?: string;
 }) {
   return (
-    <button className="auth-button" type="submit" disabled={disabled}>
-      {children}
-      <Icon name="arrow" />
+    <button className={`auth-button${loading ? " is-loading" : ""}`} type="submit" disabled={disabled || loading} aria-busy={loading}>
+      {loading ? <ButtonLoader label={loadingLabel} /> : <>{children}<Icon name="arrow" /></>}
     </button>
   );
 }
