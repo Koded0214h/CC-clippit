@@ -22,6 +22,7 @@ def _require_organisation(user: User) -> None:
 
 
 async def _out(profile: models.OrganisationProfile, db: AsyncSession) -> schemas.OrganisationProfileOut:
+    owner = await db.get(User, profile.user_id)
     return schemas.OrganisationProfileOut(
         user_id=profile.user_id,
         name=profile.name,
@@ -37,6 +38,14 @@ async def _out(profile: models.OrganisationProfile, db: AsyncSession) -> schemas
         team_size=profile.team_size,
         campaign_goal=profile.campaign_goal,
         budget_range=profile.budget_range,
+        contact_name=profile.contact_name,
+        location=profile.location,
+        funder_type=profile.funder_type,
+        registered=profile.registered,
+        content_interests=list(profile.content_interests or []),
+        viewing_interests=list(profile.viewing_interests or []),
+        discovery_source=profile.discovery_source,
+        onboarding_completed=bool(owner and owner.onboarding_completed),
         updated_at=profile.updated_at,
     )
 
@@ -100,6 +109,8 @@ async def complete_onboarding(
         await owned_upload(db, payload.photo_upload_id, user.id, kinds=("image",))
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(profile, field, value)
+    profile.draft_answers = None
+    profile.draft_step = None
     if user.onboarded_at is None:
         user.onboarded_at = datetime.now(timezone.utc)
     await db.commit()
