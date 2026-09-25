@@ -668,6 +668,10 @@
   flex-direction: column;
   width: 244px;
   padding: 28px 20px 22px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
   color: var(--white);
   background: var(--ink);
 }
@@ -3959,6 +3963,9 @@
 
 /* Responsive campaign QA pass: keep data readable and contained at every width. */
 .studio-rail .rail-signout {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   width: 100%;
   min-height: 42px;
   padding: 0 14px;
@@ -3970,9 +3977,13 @@
   font-size: 11px;
   font-weight: 760;
   text-align: left;
+  cursor: pointer;
+  transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, transform 150ms ease;
 }
+.studio-rail .rail-signout svg { width: 18px; flex: 0 0 auto; }
 .studio-rail .rail-signout:hover,
-.studio-rail .rail-signout:focus-visible { color: var(--ink); background: var(--lime); border-color: var(--lime); outline: 0; }
+.studio-rail .rail-signout:focus-visible { color: var(--ink); background: var(--lime); border-color: var(--lime); outline: 0; transform: translateY(-1px); }
+.studio-rail .rail-signout:disabled { cursor: wait; opacity: .56; transform: none; }
 
 .campaign-ledger__header { font-size: 10px; }
 .ledger-campaign small { font-size: 10px; line-height: 1.35; }
@@ -5271,6 +5282,16 @@
     justify-content: center;
     padding: 7px;
   }
+
+  .studio-rail .rail-signout {
+    width: 58px;
+    min-height: 48px;
+    padding: 0;
+    justify-content: center;
+  }
+
+  .studio-rail .rail-signout span { display: none; }
+  .studio-rail .rail-signout svg { width: 21px; }
 
   .product-stage {
     grid-column: 2;
@@ -7615,14 +7636,19 @@
   .creator-mobile-more > header button { display: grid; width: 39px; height: 39px; place-items: center; border: 1px solid var(--ink); border-radius: 50%; background: #fff; transform: rotate(90deg); }
   .creator-mobile-more > header svg { width: 19px; }
   .creator-mobile-more nav { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; padding-top: 14px; }
-  .creator-mobile-more nav a { display: grid; grid-template-columns: 38px minmax(0, 1fr) 16px; align-items: center; gap: 9px; min-height: 68px; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
+  .creator-mobile-more nav :is(a, button) { display: grid; grid-template-columns: 38px minmax(0, 1fr) 16px; align-items: center; gap: 9px; min-height: 68px; padding: 10px; color: inherit; border: 1px solid var(--line); border-radius: 12px; background: #fff; font: inherit; text-align: left; cursor: pointer; }
   .creator-mobile-more nav a.is-active { border-color: var(--ink); background: var(--lime); box-shadow: 3px 3px 0 var(--ink); }
-  .creator-mobile-more nav a > span { display: grid; width: 38px; height: 38px; place-items: center; border: 1px solid var(--ink); border-radius: 10px; background: var(--gold); }
-  .creator-mobile-more nav a > span svg { width: 18px; }
-  .creator-mobile-more nav a > p { display: grid; gap: 2px; min-width: 0; margin: 0; }
-  .creator-mobile-more nav a strong { font-size: 10px; }
-  .creator-mobile-more nav a small { overflow: hidden; color: var(--muted); font-size: 7px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
-  .creator-mobile-more nav a > svg { width: 15px; }
+  .creator-mobile-more nav :is(a, button) > span { display: grid; width: 38px; height: 38px; place-items: center; border: 1px solid var(--ink); border-radius: 10px; background: var(--gold); }
+  .creator-mobile-more nav :is(a, button) > span svg { width: 18px; }
+  .creator-mobile-more nav :is(a, button) > p { display: grid; gap: 2px; min-width: 0; margin: 0; }
+  .creator-mobile-more nav :is(a, button) strong { font-size: 10px; }
+  .creator-mobile-more nav :is(a, button) small { overflow: hidden; color: var(--muted); font-size: 7px; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+  .creator-mobile-more nav :is(a, button) > svg { width: 15px; }
+  .creator-mobile-more nav .creator-mobile-signout { color: #fff; border-color: var(--ink); background: var(--ink); }
+  .creator-mobile-more nav .creator-mobile-signout > span { color: var(--ink); background: var(--lime); }
+  .creator-mobile-more nav .creator-mobile-signout small { color: rgba(255, 255, 255, .62); }
+  .creator-mobile-more nav .creator-mobile-signout > svg { color: var(--lime); }
+  .creator-mobile-more nav .creator-mobile-signout:disabled { cursor: wait; opacity: .58; }
   .mobile-dock :is(a, button) { position: relative; display: grid; justify-items: center; gap: 5px; padding: 7px 2px; color: inherit; border: 0; border-radius: 10px; background: transparent; font: inherit; font-size: 7px; }
   .mobile-dock :is(a, button) svg { width: 19px; }
   .mobile-dock :is(a, button).is-active { color: var(--ink); background: var(--gold); }
@@ -7631,8 +7657,8 @@
 @media (max-width: 520px) {
   .creator-mobile-more { right: 8px; left: 8px; padding: 12px; }
   .creator-mobile-more nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .creator-mobile-more nav a { grid-template-columns: 34px minmax(0, 1fr) 14px; min-height: 64px; gap: 7px; padding: 8px; }
-  .creator-mobile-more nav a > span { width: 34px; height: 34px; }
+  .creator-mobile-more nav :is(a, button) { grid-template-columns: 34px minmax(0, 1fr) 14px; min-height: 64px; gap: 7px; padding: 8px; }
+  .creator-mobile-more nav :is(a, button) > span { width: 34px; height: 34px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

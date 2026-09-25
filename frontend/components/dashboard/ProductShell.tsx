@@ -48,6 +48,7 @@ export function ProductShell({ children }: { children: ReactNode }) {
   const profile = useStoredProfile("creator", CREATOR_PROFILE_FALLBACK);
   const dockHidden = useAutoHideDock();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const [payable, setPayable] = useState(18400);
   const [notifCount, setNotifCount] = useState(0);
   const { user, logout } = useUser();
@@ -59,6 +60,13 @@ export function ProductShell({ children }: { children: ReactNode }) {
     earningsApi.summary().then((data) => setPayable(data.payable)).catch(() => undefined);
     notificationsApi.unreadCount().then((data) => setNotifCount(data.unread_count)).catch(() => undefined);
   }, []);
+
+  const signOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    setMoreOpen(false);
+    await logout();
+  };
 
   return (
     <div className="product-shell">
@@ -100,8 +108,8 @@ export function ProductShell({ children }: { children: ReactNode }) {
             </span>
             <ProductIcon name="chevron" />
           </Link>
-          <button type="button" className="rail-signout" onClick={logout} aria-label="Sign out">
-            Sign out
+          <button type="button" className="rail-signout" onClick={signOut} disabled={signingOut} aria-label="Sign out" aria-busy={signingOut}>
+            <ProductIcon name="logout" /><span>Sign out</span>
           </button>
         </div>
       </aside>
@@ -137,7 +145,7 @@ export function ProductShell({ children }: { children: ReactNode }) {
       {moreOpen && <button className="creator-mobile-more-backdrop" type="button" aria-label="Close more menu" onClick={() => setMoreOpen(false)} />}
       <section id="creator-more-menu" className={`creator-mobile-more${moreOpen ? " is-open" : ""}`} aria-label="More creator pages" aria-hidden={!moreOpen}>
         <header><div><small>Your Clippit</small><strong>More</strong></div><button type="button" onClick={() => setMoreOpen(false)} aria-label="Close more menu"><ProductIcon name="more" /></button></header>
-        <nav>{creatorMoreItems.map((item) => <Link key={item.href} href={item.href} onClick={() => setMoreOpen(false)} className={pathname.startsWith(item.href) ? "is-active" : ""}><span><ProductIcon name={item.icon} /></span><p><strong>{item.label}</strong><small>{item.copy}</small></p><ProductIcon name="arrow" /></Link>)}</nav>
+        <nav>{creatorMoreItems.map((item) => <Link key={item.href} href={item.href} onClick={() => setMoreOpen(false)} className={pathname.startsWith(item.href) ? "is-active" : ""}><span><ProductIcon name={item.icon} /></span><p><strong>{item.label}</strong><small>{item.copy}</small></p><ProductIcon name="arrow" /></Link>)}<button type="button" className="creator-mobile-signout" onClick={signOut} disabled={signingOut} aria-busy={signingOut}><span><ProductIcon name="logout" /></span><p><strong>Sign out</strong><small>End this session</small></p><ProductIcon name="arrow" /></button></nav>
       </section>
       <nav className={`mobile-dock${dockHidden && !moreOpen ? " is-hidden" : ""}`} aria-label="Mobile navigation">
         {mobileNavItems.map((item) => (

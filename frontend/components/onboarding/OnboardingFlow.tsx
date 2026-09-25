@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
 import { ProfilePhotoPicker, saveStoredProfile } from "@/components/ui/ProfilePhotoPicker";
+import { ButtonLoader, ClippitLoader } from "@/components/ui/ClippitLoader";
 import { ApiError } from "@/lib/api/client";
 import { onboardingApi, PLATFORM_VALUES, type OnboardingDraftOut } from "@/lib/api/onboarding";
 
@@ -14,6 +15,7 @@ function useDraftSync(load: () => Promise<OnboardingDraftOut>, save: (payload: R
   const revision = useRef<number | null>(null);
   const [draft, setDraft] = useState<OnboardingDraftOut | null>(null);
   const [ready, setReady] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -28,16 +30,19 @@ function useDraftSync(load: () => Promise<OnboardingDraftOut>, save: (payload: R
   const persist = async (answers: Record<string, unknown>, step: string) => {
     if (revision.current === null) return;
     const body = Object.fromEntries(Object.entries(answers).filter(([, value]) => value !== "" && value !== null && value !== undefined));
+    setSaving(true);
     try {
       revision.current = (await save({ ...body, step, revision: revision.current })).revision;
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
         try { revision.current = (await load()).revision; } catch { /* next save retries */ }
       }
+    } finally {
+      setSaving(false);
     }
   };
 
-  return { draft, ready, persist };
+  return { draft, ready, saving, persist };
 }
 
 async function uploadIfLocal(photo: string) {
@@ -50,8 +55,8 @@ async function uploadIfLocal(photo: string) {
   }
 }
 
-function SetupLoading() {
-  return <main className="onboarding-shell"><SetupTopbar /></main>;
+function SetupLoading({ tone = "paper", label = "Loading your setup" }: { tone?: "paper" | "gold"; label?: string }) {
+  return <main className="onboarding-shell"><ClippitLoader tone={tone} label={label} note="" /></main>;
 }
 
 type Option = { label: string; copy?: string; icon: ProductIconName };
@@ -157,7 +162,7 @@ function PlatformPicker({ selected, onToggle }: { selected: string[]; onToggle: 
 }
 
 function SetupActions({ step, isLast, error, onBack, finalLabel, hint = "Press Enter to continue", continueLabel, busy = false }: { step: number; isLast: boolean; error: string; onBack: () => void; finalLabel: string; hint?: string; continueLabel?: string; busy?: boolean }) {
-  return <div className="setup-actions typeform-actions"><div>{step > 0 && <button className="setup-back" type="button" onClick={onBack} disabled={busy}>Back</button>}<span className="setup-error" role="alert">{error}</span></div><div className="typeform-continue"><small>{busy ? "Saving your answers…" : hint}</small><button className="setup-next" type="submit" disabled={busy} aria-busy={busy}>{busy ? "Saving…" : isLast ? finalLabel : continueLabel || "Continue"}<ProductIcon name="arrow" /></button></div></div>;
+  return <div className="setup-actions typeform-actions"><div>{step > 0 && <button className="setup-back" type="button" onClick={onBack} disabled={busy}>Back</button>}<span className="setup-error" role="alert">{error}</span></div><div className="typeform-continue"><small>{busy ? null : hint}</small><button className="setup-next" type="submit" disabled={busy} aria-busy={busy}>{busy ? <ButtonLoader label="Saving onboarding answers" /> : <>{isLast ? finalLabel : continueLabel || "Continue"}<ProductIcon name="arrow" /></>}</button></div></div>;
 }
 
 function toggleLimited(current: string[], label: string, limit = 5) {
@@ -235,6 +240,7 @@ export function CreatorOnboarding() {
   };
   const choose = (setter: (value: string) => void, value: string) => { setter(value); setError(""); if (step < creatorSteps.length - 1) window.setTimeout(() => advanceTo(step + 1), 230); };
 
+  if (saving || sync.saving) return <SetupLoading label={saving ? "Saving creator onboarding" : "Saving creator onboarding progress"} />;
   if (!sync.ready || sync.draft?.status === "completed") return <SetupLoading />;
 
   return <main className="onboarding-shell creator-onboarding"><SetupTopbar /><div className="onboarding-layout"><section className="onboarding-workbench typeform-workbench"><SetupProgress step={step} total={creatorSteps.length} label="Creator setup" /><SetupArtwork artwork={artwork[current]} /><form className="setup-form setup-form--extended typeform-form" onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); next(); }}><div key={current}>
@@ -359,7 +365,8 @@ export function BrandOnboarding() {
   };
   const choose = (setter: (value: string) => void, value: string) => { setter(value); setError(""); if (step < steps.length - 1) window.setTimeout(() => advanceTo(step + 1), 230); };
 
-  if (!sync.ready || sync.draft?.status === "completed") return <SetupLoading />;
+  if (saving || sync.saving) return <SetupLoading tone="gold" label={saving ? "Saving brand onboarding" : "Saving brand onboarding progress"} />;
+  if (!sync.ready || sync.draft?.status === "completed") return <SetupLoading tone="gold" />;
 
   return <main className="onboarding-shell brand-onboarding"><SetupTopbar /><div className="onboarding-layout brand-setup-layout"><section className="onboarding-workbench brand-workbench typeform-workbench"><SetupProgress step={step} total={steps.length} label={identity === "individual" ? "Funder setup" : "Brand setup"} /><SetupArtwork artwork={artwork[current]} tone="gold" /><form className="setup-form setup-form--extended typeform-form" onSubmit={(event) => { event.preventDefault(); next(); }}><div key={current}>
     {current === "name" && <Question note="Start with the person behind the pot." title="What would you like to be called?" copy="Use the name you want to see across your workspace."><TextAnswer label="Preferred name" value={name} onChange={(value) => { setName(value); setError(""); }} placeholder="Amara" autoComplete="nickname" maxLength={32} /></Question>}
