@@ -81,8 +81,27 @@ async function request<T>(path: string, init: RequestInit = {}, isRetry = false)
   return res.json() as Promise<T>;
 }
 
+const inFlightGets = new Map<string, Promise<unknown>>();
+
+function get<T>(path: string): Promise<T> {
+  const token = typeof window !== "undefined"
+    ? localStorage.getItem("clippit:access-token")
+    : null;
+  const key = `${token ?? "anonymous"}:${path}`;
+  const existing = inFlightGets.get(key) as Promise<T> | undefined;
+  if (existing) return existing;
+
+  const pending = request<T>(path);
+  inFlightGets.set(key, pending);
+  const clear = () => {
+    if (inFlightGets.get(key) === pending) inFlightGets.delete(key);
+  };
+  pending.then(clear, clear);
+  return pending;
+}
+
 export const api = {
-  get: <T>(path: string) => request<T>(path),
+  get,
   post: <T>(path: string, body: unknown) =>
     request<T>(path, { method: "POST", body: JSON.stringify(body) }),
   put: <T>(path: string, body: unknown) =>
