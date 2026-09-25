@@ -16,7 +16,7 @@ export function ClippitMarkMotion({ compact = false, light = false }: { compact?
           <path className="clippit-logo-path clippit-logo-path--arrow-head" pathLength="1" d="M71 14 L90 7 L86 28" />
         </mask>
       </defs>
-      <image href={light ? "/assets/clippit-mark-light.png" : "/assets/clippit-mark.png"} width="100" height="100" preserveAspectRatio="xMidYMid meet" mask={`url(#${maskId})`} />
+      <image href={light ? "/assets/clippit-mark-light-loader.webp" : "/assets/clippit-mark-loader.webp"} width="100" height="100" preserveAspectRatio="xMidYMid meet" mask={`url(#${maskId})`} />
     </svg>
   </span>;
 }

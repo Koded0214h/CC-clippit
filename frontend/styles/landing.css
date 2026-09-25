@@ -166,6 +166,16 @@ svg {
 .section {
   padding-block: 110px;
 }
+
+/* Defer layout and paint work for content that is still below the viewport. */
+@supports (content-visibility: auto) {
+  main > .section,
+  main > .throw-stage,
+  .footer {
+    content-visibility: auto;
+    contain-intrinsic-block-size: auto 900px;
+  }
+}
 .section-label {
   display: flex;
   align-items: center;
