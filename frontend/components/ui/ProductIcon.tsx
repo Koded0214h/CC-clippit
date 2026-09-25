@@ -22,6 +22,7 @@ export type ProductIconName =
   | "home"
   | "instagram"
   | "link"
+  | "logout"
   | "more"
   | "music"
   | "pause"
@@ -137,6 +138,11 @@ export function ProductIcon({
       <>
         <path d="m9 15 6-6" />
         <path d="M7 17H5a4 4 0 0 1 0-8h4m6-2h4a4 4 0 0 1 0 8h-4" />
+      </>
+    ),
+    logout: (
+      <>
+        <path d="M10 4H5v16h5M14 8l4 4-4 4M8 12h10" />
       </>
     ),
     more: (
