@@ -121,20 +121,19 @@ def health():
 
 @app.get("/health/email")
 async def health_email(x_internal_secret: str = ""):
-    """Smoke-tests the configured email sender. Returns the backend type and
-    any error so we can diagnose SMTP issues on Render without log access."""
-    from fastapi import Depends
+    """Smoke-tests the configured email sender. Returns backend type and
+    any SMTP error so failures can be diagnosed without Render log access."""
     from core.email import EmailMessage, get_email_sender
+    from fastapi import HTTPException
     if x_internal_secret != settings.internal_service_secret:
-        from fastapi import HTTPException
         raise HTTPException(401, "Invalid secret")
     sender = get_email_sender()
     backend = type(sender).__name__
     try:
         await sender.send(EmailMessage(
             to="clippit.click@gmail.com",
-            subject="Clippit /health/email smoke test",
-            text="If you see this, SMTP is working correctly from the deployed backend.",
+            subject="Clippit email smoke test",
+            text="SMTP is working correctly from the deployed backend.",
         ))
         return {"backend": backend, "status": "sent", "error": None}
     except Exception as exc:
