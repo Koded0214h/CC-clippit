@@ -82,12 +82,13 @@ class Settings(BaseSettings):
     # --- Email / one-time codes -------------------------------------------
     # `console` logs the message (and keeps the last few in memory so dev
     # and tests can read a code). `smtp` sends for real.
-    email_backend: str = "console"
+    email_backend: str = "console"  # console | smtp | resend
     email_from: str = "Clippit <no-reply@clippit.local>"
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""
     smtp_password: str = ""
+    resend_api_key: str = ""
     require_email_verification: bool = True
     otp_ttl_minutes: int = 10
     otp_max_attempts: int = 5

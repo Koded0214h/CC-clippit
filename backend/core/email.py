@@ -3,7 +3,9 @@
 `ConsoleEmailSender` is the default: it logs the message and keeps the most
 recent ones in memory, which is how a developer (or a test) reads the code
 that would have arrived in an inbox. Nothing is ever sent to a real address
-unless `EMAIL_BACKEND=smtp` is configured.
+unless `EMAIL_BACKEND=smtp` or `EMAIL_BACKEND=resend` is configured.
+
+Render blocks outbound SMTP (port 587/465), so use `resend` in production.
 """
 
 from __future__ import annotations
@@ -70,9 +72,34 @@ class SmtpEmailSender:
         await asyncio.to_thread(self._send_blocking, message)
 
 
+class ResendEmailSender:
+    """Sends via Resend's HTTP API — works on Render (no outbound SMTP needed)."""
+
+    def __init__(self, *, api_key: str, sender: str) -> None:
+        self._api_key = api_key
+        self._sender = sender
+
+    def _send_blocking(self, message: EmailMessage) -> None:
+        import resend as _resend
+        _resend.api_key = self._api_key
+        _resend.Emails.send({
+            "from": self._sender,
+            "to": [message.to],
+            "subject": message.subject,
+            "text": message.text,
+        })
+
+    async def send(self, message: EmailMessage) -> None:
+        await asyncio.to_thread(self._send_blocking, message)
+
+
 @lru_cache
 def get_email_sender() -> EmailSender:
     settings = get_settings()
+    if settings.email_backend == "resend":
+        if not settings.resend_api_key:
+            raise RuntimeError("EMAIL_BACKEND=resend needs RESEND_API_KEY")
+        return ResendEmailSender(api_key=settings.resend_api_key, sender=settings.email_from)
     if settings.email_backend == "smtp":
         if not settings.smtp_host:
             raise RuntimeError("EMAIL_BACKEND=smtp needs SMTP_HOST")
