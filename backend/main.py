@@ -117,3 +117,25 @@ app.include_router(reports_admin_router)
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/health/email")
+async def health_email(x_internal_secret: str = ""):
+    """Smoke-tests the configured email sender. Returns the backend type and
+    any error so we can diagnose SMTP issues on Render without log access."""
+    from fastapi import Depends
+    from core.email import EmailMessage, get_email_sender
+    if x_internal_secret != settings.internal_service_secret:
+        from fastapi import HTTPException
+        raise HTTPException(401, "Invalid secret")
+    sender = get_email_sender()
+    backend = type(sender).__name__
+    try:
+        await sender.send(EmailMessage(
+            to="clippit.click@gmail.com",
+            subject="Clippit /health/email smoke test",
+            text="If you see this, SMTP is working correctly from the deployed backend.",
+        ))
+        return {"backend": backend, "status": "sent", "error": None}
+    except Exception as exc:
+        return {"backend": backend, "status": "failed", "error": str(exc)}
