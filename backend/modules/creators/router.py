@@ -146,6 +146,8 @@ async def _profile_out(user: User, profile: models.CreatorProfile, db: AsyncSess
         experience=profile.experience,
         goals=list(profile.goals or []),
         country=profile.country,
+        location=profile.location,
+        viewing_interests=list(profile.viewing_interests or []),
         onboarding_completed=user.onboarding_completed,
         updated_at=profile.updated_at,
     )
@@ -212,6 +214,10 @@ async def complete_onboarding(
     profile.experience = payload.experience
     profile.goals = payload.goals
     profile.country = payload.country
+    profile.location = payload.location
+    profile.viewing_interests = payload.viewing_interests
+    profile.draft_answers = None
+    profile.draft_step = None
     if user.onboarded_at is None:
         user.onboarded_at = datetime.now(timezone.utc)
     await db.commit()
@@ -296,6 +302,9 @@ async def complete_onboarding_draft(user: User = Depends(get_current_user), db: 
     profile.discovery_source = payload.discovery_source
     profile.experience = payload.experience
     profile.goals = payload.goals
+    profile.country = payload.country
+    profile.location = payload.location
+    profile.viewing_interests = payload.viewing_interests
     profile.draft_answers = None
     profile.draft_step = None
     user.onboarded_at = datetime.now(timezone.utc)

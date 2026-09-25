@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
@@ -45,19 +46,43 @@ class OrganisationProfileUpdate(BaseModel):
         return slug
 
 
+def _clean_list(values: list[str] | None) -> list[str] | None:
+    if values is None:
+        return None
+    seen: dict[str, None] = {}
+    for value in values:
+        cleaned = value.strip()[:40]
+        if cleaned:
+            seen[cleaned] = None
+    return list(seen)[:12]
+
+
 class OrganisationOnboarding(BaseModel):
     name: str = Field(min_length=2, max_length=80)
     bio: str | None = Field(default=None, max_length=240)
+    website: str | None = Field(default=None, max_length=255)
     photo_upload_id: uuid.UUID | None = None
     production_workflow: str | None = Field(default=None, max_length=60)
     team_size: str | None = Field(default=None, max_length=40)
     campaign_goal: str | None = Field(default=None, max_length=80)
     budget_range: str | None = Field(default=None, max_length=60)
+    contact_name: str | None = Field(default=None, max_length=80)
+    location: str | None = Field(default=None, max_length=80)
+    funder_type: Literal["brand", "individual"] | None = None
+    registered: bool | None = None
+    content_interests: list[str] = Field(default_factory=list, max_length=12)
+    viewing_interests: list[str] = Field(default_factory=list, max_length=12)
+    discovery_source: str | None = Field(default=None, max_length=60)
 
-    @field_validator("name", "bio")
+    @field_validator("name", "bio", "website", "contact_name", "location")
     @classmethod
     def strip(cls, value: str | None) -> str | None:
         return _clean(value)
+
+    @field_validator("content_interests", "viewing_interests")
+    @classmethod
+    def clean_lists(cls, value: list[str]) -> list[str]:
+        return _clean_list(value) or []
 
 
 class OnboardingDraftPatch(BaseModel):
@@ -69,16 +94,29 @@ class OnboardingDraftPatch(BaseModel):
     step: str | None = Field(default=None, max_length=40)
     name: str | None = Field(default=None, min_length=2, max_length=80)
     bio: str | None = Field(default=None, max_length=240)
+    website: str | None = Field(default=None, max_length=255)
     photo_upload_id: uuid.UUID | None = None
     production_workflow: str | None = Field(default=None, max_length=60)
     team_size: str | None = Field(default=None, max_length=40)
     campaign_goal: str | None = Field(default=None, max_length=80)
     budget_range: str | None = Field(default=None, max_length=60)
+    contact_name: str | None = Field(default=None, max_length=80)
+    location: str | None = Field(default=None, max_length=80)
+    funder_type: Literal["brand", "individual"] | None = None
+    registered: bool | None = None
+    content_interests: list[str] | None = Field(default=None, max_length=12)
+    viewing_interests: list[str] | None = Field(default=None, max_length=12)
+    discovery_source: str | None = Field(default=None, max_length=60)
 
-    @field_validator("name", "bio")
+    @field_validator("name", "bio", "website", "contact_name", "location")
     @classmethod
     def strip(cls, value: str | None) -> str | None:
         return _clean(value)
+
+    @field_validator("content_interests", "viewing_interests")
+    @classmethod
+    def clean_lists(cls, value: list[str] | None) -> list[str] | None:
+        return _clean_list(value)
 
 
 class OnboardingDraftOut(BaseModel):
@@ -106,6 +144,14 @@ class OrganisationProfileOut(BaseModel):
     team_size: str | None
     campaign_goal: str | None
     budget_range: str | None
+    contact_name: str | None = None
+    location: str | None = None
+    funder_type: str | None = None
+    registered: bool | None = None
+    content_interests: list[str] = []
+    viewing_interests: list[str] = []
+    discovery_source: str | None = None
+    onboarding_completed: bool = False
     updated_at: datetime
 
 

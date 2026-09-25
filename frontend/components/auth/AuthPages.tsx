@@ -22,8 +22,53 @@ import { Icon } from "@/components/ui/Icon";
 import { isEmail, isStrongPassword, type AccountRole } from "@/lib/auth";
 import { ApiError } from "@/lib/api/client";
 import { authApi, storeTokens } from "@/lib/api/auth";
+import { homeFor, onboardingApi, onboardingFor } from "@/lib/api/onboarding";
+import { saveStoredProfile } from "@/components/ui/ProfilePhotoPicker";
 
 type Errors = Record<string, string>;
+
+const VERIFY_EMAIL_KEY = "clippit:verify-email";
+const VERIFY_AUTOSEND_KEY = "clippit:verify-autosend";
+
+function rememberVerifyEmail(email: string, autosend = false) {
+  try {
+    window.sessionStorage.setItem(VERIFY_EMAIL_KEY, email);
+    if (autosend) window.sessionStorage.setItem(VERIFY_AUTOSEND_KEY, "1");
+  } catch {
+    // private mode: the in-memory flow state still carries the email
+  }
+}
+
+async function hydrateStoredProfile(role: AccountRole) {
+  try {
+    if (role === "organisation") {
+      const profile = await onboardingApi.organisationProfile();
+      saveStoredProfile("brand", { name: profile.name, bio: profile.bio ?? "", photo: profile.photo_url ?? "" });
+    } else {
+      const profile = await onboardingApi.creatorProfile();
+      saveStoredProfile("creator", { name: profile.display_name, bio: profile.bio ?? "", photo: profile.photo_url ?? "" });
+    }
+  } catch {
+    // the dashboard falls back to its defaults
+  }
+}
+
+async function routeAfterAuth(
+  router: ReturnType<typeof useRouter>,
+  user: { role: AccountRole; email_verified: boolean; onboarding_completed: boolean; email: string },
+) {
+  if (!user.email_verified) {
+    rememberVerifyEmail(user.email, true);
+    router.push("/auth/verify-email");
+    return;
+  }
+  if (user.onboarding_completed) {
+    await hydrateStoredProfile(user.role);
+    router.push(homeFor(user.role));
+    return;
+  }
+  router.push(onboardingFor(user.role));
+}
 
 function Header({
   kicker,
@@ -172,12 +217,14 @@ export function SignUpDetails({ role }: { role: AccountRole }) {
   const [errors, setErrors] = useState<Errors>({});
   const [apiError, setApiError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [existing, setExisting] = useState<{ email: string; name: string } | null>(null);
   const organisation = role === "organisation";
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setErrors({});
     setApiError("");
+    setExisting(null);
 
     const data = new FormData(event.currentTarget);
     const email = String(data.get("email") ?? "").trim();
@@ -211,11 +258,12 @@ export function SignUpDetails({ role }: { role: AccountRole }) {
       flow.setEmail(email);
       flow.setRole(result.user.role);
       flow.setCompletion("signup");
+      rememberVerifyEmail(email);
       router.push("/auth/verify-email");
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 409) {
-          setErrors({ email: "An account with this email already exists." });
+          setExisting({ email, name: full_name.split(/\s+/)[0] || "there" });
         } else {
           setApiError(err.detail);
         }
@@ -318,10 +366,24 @@ export function SignUpDetails({ role }: { role: AccountRole }) {
           error={errors.password}
         />
         <ApiErrorMessage message={apiError} />
+        {existing && (
+          <div role="alert" className="auth-notice">
+            <p>
+              <strong>Hey {existing.name}, you already have an account.</strong>{" "}
+              <span>{existing.email} is already registered with Clippit. Sign in to pick up where you left off. If you haven&apos;t confirmed your email yet, we&apos;ll send you a fresh code.</span>
+            </p>
+            <Link href={`/auth/sign-in?email=${encodeURIComponent(existing.email)}`}>
+              Go to sign in <Icon name="arrow" />
+            </Link>
+          </div>
+        )}
         <AuthButton loading={isLoading} loadingLabel="Creating your account">
           {`Create my ${organisation ? "organisation" : "creator"} account`}
         </AuthButton>
       </form>
+      <p className="switch-line">
+        Already have an account? <Link href="/auth/sign-in">Sign in</Link>
+      </p>
     </section>
   );
 }
@@ -332,6 +394,15 @@ export function SignIn() {
   const [errors, setErrors] = useState<Errors>({});
   const [apiError, setApiError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [prefill, setPrefill] = useState("");
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const email = new URLSearchParams(window.location.search).get("email");
+      if (email) setPrefill(email);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -355,12 +426,7 @@ export function SignIn() {
       flow.setEmail(email);
       flow.setRole(result.user.role);
       flow.setCompletion("signin");
-
-      if (!result.user.email_verified) {
-        router.push("/auth/verify-email");
-      } else {
-        router.push(result.user.role === "organisation" ? "/onboarding/brand" : "/onboarding/creator");
-      }
+      await routeAfterAuth(router, result.user);
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 401) {
@@ -402,12 +468,14 @@ export function SignIn() {
         />
         <AuthDivider />
         <TextField
+          key={prefill}
           label="Email address"
           name="email"
           type="email"
           autoComplete="email"
           placeholder="you@example.com"
           icon="mail"
+          defaultValue={prefill}
           error={errors.email}
         />
         <PasswordField
@@ -458,6 +526,7 @@ export function ForgotPassword() {
     try {
       await authApi.forgotPassword({ email });
       flow.setEmail(email);
+      rememberVerifyEmail(email);
       router.push("/auth/recovery-code");
     } catch (err) {
       if (err instanceof ApiError) {
@@ -520,6 +589,16 @@ export function OtpPage({ recovery = false }: { recovery?: boolean }) {
   const [apiError, setApiError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [cooldown, setCooldown] = useState(0);
+  const [notice, setNotice] = useState("");
+  const [storedEmail, setStoredEmail] = useState("");
+  const [sending, setSending] = useState(false);
+  const email = flow.email || storedEmail;
+
+  useEffect(() => {
+    if (!cooldown) return;
+    const timer = window.setTimeout(() => setCooldown((value) => Math.max(0, value - 1)), 1000);
+    return () => window.clearTimeout(timer);
+  }, [cooldown]);
 
   const update = (index: number, value: string) => {
     const digit = value.replace(/\D/g, "").slice(-1);
@@ -557,13 +636,18 @@ export function OtpPage({ recovery = false }: { recovery?: boolean }) {
 
     try {
       if (recovery) {
-        const result = await authApi.verifyRecoveryCode({ email: flow.email, code });
+        const result = await authApi.verifyRecoveryCode({ email, code });
         flow.setResetToken(result.reset_token);
         router.push("/auth/reset-password");
       } else {
-        await authApi.verifyEmail({ code, email: flow.email || undefined });
-        flow.setCompletion("signup");
-        router.push("/auth/success");
+        const user = await authApi.verifyEmail({ code, email: email || undefined });
+        try { window.sessionStorage.removeItem(VERIFY_EMAIL_KEY); } catch { /* ignore */ }
+        if (user.onboarding_completed) {
+          await routeAfterAuth(router, user);
+        } else {
+          flow.setCompletion("signup");
+          router.push("/auth/success");
+        }
       }
     } catch (err) {
       if (err instanceof ApiError) {
@@ -576,30 +660,49 @@ export function OtpPage({ recovery = false }: { recovery?: boolean }) {
     }
   };
 
-  const resend = async () => {
-    if (cooldown) return;
+  const resend = async (target = email) => {
+    if (cooldown || sending) return;
+    setSending(true);
+    setNotice("");
+    setApiError("");
     try {
-      if (recovery) {
-        await authApi.forgotPassword({ email: flow.email });
+      const result = recovery
+        ? await authApi.forgotPassword({ email: target })
+        : await authApi.resendVerification({ email: target || undefined });
+      setNotice(`We sent a new code to ${target || "your inbox"}. Check spam or promotions if you don't see it.`);
+      setCooldown(result.resend_in || 60);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 429) {
+        const wait = Number(/(\d+)\s*s/.exec(err.detail)?.[1] ?? 60);
+        setNotice(`A code was sent recently. You can ask for another in ${wait}s — check your inbox for the last one.`);
+        setCooldown(wait);
+      } else if (err instanceof ApiError && err.status === 409) {
+        setNotice("This email is already confirmed. Sign in to continue.");
       } else {
-        await authApi.resendVerification({ email: flow.email || undefined });
+        setApiError(err instanceof ApiError ? err.detail : "We couldn't send a new code. Check your connection and try again.");
       }
-    } catch {
-      // resend failures are silent — the user can try again
+    } finally {
+      setSending(false);
     }
-    setCooldown(30);
-    const timer = window.setInterval(
-      () =>
-        setCooldown((value) => {
-          if (value <= 1) {
-            window.clearInterval(timer);
-            return 0;
-          }
-          return value - 1;
-        }),
-      1000,
-    );
   };
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      let saved = "";
+      let autosend = false;
+      try {
+        saved = window.sessionStorage.getItem(VERIFY_EMAIL_KEY) ?? "";
+        autosend = !recovery && window.sessionStorage.getItem(VERIFY_AUTOSEND_KEY) === "1";
+        window.sessionStorage.removeItem(VERIFY_AUTOSEND_KEY);
+      } catch {
+        // sessionStorage unavailable
+      }
+      if (saved) setStoredEmail(saved);
+      if (autosend) void resend(flow.email || saved);
+    });
+    return () => window.cancelAnimationFrame(frame);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <section className="auth-screen" aria-labelledby="otp-title">
@@ -640,7 +743,7 @@ export function OtpPage({ recovery = false }: { recovery?: boolean }) {
         intro={
           <>
             Enter the {recovery ? "recovery" : "verification"} code sent to{" "}
-            <strong>{flow.email || "you@example.com"}</strong>.
+            <strong>{email || "your email"}</strong>.
           </>
         }
       />
@@ -680,12 +783,22 @@ export function OtpPage({ recovery = false }: { recovery?: boolean }) {
           {recovery ? "Check the code" : "Verify my email"}
         </AuthButton>
       </form>
+      {notice && (
+        <p role="status" className="auth-notice auth-notice--quiet">
+          {notice}
+        </p>
+      )}
       <p className="resend-line">
         {recovery ? "Code taking its time?" : "Nothing yet?"}{" "}
-        <button type="button" onClick={resend} disabled={Boolean(cooldown)}>
-          {recovery ? "Send again" : "Send a new code"}
+        <button type="button" onClick={() => void resend()} disabled={Boolean(cooldown) || sending}>
+          {sending ? "Sending…" : recovery ? "Send again" : "Send a new code"}
         </button>
-        {cooldown ? <span> 0:{String(cooldown).padStart(2, "0")}</span> : null}
+        {cooldown ? (
+          <span>
+            {" "}
+            {Math.floor(cooldown / 60)}:{String(cooldown % 60).padStart(2, "0")}
+          </span>
+        ) : null}
       </p>
     </section>
   );

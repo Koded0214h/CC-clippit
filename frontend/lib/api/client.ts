@@ -22,7 +22,7 @@ async function request<T>(path: string, init: RequestInit = {}, isRetry = false)
       : null;
 
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    ...(init.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
     ...(init.headers as Record<string, string> | undefined),
   };
   if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -70,6 +70,7 @@ async function request<T>(path: string, init: RequestInit = {}, isRetry = false)
     try {
       const body = await res.json();
       if (typeof body.detail === "string") detail = body.detail;
+      else if (typeof body.detail?.message === "string") detail = body.detail.message;
     } catch {
       // keep statusText
     }
@@ -88,6 +89,8 @@ export const api = {
     request<T>(path, { method: "PUT", body: JSON.stringify(body) }),
   patch: <T>(path: string, body: unknown) =>
     request<T>(path, { method: "PATCH", body: JSON.stringify(body) }),
+  upload: <T>(path: string, form: FormData) =>
+    request<T>(path, { method: "POST", body: form }),
   delete: <T>(path: string, body?: unknown) =>
     request<T>(path, {
       method: "DELETE",

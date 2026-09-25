@@ -753,6 +753,52 @@ fieldset {
   margin-left: 4px;
 }
 
+.auth-notice {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 12px 14px;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--lime) 22%, var(--paper));
+  border: 1px solid color-mix(in srgb, var(--lime) 60%, var(--line));
+  border-radius: 12px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.auth-notice p {
+  margin: 0;
+}
+
+.auth-notice strong {
+  display: block;
+  margin-bottom: 2px;
+}
+
+.auth-notice a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  color: var(--ink);
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.auth-notice a svg {
+  width: 14px;
+  height: 14px;
+}
+
+.auth-notice--quiet {
+  margin: 14px 0 0;
+  background: transparent;
+  border-color: var(--line);
+  color: var(--muted);
+  text-align: center;
+}
+
 .resend-line button:disabled {
   color: var(--muted);
   cursor: wait;
