@@ -10,7 +10,7 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, func
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from core.database import Base
@@ -40,6 +40,15 @@ class OrganisationProfile(Base):
     team_size: Mapped[str | None] = mapped_column(String(40), nullable=True)
     campaign_goal: Mapped[str | None] = mapped_column(String(80), nullable=True)
     budget_range: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    #: The person behind the account, separate from the organisation `name`.
+    contact_name: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    location: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    #: "brand" | "individual"
+    funder_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    registered: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    content_interests: Mapped[list[str]] = mapped_column(ARRAY(String(40)), nullable=False, server_default="{}")
+    viewing_interests: Mapped[list[str]] = mapped_column(ARRAY(String(40)), nullable=False, server_default="{}")
+    discovery_source: Mapped[str | None] = mapped_column(String(60), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

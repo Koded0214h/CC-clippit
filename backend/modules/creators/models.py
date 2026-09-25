@@ -70,6 +70,10 @@ class CreatorProfile(Base):
     #: Free text at this layer (validated at the schema layer) rather than a
     #: native enum, same reasoning as `platforms` (D5).
     country: Mapped[str | None] = mapped_column(String(2), nullable=True)
+    #: Free-text city/region from onboarding ("Lagos, Nigeria").
+    location: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    #: What they like watching, distinct from `interests` (what they make).
+    viewing_interests: Mapped[list[str]] = mapped_column(ARRAY(String(40)), nullable=False, server_default="{}")
     # Onboarding answers — kept for product analytics and matching, not shown.
     intended_platforms: Mapped[list[str]] = mapped_column(ARRAY(String(20)), nullable=False, server_default="{}")
     discovery_source: Mapped[str | None] = mapped_column(String(60), nullable=True)

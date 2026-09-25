@@ -112,6 +112,8 @@ class CreatorOnboarding(BaseModel):
     experience: str | None = Field(default=None, max_length=80)
     goals: list[str] = Field(default_factory=list, max_length=8)
     country: str | None = Field(default=None, min_length=2, max_length=2)
+    location: str | None = Field(default=None, max_length=80)
+    viewing_interests: list[str] = Field(default_factory=list, max_length=12)
 
     @field_validator("country")
     @classmethod
@@ -122,6 +124,16 @@ class CreatorOnboarding(BaseModel):
     @classmethod
     def strip_name(cls, value: str) -> str:
         return value.strip()
+
+    @field_validator("location")
+    @classmethod
+    def strip_location(cls, value: str | None) -> str | None:
+        return (value.strip() or None) if value is not None else None
+
+    @field_validator("viewing_interests")
+    @classmethod
+    def clean_viewing(cls, value: list[str]) -> list[str]:
+        return _strip_list(value, 12, 40)
 
     @field_validator("interests")
     @classmethod
@@ -150,6 +162,8 @@ class CreatorProfileOut(BaseModel):
     experience: str | None
     goals: list[str]
     country: str | None = None
+    location: str | None = None
+    viewing_interests: list[str] = []
     onboarding_completed: bool
     updated_at: datetime
 
@@ -229,6 +243,8 @@ class OnboardingDraftPatch(BaseModel):
     experience: str | None = Field(default=None, max_length=80)
     goals: list[str] | None = Field(default=None, max_length=8)
     country: str | None = Field(default=None, min_length=2, max_length=2)
+    location: str | None = Field(default=None, max_length=80)
+    viewing_interests: list[str] | None = Field(default=None, max_length=12)
 
 
 class OnboardingDraftOut(BaseModel):

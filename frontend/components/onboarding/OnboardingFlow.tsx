@@ -2,9 +2,57 @@
 
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
 import { ProfilePhotoPicker, saveStoredProfile } from "@/components/ui/ProfilePhotoPicker";
+import { ApiError } from "@/lib/api/client";
+import { onboardingApi, PLATFORM_VALUES, type OnboardingDraftOut } from "@/lib/api/onboarding";
+
+const PLATFORM_LABELS = Object.fromEntries(Object.entries(PLATFORM_VALUES).map(([label, value]) => [value, label]));
+
+function useDraftSync(load: () => Promise<OnboardingDraftOut>, save: (payload: Record<string, unknown> & { revision: number }) => Promise<OnboardingDraftOut>, restore: (draft: OnboardingDraftOut) => void) {
+  const revision = useRef<number | null>(null);
+  const [draft, setDraft] = useState<OnboardingDraftOut | null>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    load()
+      .then((result) => { if (!cancelled) { revision.current = result.revision; setDraft(result); restore(result); } })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setReady(true); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const persist = async (answers: Record<string, unknown>, step: string) => {
+    if (revision.current === null) return;
+    const body = Object.fromEntries(Object.entries(answers).filter(([, value]) => value !== "" && value !== null && value !== undefined));
+    try {
+      revision.current = (await save({ ...body, step, revision: revision.current })).revision;
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 409) {
+        try { revision.current = (await load()).revision; } catch { /* next save retries */ }
+      }
+    }
+  };
+
+  return { draft, ready, persist };
+}
+
+async function uploadIfLocal(photo: string) {
+  if (!photo.startsWith("data:")) return { id: null, url: photo || "" };
+  try {
+    const upload = await onboardingApi.uploadPhoto(photo);
+    return { id: upload.id, url: upload.url };
+  } catch {
+    return { id: null, url: photo };
+  }
+}
+
+function SetupLoading() {
+  return <main className="onboarding-shell"><SetupTopbar /></main>;
+}
 
 type Option = { label: string; copy?: string; icon: ProductIconName };
 
@@ -108,8 +156,8 @@ function PlatformPicker({ selected, onToggle }: { selected: string[]; onToggle: 
   return <div className="platform-picker platform-picker--compact typeform-platforms">{platforms.map((platform, index) => { const active = selected.includes(platform.label); return <button type="button" key={platform.label} className={active ? "is-selected" : ""} onClick={() => onToggle(platform.label)} aria-pressed={active}><em>{index + 1}</em><span><ProductIcon name={platform.icon} /></span><p><strong>{platform.label}</strong><small>{platform.copy}</small></p><i><ProductIcon name="check" /></i></button>; })}</div>;
 }
 
-function SetupActions({ step, isLast, error, onBack, finalLabel, hint = "Press Enter to continue", continueLabel }: { step: number; isLast: boolean; error: string; onBack: () => void; finalLabel: string; hint?: string; continueLabel?: string }) {
-  return <div className="setup-actions typeform-actions"><div>{step > 0 && <button className="setup-back" type="button" onClick={onBack}>Back</button>}<span className="setup-error" role="alert">{error}</span></div><div className="typeform-continue"><small>{hint}</small><button className="setup-next" type="submit">{isLast ? finalLabel : continueLabel || "Continue"}<ProductIcon name="arrow" /></button></div></div>;
+function SetupActions({ step, isLast, error, onBack, finalLabel, hint = "Press Enter to continue", continueLabel, busy = false }: { step: number; isLast: boolean; error: string; onBack: () => void; finalLabel: string; hint?: string; continueLabel?: string; busy?: boolean }) {
+  return <div className="setup-actions typeform-actions"><div>{step > 0 && <button className="setup-back" type="button" onClick={onBack} disabled={busy}>Back</button>}<span className="setup-error" role="alert">{error}</span></div><div className="typeform-continue"><small>{busy ? "Saving your answers…" : hint}</small><button className="setup-next" type="submit" disabled={busy} aria-busy={busy}>{busy ? "Saving…" : isLast ? finalLabel : continueLabel || "Continue"}<ProductIcon name="arrow" /></button></div></div>;
 }
 
 function toggleLimited(current: string[], label: string, limit = 5) {
@@ -127,10 +175,53 @@ export function CreatorOnboarding() {
   const [makes, setMakes] = useState<string[]>(["Comedy", "Lifestyle"]); const [watches, setWatches] = useState<string[]>(["Comedy", "Music"]);
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["TikTok"]); const [experience, setExperience] = useState("");
   const [discovery, setDiscovery] = useState(""); const [goal, setGoal] = useState(""); const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
   const current = creatorSteps[step]; const firstName = useMemo(() => name.trim().split(/\s+/)[0] || "You", [name]);
   const artwork: Record<CreatorStep, keyof typeof generatedArt> = { name: "camera", photo: "camera", location: "camera", makes: "brief", watches: "taste", platforms: "proof", experience: "proof", discovery: "payout", goal: "payout" };
+  const sync = useDraftSync(onboardingApi.creatorDraft, onboardingApi.saveCreatorDraft, (draft) => {
+    if (draft.status === "completed") { router.replace("/dashboard"); return; }
+    if (draft.status !== "in_progress") return;
+    const a = draft.answers as Record<string, unknown>;
+    const list = (key: string) => (Array.isArray(a[key]) ? (a[key] as string[]) : null);
+    if (typeof a.display_name === "string") setName(a.display_name);
+    if (typeof a.location === "string") setLocation(a.location);
+    if (list("interests")) setMakes(list("interests")!);
+    if (list("viewing_interests")) setWatches(list("viewing_interests")!);
+    if (list("platforms")) setSelectedPlatforms(list("platforms")!.map((value) => PLATFORM_LABELS[value] ?? value));
+    if (typeof a.experience === "string") setExperience(a.experience);
+    if (typeof a.discovery_source === "string") setDiscovery(a.discovery_source);
+    if (list("goals")?.length) setGoal(list("goals")![0]);
+    const resumeAt = creatorSteps.indexOf(draft.step as CreatorStep);
+    if (resumeAt > 0) setStep(resumeAt);
+  });
 
-  const finish = () => { window.localStorage.setItem("clippit:creator-onboarding", JSON.stringify({ name, photo, location, makes, watches, platforms: selectedPlatforms, experience, discovery, goal })); saveStoredProfile("creator", { name, bio: "", photo }); router.push("/dashboard"); };
+  const answers = () => ({
+    display_name: name.trim().length >= 2 ? name.trim() : undefined,
+    location: location.trim() || undefined,
+    interests: makes,
+    viewing_interests: watches,
+    platforms: selectedPlatforms.map((label) => PLATFORM_VALUES[label]).filter(Boolean),
+    experience: experience || undefined,
+    discovery_source: discovery || undefined,
+    goals: goal ? [goal] : [],
+  });
+  const latestAnswers = useRef(answers);
+  useEffect(() => { latestAnswers.current = answers; });
+  const advanceTo = (index: number) => { setStep(index); window.setTimeout(() => void sync.persist(latestAnswers.current(), creatorSteps[index]), 0); };
+
+  const finish = async () => {
+    setSaving(true); setError("");
+    try {
+      const uploaded = await uploadIfLocal(photo);
+      const profile = await onboardingApi.completeCreator({ ...answers(), display_name: name.trim(), photo_upload_id: uploaded.id });
+      window.localStorage.removeItem("clippit:creator-onboarding");
+      saveStoredProfile("creator", { name: profile.display_name, bio: profile.bio ?? "", photo: profile.photo_url || uploaded.url });
+      router.push("/dashboard");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : "We couldn't save your answers. Check your connection and try again.");
+      setSaving(false);
+    }
+  };
   const next = () => {
     if (current === "name" && name.trim().length < 2) return setError("Tell us what you would like to be called.");
     if (current === "location" && location.trim().length < 2) return setError("Add the city or region you create from.");
@@ -140,9 +231,11 @@ export function CreatorOnboarding() {
     if (current === "experience" && !experience) return setError("Choose the closest match for your creator journey.");
     if (current === "discovery" && !discovery) return setError("Tell us how you heard about Clippit.");
     if (current === "goal" && !goal) return setError("Choose what Clippit should help with first.");
-    setError(""); if (step === creatorSteps.length - 1) finish(); else setStep((value) => value + 1);
+    setError(""); if (step === creatorSteps.length - 1) void finish(); else advanceTo(step + 1);
   };
-  const choose = (setter: (value: string) => void, value: string) => { setter(value); setError(""); if (step < creatorSteps.length - 1) window.setTimeout(() => setStep((item) => item + 1), 230); };
+  const choose = (setter: (value: string) => void, value: string) => { setter(value); setError(""); if (step < creatorSteps.length - 1) window.setTimeout(() => advanceTo(step + 1), 230); };
+
+  if (!sync.ready || sync.draft?.status === "completed") return <SetupLoading />;
 
   return <main className="onboarding-shell creator-onboarding"><SetupTopbar /><div className="onboarding-layout"><section className="onboarding-workbench typeform-workbench"><SetupProgress step={step} total={creatorSteps.length} label="Creator setup" /><SetupArtwork artwork={artwork[current]} /><form className="setup-form setup-form--extended typeform-form" onSubmit={(event: FormEvent<HTMLFormElement>) => { event.preventDefault(); next(); }}><div key={current}>
     {current === "name" && <Question note="First, make it yours." title="What would you like to be called?" copy="Use the name people know from your content."><TextAnswer label="Creator name" value={name} onChange={(value) => { setName(value); setError(""); }} placeholder="Tobi On Cam" autoComplete="nickname" maxLength={32} /></Question>}
@@ -154,7 +247,7 @@ export function CreatorOnboarding() {
     {current === "experience" && <Question note="No follower minimum." title="How established is your practice?" copy="Choose the answer that feels most like your current rhythm."><ChoiceGrid options={creatorExperience} value={experience} onChange={(value) => choose(setExperience, value)} /></Question>}
     {current === "discovery" && <Question note="Almost there." title="How did you hear about us?" copy="This helps us understand where the creator community is finding Clippit."><ChoiceGrid options={discoverySources} value={discovery} onChange={(value) => choose(setDiscovery, value)} compact /></Question>}
     {current === "goal" && <Question note="Set your first signal." title="What should Clippit help you do first?" copy="Your answer shapes the first version of your creator dashboard."><ChoiceGrid options={creatorGoals} value={goal} onChange={(value) => { setGoal(value); setError(""); }} /></Question>}
-  </div><SetupActions step={step} isLast={step === creatorSteps.length - 1} error={error} onBack={() => { setError(""); setStep((value) => Math.max(0, value - 1)); }} finalLabel="Build my creator feed" continueLabel={current === "photo" && !photo ? "Skip for now" : undefined} hint={current === "photo" ? photo ? "Photo added" : "This step is optional" : current === "makes" || current === "watches" || current === "platforms" ? "Choose, then continue" : current === "experience" || current === "discovery" ? "Choose one to continue" : current === "goal" ? "Choose one, then continue" : "Press Enter to continue"} /></form></section><CreatorPreview name={name} photo={photo} location={location} firstName={firstName} makes={makes} watches={watches} step={step} total={creatorSteps.length} /></div></main>;
+  </div><SetupActions step={step} isLast={step === creatorSteps.length - 1} error={error} onBack={() => { setError(""); setStep((value) => Math.max(0, value - 1)); }} finalLabel="Build my creator feed" busy={saving} continueLabel={current === "photo" && !photo ? "Skip for now" : undefined} hint={current === "photo" ? photo ? "Photo added" : "This step is optional" : current === "makes" || current === "watches" || current === "platforms" ? "Choose, then continue" : current === "experience" || current === "discovery" ? "Choose one to continue" : current === "goal" ? "Choose one, then continue" : "Press Enter to continue"} /></form></section><CreatorPreview name={name} photo={photo} location={location} firstName={firstName} makes={makes} watches={watches} step={step} total={creatorSteps.length} /></div></main>;
 }
 
 function CreatorPreview({ name, photo, location, firstName, makes, watches, step, total }: { name: string; photo: string; location: string; firstName: string; makes: string[]; watches: string[]; step: number; total: number }) {
@@ -162,6 +255,13 @@ function CreatorPreview({ name, photo, location, firstName, makes, watches, step
 }
 
 type BrandStep = "name" | "photo" | "location" | "identity" | "registration" | "organisation" | "website" | "description" | "team" | "fund" | "workflow" | "view" | "discovery" | "campaignGoal" | "budget";
+
+function brandStepsFor(identity: "" | "brand" | "individual", registered: "" | "yes" | "no"): BrandStep[] {
+  if (identity === "individual") return ["name", "photo", "location", "identity", "fund", "view", "discovery", "campaignGoal", "budget"];
+  const company: BrandStep[] = ["name", "photo", "location", "identity", "registration"];
+  if (registered === "yes") company.push("organisation", "website", "description", "team");
+  return [...company, "fund", "workflow", "view", "discovery", "campaignGoal", "budget"];
+}
 
 export function BrandOnboarding() {
   const router = useRouter();
@@ -171,10 +271,75 @@ export function BrandOnboarding() {
   const [organisation, setOrganisation] = useState(""); const [description, setDescription] = useState(""); const [website, setWebsite] = useState(""); const [teamSize, setTeamSize] = useState("");
   const [funds, setFunds] = useState<string[]>(["Comedy", "Lifestyle"]); const [watches, setWatches] = useState<string[]>(["Comedy", "Music"]); const [workflow, setWorkflow] = useState("");
   const [discovery, setDiscovery] = useState(""); const [campaignGoal, setCampaignGoal] = useState(""); const [budget, setBudget] = useState(""); const [error, setError] = useState("");
-  const steps = useMemo<BrandStep[]>(() => { if (identity === "individual") return ["name", "photo", "location", "identity", "fund", "view", "discovery", "campaignGoal", "budget"]; const company: BrandStep[] = ["name", "photo", "location", "identity", "registration"]; if (registered === "yes") company.push("organisation", "website", "description", "team"); return [...company, "fund", "workflow", "view", "discovery", "campaignGoal", "budget"]; }, [identity, registered]);
+  const steps = useMemo(() => brandStepsFor(identity, registered), [identity, registered]);
   const current = steps[step] ?? steps[steps.length - 1]; const displayName = identity === "individual" ? name : organisation || name;
   const artwork: Record<BrandStep, keyof typeof generatedArt> = { name: "camera", photo: "camera", location: "camera", identity: "brief", registration: "proof", organisation: "brief", website: "brief", description: "brief", team: "proof", fund: "pot", workflow: "camera", view: "taste", discovery: "payout", campaignGoal: "brief", budget: "pot" };
-  const finish = () => { window.localStorage.setItem("clippit:brand-onboarding", JSON.stringify({ name, photo, location, identity, registered, organisation, description, website, teamSize, funds, workflow, watches, discovery, campaignGoal, budget })); saveStoredProfile("brand", { name: displayName, bio: description, photo }); router.push("/brand"); };
+  const [saving, setSaving] = useState(false);
+  const sync = useDraftSync(onboardingApi.organisationDraft, onboardingApi.saveOrganisationDraft, (draft) => {
+    if (draft.status === "completed") { router.replace("/brand"); return; }
+    if (draft.status !== "in_progress") return;
+    const a = draft.answers as Record<string, unknown>;
+    const text = (key: string) => (typeof a[key] === "string" ? (a[key] as string) : null);
+    const list = (key: string) => (Array.isArray(a[key]) ? (a[key] as string[]) : null);
+    const funder = text("funder_type");
+    const restoredIdentity = funder === "brand" || funder === "individual" ? funder : "";
+    const restoredRegistered = a.registered === true ? "yes" : a.registered === false ? "no" : "";
+    setIdentity(restoredIdentity);
+    setRegistered(restoredRegistered);
+    if (text("contact_name")) setName(text("contact_name")!);
+    if (funder === "brand" && a.registered === true && text("name")) setOrganisation(text("name")!);
+    if (text("location")) setLocation(text("location")!);
+    if (text("website")) setWebsite(text("website")!);
+    if (text("bio")) setDescription(text("bio")!);
+    if (text("team_size")) setTeamSize(text("team_size")!);
+    if (list("content_interests")) setFunds(list("content_interests")!);
+    if (list("viewing_interests")) setWatches(list("viewing_interests")!);
+    if (text("production_workflow")) setWorkflow(text("production_workflow")!);
+    if (text("discovery_source")) setDiscovery(text("discovery_source")!);
+    if (text("campaign_goal")) setCampaignGoal(text("campaign_goal")!);
+    if (text("budget_range")) setBudget(text("budget_range")!);
+    const resumeAt = brandStepsFor(restoredIdentity, restoredRegistered).indexOf(draft.step as BrandStep);
+    if (resumeAt > 0) setStep(resumeAt);
+  });
+
+  const answers = () => {
+    const brand = identity !== "individual";
+    const orgName = brand && registered === "yes" ? organisation.trim() : name.trim();
+    return {
+      name: orgName.length >= 2 ? orgName : undefined,
+      contact_name: name.trim() || undefined,
+      location: location.trim() || undefined,
+      funder_type: identity || undefined,
+      registered: brand && registered ? registered === "yes" : undefined,
+      website: brand && registered === "yes" ? website.trim() || undefined : undefined,
+      bio: brand && registered === "yes" ? description.trim() || undefined : undefined,
+      team_size: brand && registered === "yes" ? teamSize || undefined : undefined,
+      content_interests: funds,
+      production_workflow: brand ? workflow || undefined : undefined,
+      viewing_interests: watches,
+      discovery_source: discovery || undefined,
+      campaign_goal: campaignGoal || undefined,
+      budget_range: budget || undefined,
+    };
+  };
+  const latestAnswers = useRef(answers);
+  useEffect(() => { latestAnswers.current = answers; });
+  const advanceTo = (index: number) => { setStep(index); window.setTimeout(() => void sync.persist(latestAnswers.current(), steps[index] ?? ""), 0); };
+
+  const finish = async () => {
+    setSaving(true); setError("");
+    try {
+      const uploaded = await uploadIfLocal(photo);
+      const payload = answers();
+      const profile = await onboardingApi.completeOrganisation({ ...payload, name: payload.name ?? displayName.trim(), photo_upload_id: uploaded.id });
+      window.localStorage.removeItem("clippit:brand-onboarding");
+      saveStoredProfile("brand", { name: profile.name, bio: profile.bio ?? "", photo: profile.photo_url || uploaded.url });
+      router.push("/brand");
+    } catch (err) {
+      setError(err instanceof ApiError ? err.detail : "We couldn't save your answers. Check your connection and try again.");
+      setSaving(false);
+    }
+  };
   const next = () => {
     if (current === "name" && name.trim().length < 2) return setError("Tell us what you would like to be called.");
     if (current === "location" && location.trim().length < 2) return setError("Add your city or region.");
@@ -190,9 +355,11 @@ export function BrandOnboarding() {
     if (current === "discovery" && !discovery) return setError("Tell us how you heard about Clippit.");
     if (current === "campaignGoal" && !campaignGoal) return setError("Choose the first result you want from creators.");
     if (current === "budget" && !budget) return setError("Choose a comfortable starting budget.");
-    setError(""); if (step === steps.length - 1) finish(); else setStep((value) => value + 1);
+    setError(""); if (step === steps.length - 1) void finish(); else advanceTo(step + 1);
   };
-  const choose = (setter: (value: string) => void, value: string) => { setter(value); setError(""); if (step < steps.length - 1) window.setTimeout(() => setStep((item) => item + 1), 230); };
+  const choose = (setter: (value: string) => void, value: string) => { setter(value); setError(""); if (step < steps.length - 1) window.setTimeout(() => advanceTo(step + 1), 230); };
+
+  if (!sync.ready || sync.draft?.status === "completed") return <SetupLoading />;
 
   return <main className="onboarding-shell brand-onboarding"><SetupTopbar /><div className="onboarding-layout brand-setup-layout"><section className="onboarding-workbench brand-workbench typeform-workbench"><SetupProgress step={step} total={steps.length} label={identity === "individual" ? "Funder setup" : "Brand setup"} /><SetupArtwork artwork={artwork[current]} tone="gold" /><form className="setup-form setup-form--extended typeform-form" onSubmit={(event) => { event.preventDefault(); next(); }}><div key={current}>
     {current === "name" && <Question note="Start with the person behind the pot." title="What would you like to be called?" copy="Use the name you want to see across your workspace."><TextAnswer label="Preferred name" value={name} onChange={(value) => { setName(value); setError(""); }} placeholder="Amara" autoComplete="nickname" maxLength={32} /></Question>}
@@ -210,7 +377,7 @@ export function BrandOnboarding() {
     {current === "discovery" && <Question note="One quick signal." title="How did you hear about us?" copy="This helps us understand where funders are discovering Clippit."><ChoiceGrid options={discoverySources} value={discovery} onChange={(value) => choose(setDiscovery, value)} compact /></Question>}
     {current === "campaignGoal" && <Question note="Point the first campaign." title="What should creators help you achieve?" copy="Choose the result that matters most for your first recommendation."><ChoiceGrid options={campaignGoals} value={campaignGoal} onChange={(value) => choose(setCampaignGoal, value)} /></Question>}
     {current === "budget" && <Question note="Set a comfortable starting point." title="What budget range feels right?" copy="This is not a commitment. It helps us recommend realistic campaign shapes."><ChoiceGrid options={budgets} value={budget} onChange={(value) => { setBudget(value); setError(""); }} compact /></Question>}
-  </div><SetupActions step={step} isLast={step === steps.length - 1} error={error} onBack={() => { setError(""); setStep((value) => Math.max(0, value - 1)); }} finalLabel={identity === "individual" ? "Build my funding feed" : "Open campaign workspace"} continueLabel={current === "photo" && !photo ? "Skip for now" : undefined} hint={current === "photo" ? photo ? "Photo added" : "This step is optional" : current === "fund" || current === "view" ? "Choose, then continue" : current === "description" ? "Write, then continue" : current === "name" || current === "location" || current === "organisation" || current === "website" ? "Press Enter to continue" : current === "budget" ? "Choose one, then continue" : "Choose one to continue"} /></form></section><BrandPreview displayName={displayName} photo={photo} location={location} identity={identity} registered={registered} funds={funds} watches={watches} budget={budget} campaignGoal={campaignGoal} /></div></main>;
+  </div><SetupActions step={step} isLast={step === steps.length - 1} error={error} onBack={() => { setError(""); setStep((value) => Math.max(0, value - 1)); }} finalLabel={identity === "individual" ? "Build my funding feed" : "Open campaign workspace"} busy={saving} continueLabel={current === "photo" && !photo ? "Skip for now" : undefined} hint={current === "photo" ? photo ? "Photo added" : "This step is optional" : current === "fund" || current === "view" ? "Choose, then continue" : current === "description" ? "Write, then continue" : current === "name" || current === "location" || current === "organisation" || current === "website" ? "Press Enter to continue" : current === "budget" ? "Choose one, then continue" : "Choose one to continue"} /></form></section><BrandPreview displayName={displayName} photo={photo} location={location} identity={identity} registered={registered} funds={funds} watches={watches} budget={budget} campaignGoal={campaignGoal} /></div></main>;
 }
 
 function BrandPreview({ displayName, photo, location, identity, registered, funds, watches, budget, campaignGoal }: { displayName: string; photo: string; location: string; identity: "" | "brand" | "individual"; registered: "" | "yes" | "no"; funds: string[]; watches: string[]; budget: string; campaignGoal: string }) {
