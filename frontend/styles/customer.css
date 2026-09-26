@@ -628,7 +628,7 @@
 .public-passport dd { margin: 0; font-size: 27px; font-weight: 850; letter-spacing: -.05em; }
 .profile-work { display: grid; gap: 18px; }
 .profile-work > header { display: flex; align-items: end; justify-content: space-between; gap: 20px; }
-.profile-work h2 { margin: 0; font-size: 28px; letter-spacing: -.045em; }
+.profile-work > header h2 { margin: 0; font-size: 28px; letter-spacing: -.045em; }
 .profile-work header p { margin: 5px 0 0; color: var(--muted); font-size: 10px; }
 .profile-work > header > span { font-size: 9px; font-weight: 700; }
 .profile-work > div { display: grid; grid-template-columns: repeat(3,1fr); gap: 17px; }
