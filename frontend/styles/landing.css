@@ -2083,7 +2083,9 @@ input[type="range"]::-moz-range-thumb {
   inset: 0;
   width: 100%;
   height: 100%;
+  background: url("/assets/throw/f00.webp") 69% bottom / min(50%, 66.9vh) auto no-repeat;
 }
+.throw-canvas.has-frame { background-image: none; }
 .phone {
   position: relative;
   width: 100%;
