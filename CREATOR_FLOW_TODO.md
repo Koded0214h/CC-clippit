@@ -188,7 +188,7 @@ The UI is honest about each one today. Pick **build** or **leave as is**.
 
 ### 9. 🟡 Clean-up (not blocking)
 
-- [ ] `WIRING.md` is outdated. Replace it with this file.
+- [x] `WIRING.md` removed. This file replaces it.
 - [ ] Old lint errors in files this work didn't touch:
   - `AuthPages.tsx`: apostrophes
   - setState in an effect: `AuthGuard.tsx`, `user-context.tsx`, `BrandScreens.tsx`
