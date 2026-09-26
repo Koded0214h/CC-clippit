@@ -8,6 +8,7 @@ import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { ReceiptHeader } from "@/components/ui/ReceiptHeader";
 import { ButtonLoader, ClippitLoader } from "@/components/ui/ClippitLoader";
+import { ClippitEmptyState } from "@/components/ui/ClippitEmptyState";
 import { feePercentage } from "@/lib/fees";
 import { money } from "@/lib/product";
 import { earningsApi, type EarningEntryDetail, type EarningRow, type EarningsSummary } from "@/lib/api/earnings";
@@ -57,11 +58,11 @@ function Loading({ label, note }: { label: string; note?: string }) {
 }
 
 function Problem({ title, copy, action }: { title: string; copy: string; action?: ReactNode }) {
-  return <div className="dashboard-page creator-flow-page"><section className="creator-sheet creator-empty" role="alert"><ProductIcon name="shield" /><h2>{title}</h2><p>{copy}</p>{action}</section></div>;
+  return <div className="dashboard-page creator-flow-page"><ClippitEmptyState role="alert" tone="danger" icon="shield" title={title} copy={copy} action={action} /></div>;
 }
 
 function Empty({ icon = "play", title, copy, action }: { icon?: ProductIconName; title: string; copy: string; action?: ReactNode }) {
-  return <div className="creator-empty"><ProductIcon name={icon} /><h2>{title}</h2><p>{copy}</p>{action}</div>;
+  return <ClippitEmptyState icon={icon} title={title} copy={copy} action={action} />;
 }
 
 function useQueryId(): string | null | undefined {

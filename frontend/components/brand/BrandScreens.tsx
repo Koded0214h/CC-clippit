@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { ClippitLoader } from "@/components/ui/ClippitLoader";
+import { ClippitEmptyState } from "@/components/ui/ClippitEmptyState";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
 import { ProfileAvatar, ProfilePhotoPicker, saveStoredProfile, useStoredProfile, type StoredProfile } from "@/components/ui/ProfilePhotoPicker";
 import { ReceiptHeader } from "@/components/ui/ReceiptHeader";
@@ -343,9 +344,7 @@ export function BrandReviewQueueScreen() {
     const tab = tabMap[filter] ?? "needs_review";
     brandApi.reviews(tab).then((data) => {
       setCounts(data.counts);
-      if (tab === "needs_review") {
-        setReviews(data.items.length > 0 ? data.items.map(apiReviewToBrand) : brandReviews);
-      }
+      if (tab === "needs_review") setReviews(data.items.map(apiReviewToBrand));
     }).catch(() => undefined).finally(() => setLoading(false));
   }, [filter]);
 
@@ -353,7 +352,7 @@ export function BrandReviewQueueScreen() {
   return <div className="brand-page review-queue-page">
     <PageHeading title={`${needsCount} submission${needsCount !== 1 ? "s" : ""} need review.`} copy="Approve a submission or request a correction. These clips are not earning yet." action={<div className="review-count"><AnimatedNumber value={needsCount} padStart={2} /><span>waiting<br />for review</span></div>} />
     <div className="brand-filter-row">{["Needs review", "Appeals", "Resolved"].map((item) => <button type="button" key={item} onClick={() => setFilter(item)} className={filter === item ? "is-active" : ""}>{item}{item === "Needs review" && <b>{needsCount}</b>}</button>)}</div>
-    {loading ? <ClippitLoader contained compact tone="gold" label="Opening the review queue" note="Bringing in the latest submissions and decisions." /> : filter === "Needs review" ? <section className="review-list">{reviews.map((review) => <ReviewCard review={review} key={review.id} />)}</section> : <section className="review-empty"><BrandArt src={filter === "Appeals" ? art.review : art.proof} label={filter === "Appeals" ? "No appeals waiting" : "Queue cleared"} tone="lime" compact /><h2>{filter === "Appeals" ? "Nothing has been appealed." : "No resolved submissions yet."}</h2><p>{filter === "Appeals" ? "Creator appeals will arrive here with the original verdict and supporting evidence." : "Resolved submissions will appear here with the decision and evidence."}</p></section>}
+    {loading ? <ClippitLoader contained compact tone="gold" label="Opening the review queue" note="Bringing in the latest submissions and decisions." /> : filter === "Needs review" && reviews.length ? <section className="review-list">{reviews.map((review) => <ReviewCard review={review} key={review.id} />)}</section> : <ClippitEmptyState className="review-empty" tone="gold" icon={filter === "Appeals" ? "shield" : filter === "Needs review" ? "eye" : "check"} artSrc={filter === "Appeals" ? art.review : art.proof} title={filter === "Appeals" ? "No appeals waiting" : filter === "Needs review" ? "Review queue cleared" : "No resolved submissions yet"} copy={filter === "Appeals" ? "Appeals will arrive here with the original verdict and evidence." : filter === "Needs review" ? "New creator submissions will appear here when they are ready for your decision." : "Completed review decisions will appear here."} />}
   </div>;
 }
 

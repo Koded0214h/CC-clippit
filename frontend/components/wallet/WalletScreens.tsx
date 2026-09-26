@@ -6,6 +6,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { ProductIcon } from "@/components/ui/ProductIcon";
 import { ClippitLoader } from "@/components/ui/ClippitLoader";
+import { ClippitEmptyState } from "@/components/ui/ClippitEmptyState";
 import { MINIMUM_WALLET_WITHDRAWAL } from "@/lib/fees";
 import { money } from "@/lib/product";
 import { walletApi, type CreatorWalletOut } from "@/lib/api/account";
@@ -67,7 +68,7 @@ export function CreatorWalletScreen() {
     });
   }, []);
 
-  if (error) return <div className="dashboard-page wallet-page"><div className="campaign-empty" role="alert"><ProductIcon name="wallet" /><h2>We couldn&apos;t load your wallet.</h2><p>{error}</p></div></div>;
+  if (error) return <div className="dashboard-page wallet-page"><ClippitEmptyState tone="danger" icon="wallet" title="We couldn&apos;t load your wallet" copy={error} role="alert" /></div>;
   if (!wallet) return <div className="dashboard-page"><ClippitLoader contained label="Opening your wallet" note="Checking available money, held earnings and transfers." /></div>;
 
   const total = wallet.available + wallet.held + wallet.processing;
@@ -81,12 +82,12 @@ export function CreatorWalletScreen() {
     </section>
     <section className="wallet-body-grid">
       <div className="wallet-movements"><header><div><h2>Recent wallet activity</h2><p>New earnings and transfers.</p></div><Link href="/dashboard/earnings">Earning history<ProductIcon name="arrow" /></Link></header>
-        {!movements.length && <p className="wallet-movements__empty">No wallet activity yet. Earnings from approved clips show up here.</p>}
+        {!movements.length && <ClippitEmptyState className="wallet-movements__empty" size="inline" tone="gold" icon="wallet" title="No wallet activity yet" copy="Earnings from approved clips will appear here." />}
         {movements.map((item) => <Link href={item.href} key={item.key}><span><ProductIcon name={item.credit ? (item.state === "Held" ? "clock" : "check") : "bank"} /></span><p><strong>{item.label}</strong><small>{item.detail} · {formatDate(item.at, { day: "numeric", month: "short" })}</small></p><b className={item.credit && item.state === "Available" ? "is-credit" : ""}>{item.credit ? "+" : "−"}{money(item.amount)}</b><em>{item.state}</em></Link>)}
       </div>
-      <aside className="wallet-account-card"><span><ProductIcon name="bank" /></span><small>Payout account</small>
-        {bank === undefined ? <p>Loading…</p> : bank ? <><h2>{bank.bank_name}</h2><strong>•••• {bank.account_number_masked.slice(-4)}</strong><p>{bank.account_name ?? "Name pending"}</p><div><ProductIcon name={bank.verified ? "check" : "shield"} />{bank.verified ? "Verified payout account" : "Needs verification before you withdraw"}</div><Link href="/dashboard/payout-account">{bank.verified ? "Change payout account" : "Verify account"}<ProductIcon name="arrow" /></Link></>
-          : <><h2>No account yet</h2><p>Add the bank account your earnings should land in.</p><Link href="/dashboard/payout-account">Add payout account<ProductIcon name="arrow" /></Link></>}
+      <aside className="wallet-account-card">
+        {bank === undefined ? <><span><ProductIcon name="bank" /></span><small>Payout account</small><p>Loading…</p></> : bank ? <><span><ProductIcon name="bank" /></span><small>Payout account</small><h2>{bank.bank_name}</h2><strong>•••• {bank.account_number_masked.slice(-4)}</strong><p>{bank.account_name ?? "Name pending"}</p><div><ProductIcon name={bank.verified ? "check" : "shield"} />{bank.verified ? "Verified payout account" : "Needs verification before you withdraw"}</div><Link href="/dashboard/payout-account">{bank.verified ? "Change payout account" : "Verify account"}<ProductIcon name="arrow" /></Link></>
+          : <ClippitEmptyState size="inline" tone="gold" icon="bank" title="No payout account yet" copy="Add the bank account your earnings should land in." action={<Link href="/dashboard/payout-account">Add payout account<ProductIcon name="arrow" /></Link>} />}
       </aside>
     </section>
   </div>;

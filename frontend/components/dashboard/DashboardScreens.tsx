@@ -6,6 +6,7 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { ClippitLoader } from "@/components/ui/ClippitLoader";
+import { ClippitEmptyState } from "@/components/ui/ClippitEmptyState";
 import { ProfileAvatar, ProfilePhotoPicker, saveStoredProfile, type StoredProfile } from "@/components/ui/ProfilePhotoPicker";
 import type { Campaign } from "@/lib/product";
 import { campaignsApi, type CampaignFeed, type CampaignOut } from "@/lib/api/campaigns";
@@ -52,25 +53,11 @@ export function campaignOutToLocal(c: CampaignOut): Campaign {
 const EMPTY_PROFILE: StoredProfile = { name: "", bio: "", photo: "" };
 
 function EmptyState({ icon = "search", title, copy, action }: { icon?: ProductIconName; title: string; copy: string; action?: React.ReactNode }) {
-  return (
-    <div className="campaign-empty">
-      <ProductIcon name={icon} />
-      <h2>{title}</h2>
-      <p>{copy}</p>
-      {action}
-    </div>
-  );
+  return <ClippitEmptyState icon={icon} title={title} copy={copy} action={action} />;
 }
 
 function LoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return (
-    <div className="campaign-empty" role="alert">
-      <ProductIcon name="shield" />
-      <h2>We couldn&apos;t load this right now.</h2>
-      <p>{message}</p>
-      <button type="button" className="ink-button" onClick={onRetry}>Try again<ProductIcon name="arrow" /></button>
-    </div>
-  );
+  return <ClippitEmptyState role="alert" tone="danger" icon="shield" title="We couldn't load this right now." copy={message} action={<button type="button" className="ink-button" onClick={onRetry}>Try again<ProductIcon name="arrow" /></button>} />;
 }
 
 function PageHeading({
@@ -303,7 +290,7 @@ function MiniLeaderboard() {
   return (
     <aside className="mini-leaderboard">
       <SectionTitle title="Weekly leaderboard" href="/dashboard/leaderboard" linkLabel="Full board" />
-      {board && !board.length && <p className="mini-leaderboard__empty">No verified views yet this week. Your first approved clip puts you on the board.</p>}
+      {board && !board.length && <ClippitEmptyState className="mini-leaderboard__empty" size="inline" icon="trophy" title="The board is open" copy="Your first approved clip with verified views puts you here." />}
       {(board ?? []).map((person) => (
         <div key={person.rank} className={person.is_me ? "is-you" : ""}>
           <span><AnimatedNumber value={person.rank} padStart={2} duration={600} /></span>
@@ -446,7 +433,7 @@ export function DashboardHome() {
         <div className="proof-stream">
           <SectionTitle title="Recent clip activity" href={recentClips.length ? "/dashboard/clips" : undefined} linkLabel="All clips" />
           <div className="proof-stream__line" aria-hidden="true" />
-          {!recentClips.length && <p className="proof-stream__empty">Clips you submit show up here with their verification status and verified views.</p>}
+          {!recentClips.length && <ClippitEmptyState className="proof-stream__empty" size="inline" icon="play" title="No clips submitted yet" copy="Your verification status and verified views will appear here." />}
           {recentClips.map((clip) => {
             const node = clipNode(clip.status);
             return (
@@ -740,7 +727,7 @@ export function CampaignDetail({ slug }: { slug: string }) {
           <section className="campaign-materials">
             <SectionTitle title="Campaign materials" />
             <div>
-              {campaign.assets.length ? campaign.assets.map((asset) => <a href={asset.url} target="_blank" rel="noreferrer" key={`${asset.name}-${asset.url}`}><span><ProductIcon name={asset.kind === "sound" ? "play" : "link"} /></span><p><strong>{asset.name}</strong><small>{asset.kind === "sound" ? "Campaign sound" : "Campaign reference"}</small></p><ProductIcon name="arrow" /></a>) : <p className="campaign-materials__empty">No extra campaign files. Everything you need is in the brief.</p>}
+              {campaign.assets.length ? campaign.assets.map((asset) => <a href={asset.url} target="_blank" rel="noreferrer" key={`${asset.name}-${asset.url}`}><span><ProductIcon name={asset.kind === "sound" ? "play" : "link"} /></span><p><strong>{asset.name}</strong><small>{asset.kind === "sound" ? "Campaign sound" : "Campaign reference"}</small></p><ProductIcon name="arrow" /></a>) : <ClippitEmptyState className="campaign-materials__empty" size="inline" tone="paper" icon="brief" title="No extra files" copy="Everything you need is already in the brief." />}
             </div>
           </section>
         </div>
@@ -764,7 +751,7 @@ export function CampaignDetail({ slug }: { slug: string }) {
 
           <section className="campaign-leaders">
             <SectionTitle title="Campaign leaderboard" href={campaign.id ? `/dashboard/leaderboard?campaign=${campaign.id}` : "/dashboard/leaderboard"} linkLabel="View board" />
-            {!sideLeaders.length && <p className="campaign-leaders__empty">No verified views on this campaign yet. Be the first on the board.</p>}
+            {!sideLeaders.length && <ClippitEmptyState className="campaign-leaders__empty" size="inline" icon="trophy" title="No one is on the board yet" copy="The first approved clip with verified views takes the opening spot." />}
             {sideLeaders.map((person) => (
               <div key={person.rank}><span><AnimatedNumber value={person.rank} duration={600} /></span><i>{person.name.slice(0, 2).toUpperCase()}</i><p><strong>{person.name}</strong><small><AnimatedNumber value={person.views} format="compact" /> views</small></p><b><AnimatedMoney value={person.earned} /></b></div>
             ))}
@@ -786,6 +773,8 @@ export function LeaderboardScreen() {
   const [board, setBoard] = useState<BoardRow[] | null>(null);
   const [me, setMe] = useState<BoardRow | null>(null);
   const [updatedAt, setUpdatedAt] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [campaignOptionsLoaded, setCampaignOptionsLoaded] = useState(false);
   const [scope, setScope] = useState<"Global" | "Nigeria" | "Campaign">("Global");
   const [period, setPeriod] = useState<"week" | "all">("week");
   const [metric, setMetric] = useState<"Views" | "Earnings">("Views");
@@ -803,7 +792,7 @@ export function LeaderboardScreen() {
       else if (options[0]) setCampaignId(options[0].id);
     }).catch(() => {
       if (fromUrl) { setCampaignId(fromUrl); setScope("Campaign"); }
-    });
+    }).finally(() => setCampaignOptionsLoaded(true));
   }, []);
 
   useEffect(() => {
@@ -820,33 +809,57 @@ export function LeaderboardScreen() {
       setMe(data.me ? toBoardRow(data.me) : null);
       setUpdatedAt(timeAgo(data.updated_at));
       setError("");
-    }).catch((err) => { if (!cancelled) setError(errorMessage(err)); });
+    }).catch((err) => { if (!cancelled) setError(errorMessage(err)); }).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [scope, period, campaignId, reload]);
 
   const rows = board ?? [];
   const ranked = metric === "Views" ? rows : [...rows].sort((a, b) => b.earned - a.earned).map((row, index) => ({ ...row, rank: index + 1 }));
   const podium = [ranked[1], ranked[0], ranked[2]].filter(Boolean);
-  const noCampaigns = scope === "Campaign" && !campaignOptions.length && !campaignId;
+  const noCampaigns = scope === "Campaign" && campaignOptionsLoaded && !campaignOptions.length && !campaignId;
   const periodLabel = period === "week" ? "this week" : "all time";
+  const changeScope = (next: "Global" | "Nigeria" | "Campaign") => {
+    if (next === scope) return;
+    setScope(next);
+    setError("");
+    setLoading(true);
+  };
+  const changePeriod = (next: "week" | "all") => {
+    if (next === period) return;
+    setPeriod(next);
+    setError("");
+    setLoading(true);
+  };
+  const changeCampaign = (next: string) => {
+    if (next === campaignId) return;
+    setCampaignId(next);
+    setError("");
+    setLoading(true);
+  };
+  const emptyAction = scope === "Nigeria"
+    ? <Link className="lime-button" href="/dashboard/settings#profile">Check profile country<ProductIcon name="arrow" /></Link>
+    : scope === "Campaign" && campaignId
+      ? <Link className="lime-button" href="/dashboard/campaigns">Open campaigns<ProductIcon name="arrow" /></Link>
+      : <Link className="lime-button" href="/dashboard/campaigns">Find a campaign<ProductIcon name="arrow" /></Link>;
 
   return (
     <div className="dashboard-page leaderboard-page">
       <PageHeading title="Leaderboard" copy={`Ranking ${periodLabel} by ${metric === "Views" ? "verified views" : "creator earnings"}.`} />
       <section className="leaderboard-controls" aria-label="Leaderboard filters">
-        <div>{(["Global", "Nigeria", "Campaign"] as const).map((item) => <button type="button" className={scope === item ? "is-active" : ""} onClick={() => setScope(item)} key={item}>{item}</button>)}</div>
-        <div>{(["week", "all"] as const).map((item) => <button type="button" className={period === item ? "is-active" : ""} onClick={() => setPeriod(item)} key={item}>{item === "week" ? "This week" : "All time"}</button>)}</div>
+        <div>{(["Global", "Nigeria", "Campaign"] as const).map((item) => <button type="button" className={scope === item ? "is-active" : ""} onClick={() => changeScope(item)} key={item}>{item}</button>)}</div>
+        <div>{(["week", "all"] as const).map((item) => <button type="button" className={period === item ? "is-active" : ""} onClick={() => changePeriod(item)} key={item}>{item === "week" ? "This week" : "All time"}</button>)}</div>
         <div>{(["Views", "Earnings"] as const).map((item) => <button type="button" className={metric === item ? "is-active" : ""} onClick={() => setMetric(item)} key={item}>{item}</button>)}</div>
         {scope === "Campaign" && campaignOptions.length > 0 && (
-          <select value={campaignId} onChange={(event) => setCampaignId(event.target.value)} aria-label="Choose a campaign">
+          <select value={campaignId} onChange={(event) => changeCampaign(event.target.value)} aria-label="Choose a campaign">
             {campaignOptions.map((option) => <option key={option.id} value={option.id}>{option.title}</option>)}
           </select>
         )}
       </section>
-      {error && <LoadError message={error} onRetry={() => { setError(""); setReload((value) => value + 1); }} />}
-      {noCampaigns && <EmptyState icon="brief" title="Join a campaign to see its board" copy="Campaign leaderboards rank everyone posting for the same brief." action={<Link className="lime-button" href="/dashboard/campaigns">Browse campaigns<ProductIcon name="arrow" /></Link>} />}
-      {board && !board.length && !noCampaigns && <EmptyState title="No verified views yet" copy={scope === "Nigeria" ? "Nobody in your country has verified views here yet — or add your country in Settings to appear on this board." : "Once approved clips start collecting verified views, creators appear here."} />}
-      {!!board?.length && <section className="podium-board">
+      {error && <LoadError message={error} onRetry={() => { setError(""); setLoading(true); setReload((value) => value + 1); }} />}
+      {!error && noCampaigns && <ClippitEmptyState className="leaderboard-empty" icon="brief" title="Join a campaign to open its board" copy="Campaign leaderboards start when creators join a brief and collect verified views." action={<Link className="lime-button" href="/dashboard/campaigns">Browse campaigns<ProductIcon name="arrow" /></Link>} />}
+      {!error && !noCampaigns && (loading || board === null) && <ClippitLoader contained tone="ink" label="Opening the leaderboard" note="Checking the latest verified views and creator positions." />}
+      {!error && !loading && board && !board.length && !noCampaigns && <ClippitEmptyState className="leaderboard-empty" icon="trophy" title={metric === "Earnings" ? "No earnings on this board yet" : "The starting line is open"} copy={scope === "Nigeria" ? "Creators in your country appear here after an approved clip records verified views." : scope === "Campaign" ? "The first approved clip with verified views takes the opening position." : "Creators appear here when approved clips begin collecting verified views."} action={emptyAction} />}
+      {!error && !loading && !!board?.length && <section className="podium-board">
         <div className="podium-copy"><h2>Top creators {periodLabel}</h2><p>Updated after each verified view check.</p></div>
         {podium.map((person) => (
           <article key={person.rank} className={`podium-person podium-person--${person.rank}`}>
@@ -859,7 +872,7 @@ export function LeaderboardScreen() {
         ))}
       </section>}
 
-      {!!board?.length && <section className="ranking-sheet">
+      {!error && !loading && !!board?.length && <section className="ranking-sheet">
         <div className="ranking-sheet__head"><h2>All creators</h2><span>Updated {updatedAt}</span></div>
         <div className="ranking-row ranking-row--labels"><span>Rank</span><span>Creator</span><span>Verified views</span><span>Earned</span></div>
         {ranked.map((person) => (

@@ -633,10 +633,7 @@
 .review-card__body > div:last-child > i { height: 6px; overflow: hidden; background: #e4e8dd; border-radius: 99px; }
 .review-card__body > div:last-child > i b { display: block; height: 100%; background: var(--brand-gold); }
 .review-card > svg { width: 22px; }
-.review-empty { display: grid; justify-items: center; max-width: 600px; margin: 30px auto; text-align: center; }
-.review-empty .brand-art { width: 160px; min-height: 160px; }
-.review-empty h2 { margin: 30px 0 8px; font-size: 32px; }
-.review-empty p { max-width: 500px; margin: 0; color: #6d7468; font-size: 11px; line-height: 1.55; }
+.review-queue-page > .clippit-empty.review-empty { max-width: 920px; margin: 30px auto; }
 
 /* Review detail */
 .review-detail-page > header { display: flex; align-items: end; justify-content: space-between; gap: 28px; }

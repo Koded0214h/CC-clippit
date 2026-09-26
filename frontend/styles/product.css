@@ -2557,6 +2557,7 @@
 .leaderboard-controls > div { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--ink); border-radius: 999px; background: var(--white); }
 .leaderboard-controls button { min-height: 36px; padding: 0 16px; border: 0; border-radius: 999px; background: transparent; color: var(--ink); font: inherit; font-size: 12px; font-weight: 800; cursor: pointer; }
 .leaderboard-controls button.is-active { background: var(--ink); color: var(--lime); }
+.leaderboard-empty { margin-top: 24px; }
 .budget-only-end { display: block; margin-top: 5px; font-size: clamp(20px, 2.4vw, 32px); letter-spacing: -.05em; }
 .campaign-materials__empty { width: 100%; margin: 0; padding: 18px; border: 1px dashed var(--ink); border-radius: 14px; color: var(--muted); font-size: 12px; }
 .campaign-materials a { color: inherit; text-decoration: none; }
@@ -7741,8 +7742,12 @@
 .settings-lanes button.is-selected { background: var(--lime, #b8ff38); border-color: var(--lime, #b8ff38); color: var(--ink, #151713); font-weight: 700; }
 .security-toggle.is-disabled { opacity: .6; }
 .account-card__connect { padding: 8px 14px; border-radius: 999px; background: var(--lime, #b8ff38); color: var(--ink, #151713); font-weight: 700; text-decoration: none; }
-.mini-leaderboard__empty, .proof-stream__empty, .campaign-leaders__empty, .wallet-movements__empty, .notification-tape__empty, .profile-work__empty, .statement-table__empty { margin: 12px 0; color: var(--muted, #61665a); font-size: 13px; }
+.clippit-empty.mini-leaderboard__empty, .clippit-empty.proof-stream__empty, .clippit-empty.campaign-leaders__empty, .clippit-empty.wallet-movements__empty, .clippit-empty.notification-tape__empty, .clippit-empty.profile-work__empty, .clippit-empty.statement-table__empty { margin: 12px 0; color: var(--ink, #151713); }
 .proof-stream__item { color: inherit; text-decoration: none; display: block; }
 .campaign-load-more { justify-self: center; margin: 16px auto 0; }
 .feature-campaign--empty { display: grid; place-items: center; background: var(--paper, #f7f8f2); }
+.feature-campaign--empty > .clippit-empty { width: calc(100% - 38px); min-height: calc(100% - 38px); }
+.campaign-tape > .clippit-empty,
+.campaign-ledger > .clippit-empty { grid-column: 1 / -1; margin: 22px 0; }
+.campaign-materials .clippit-empty.campaign-materials__empty { grid-column: 1 / -1; }
 .verification-list .is-failed i { color: var(--danger, #b52e21); }

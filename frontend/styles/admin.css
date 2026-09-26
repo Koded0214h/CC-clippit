@@ -195,10 +195,7 @@
 .admin-queue > a > b { font-size: 9px; }
 .admin-queue time { color: var(--admin-muted); font-size: 8px; }
 .admin-queue > a > svg { width: 15px; }
-.admin-queue-empty { display: grid; min-height: 230px; place-items: center; align-content: center; gap: 8px; color: var(--admin-muted); }
-.admin-queue-empty svg { width: 32px; }
-.admin-queue-empty strong { color: var(--admin-ink); }
-.admin-queue-empty span { font-size: 9px; }
+.admin-queue > .clippit-empty.admin-queue-empty { width: calc(100% - 36px); margin: 18px; color: var(--admin-ink); }
 
 .admin-decision-saved { display: grid; grid-template-columns: 38px minmax(0,1fr) auto; align-items: center; gap: 11px; padding: 12px 14px; border: 1px solid var(--admin-ink); border-radius: 11px; background: var(--admin-lime); box-shadow: 4px 4px 0 var(--admin-ink); }
 .admin-decision-saved > svg { width: 24px; }

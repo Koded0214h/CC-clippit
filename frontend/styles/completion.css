@@ -163,16 +163,9 @@
 .support-ribbon strong { font-size: 1.25rem; }
 .support-ribbon span { color: #4a4337; }
 
-.completion-empty { display: grid; min-height: 350px; place-items: center; align-content: center; text-align: center; }
-.completion-empty > svg { width: 42px; }
-.completion-empty h2 { margin: 18px 0 6px; }
-.completion-empty p { margin: 0 0 24px; color: var(--muted); }
-
-.real-empty-panel { display: grid; grid-template-columns: 230px minmax(0, 1fr); align-items: center; gap: clamp(28px, 5vw, 72px); min-height: 410px; padding: clamp(28px, 5vw, 58px); border: 1.5px solid var(--ink); border-radius: 22px; background: #fff; }
-.real-empty-panel .completion-art { width: 210px; }
-.real-empty-panel h2 { max-width: 650px; margin: 18px 0 10px; font-size: clamp(2rem, 4vw, 4rem); line-height: .95; letter-spacing: -.06em; }
-.real-empty-panel p { max-width: 650px; margin: 0; color: var(--muted); line-height: 1.6; }
-.real-empty-panel > div > div { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 26px; }
+.completion-page > .clippit-empty.completion-empty,
+.completion-page > .clippit-empty.real-empty-panel,
+.public-profile > .clippit-empty.completion-empty { margin-block: 28px; }
 .real-empty-panel--compact { min-height: 330px; }
 .ticket-board--real > aside > strong { color: var(--lime); }
 
@@ -991,11 +984,7 @@
   .article-copy section p,
   .legal-document__body section p { font-size: .92rem; line-height: 1.62; }
   .article-note { padding: 18px; }
-  .real-empty-panel { grid-template-columns: 1fr; gap: 20px; min-height: 0; padding: 22px 18px; border-radius: 16px; }
-  .real-empty-panel .completion-art { width: 112px; }
-  .real-empty-panel h2 { margin: 13px 0 7px; font-size: 1.75rem; }
-  .real-empty-panel > div > div { gap: 8px; margin-top: 18px; }
-  .real-empty-panel .completion-action { width: 100%; }
+  .clippit-empty.real-empty-panel .completion-action { width: 100%; }
   .ticket-board > aside { padding: 18px; }
   .ticket-board > aside > strong { font-size: 2.7rem; }
   .ticket-row { min-height: 86px; }
@@ -1089,10 +1078,6 @@
 .topic-grid > a > svg { right: 19px; bottom: 19px; width: 19px; }
 .support-ribbon { margin-bottom: 54px; padding: 21px 23px; border-radius: 15px; }
 
-.real-empty-panel { grid-template-columns: 165px minmax(0, 1fr); gap: clamp(24px, 4vw, 46px); min-height: 300px; padding: clamp(24px, 4vw, 38px); border-radius: 18px; }
-.real-empty-panel .completion-art { width: 150px; }
-.real-empty-panel h2 { margin: 12px 0 8px; font-size: clamp(1.75rem, 3vw, 2.8rem); }
-.real-empty-panel > div > div { margin-top: 20px; }
 .real-empty-panel--compact { min-height: 260px; }
 .article-shell,
 .legal-document,
@@ -1349,9 +1334,7 @@
   .topic-grid p { grid-column: 2; margin: 0; padding: 0; font-size: .76rem; line-height: 1.35; }
   .topic-grid > a > svg { grid-column: 3; grid-row: 1 / 3; align-self: center; }
   .support-ribbon { margin-bottom: 34px; padding: 16px; }
-  .real-empty-panel { grid-template-columns: 1fr; gap: 14px; min-height: 0; padding: 18px 16px; }
-  .real-empty-panel .completion-art { width: 88px; justify-self: start; }
-  .real-empty-panel h2 { font-size: 1.55rem; }
+  .clippit-empty.real-empty-panel { min-height: 164px; }
   .article-note p,
   .article-copy > section > div { min-width: 0; overflow-wrap: anywhere; }
   .article-shell,
