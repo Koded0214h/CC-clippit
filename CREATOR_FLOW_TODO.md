@@ -5,6 +5,15 @@ What remains is mostly **configuration on Render and the platform developer port
 
 Work top to bottom. Each item says why it matters, exactly what to do, and how to confirm it's fixed.
 
+### Latest test run — 26 Sep 2026, after the backend redeploy
+
+| Test | Result | What's still failing |
+|---|---|---|
+| API contract test: every endpoint the creator frontend calls, against live Render | **70 / 72 pass** | Uploads return 502 → item 4 (Cloudinary key). No live campaign to join or submit to → item 6. |
+| Browser test: Chromium on every creator page, desktop + mobile | **All real checks pass** | Earlier failures were Chrome's own log line for expected 404s, plus one reply bug that is now fixed. |
+
+No code bugs are open. Everything left below is configuration or a product decision.
+
 **Legend:** 🔴 blocks the creator flow · 🟠 needed before real users/money · 🟡 product decision or polish
 
 ---
@@ -20,7 +29,7 @@ Work top to bottom. Each item says why it matters, exactly what to do, and how t
 
 **Confirm:** In Settings → Creator profile, change "City or region", save, reload — it stays.
 
-- [ ] Done
+- [x] Done — deployed 26 Sep. Live retest: city/location saves, and support/dispute replies show immediately.
 
 ---
 
