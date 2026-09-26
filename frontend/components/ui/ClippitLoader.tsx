@@ -8,6 +8,7 @@ export function ClippitMarkMotion({ compact = false, light = false }: { compact?
   const instanceId = useId().replace(/:/g, "");
   const accentGradientId = `clippit-loader-accent-${instanceId}`;
   const bodyPath = "M69.38 16.25L24.69 27.19L20 29.38L15 34.06L12.5 38.12L10.94 42.5L4.38 69.69L.31 83.12L0 87.19L.62 90.31L2.5 93.75L5 96.25L10.31 98.75L16.25 99.06L62.19 91.56L65.94 90.62L70.62 88.44L76.25 83.44L77.81 81.25L79.69 77.19L81.88 65L81.88 62.5L81.25 62.19L67.81 66.25L67.5 56.56L80.62 51.88L81.88 50.62L81.88 33.12L81.25 33.12L65.94 47.5L65.62 43.75L69.69 40L51.56 40L47.5 43.75L41.25 43.75L46.88 39.06L69.69 17.19Z";
+  const bodyCutoutPath = "M36.2 52.6H63L61.8 67.4L34 72.8Z";
   const arrowPath = "M99.38 3.12L97.81 1.88L95.94 1.88L72.19 8.12L71.25 9.38L71.88 11.56L78.44 14.38L47.5 43.75L65.62 43.75L86.88 23.75L89.69 29.38L90.94 30.31L92.81 30L93.75 28.75L99.69 4.38Z";
   const playPath = "M42.5 48.75L40.62 49.06L39.06 51.25L39.06 71.25L39.69 72.5L40.62 73.12L42.5 73.12L57.81 62.5L59.38 60.62L59.06 58.44L58.12 57.5Z";
 
@@ -20,7 +21,7 @@ export function ClippitMarkMotion({ compact = false, light = false }: { compact?
         </linearGradient>
       </defs>
       <g className="clippit-logo-piece clippit-logo-piece--body">
-        <path className="clippit-logo-fill" d={bodyPath} />
+        <path className="clippit-logo-fill" d={`${bodyPath}${bodyCutoutPath}`} fillRule="evenodd" clipRule="evenodd" />
         <path className="clippit-logo-trace" pathLength="1" d={bodyPath} />
       </g>
       <g className="clippit-logo-piece clippit-logo-piece--play" style={{ "--clippit-accent": `url(#${accentGradientId})` } as CSSProperties}>
