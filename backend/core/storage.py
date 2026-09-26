@@ -10,6 +10,7 @@ never fully written.
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 from dataclasses import dataclass
 from functools import lru_cache
@@ -17,15 +18,22 @@ from pathlib import Path
 from typing import Protocol
 
 import cloudinary
+import cloudinary.exceptions
 import cloudinary.uploader
 
 from .config import get_settings
+
+logger = logging.getLogger("clippit.storage")
 
 CHUNK = 1024 * 1024
 
 
 class UploadRejected(ValueError):
     """The file is not acceptable. The message is safe to show a user."""
+
+
+class StorageUnavailable(RuntimeError):
+    """The file was fine but the storage provider refused or failed it."""
 
 
 @dataclass(frozen=True)
@@ -252,6 +260,9 @@ class CloudinaryStorage:
             result = await asyncio.to_thread(
                 cloudinary.uploader.upload_large, str(local_path), resource_type=resource_type, folder=f"clippit/{kind}",
             )
+        except cloudinary.exceptions.Error as exc:
+            logger.exception("cloudinary upload failed")
+            raise StorageUnavailable(str(exc)) from exc
         finally:
             local_path.unlink(missing_ok=True)
         return StoredFile(key=result["secure_url"], size_bytes=staged.size_bytes, content_type=staged.content_type)
