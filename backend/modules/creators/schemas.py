@@ -71,13 +71,14 @@ class CreatorProfileUpdate(BaseModel):
     photo_upload_id: uuid.UUID | None = None
     interests: list[str] | None = Field(default=None, max_length=12)
     country: str | None = Field(default=None, min_length=2, max_length=2)
+    location: str | None = Field(default=None, max_length=80)
 
     @field_validator("country")
     @classmethod
     def upper_country(cls, value: str | None) -> str | None:
         return value.upper() if value else None
 
-    @field_validator("display_name", "bio")
+    @field_validator("display_name", "bio", "location")
     @classmethod
     def strip(cls, value: str | None) -> str | None:
         return value.strip() if value is not None else None

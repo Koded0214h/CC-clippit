@@ -34,6 +34,7 @@ export const bankDetailsApi = {
   resolve: (bank_code: string, account_number: string) =>
     api.post<ResolvedOut>("/banks/resolve", { bank_code, account_number }),
   verify: () => api.post<BankAccountOut>("/creators/me/bank-details/verify", {}),
+  remove: (stepUpToken: string) => api.delete<void>("/creators/me/bank-details", { step_up_token: stepUpToken }),
 };
 
 export const banksApi = {

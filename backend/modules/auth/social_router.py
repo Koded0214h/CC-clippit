@@ -86,7 +86,7 @@ async def callback(
 
     # FRONTEND_ORIGIN can be a comma-separated CORS list. The post-OAuth
     # redirect can only go to one URL — the first origin is the app itself.
-    origin = settings.frontend_origin.split(",")[0].strip()
+    origin = settings.app_url
     fail_url = f"{origin}/dashboard/settings?social={platform}&status=error"
     success_url = f"{origin}/dashboard/settings?social={platform}&status=ok"
 
@@ -276,5 +276,5 @@ async def data_deletion(request: Request, platform: str, signed_request: str = F
         if account:
             await db.delete(account)
             await db.commit()
-    origin = get_settings().frontend_origin.split(",")[0].strip()
+    origin = get_settings().app_url
     return {"url": f"{origin}/data-deletion-status?code={confirmation_code}", "confirmation_code": confirmation_code}

@@ -8,8 +8,15 @@ import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent, type Re
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
 import { ButtonLoader, ClippitLoader } from "@/components/ui/ClippitLoader";
-import { authApi, clearTokens } from "@/lib/api/auth";
-import { ApiError } from "@/lib/api/client";
+import { authApi, clearTokens, type UserOut } from "@/lib/api/auth";
+import { ApiError, errorMessage } from "@/lib/api/client";
+import { disputesApi, legalApi, publicProfilesApi, receiptsApi, supportApi, uploadsApi, type DisputeDetailOut, type DisputeOut, type DisputeType, type LegalDocumentOut, type PublicCreatorProfileOut, type PublicCreatorWork, type ReceiptVerifyOut, type TicketDetailOut, type TicketOut } from "@/lib/api/account";
+import { earningsApi, type EarningRow } from "@/lib/api/earnings";
+import { payoutsApi, type PayoutOut } from "@/lib/api/payouts";
+import { creatorApi, type ClipRow } from "@/lib/api/creator";
+import { bankDetailsApi, type BankAccountOut } from "@/lib/api/bankDetails";
+import { socialApi } from "@/lib/api/social";
+import { formatDate, formatDateTime, naira, platformLabel } from "@/lib/format";
 import { BRAND_CANCELLATION_FEE_RATE, BRAND_TOP_UP_FEE_RATE, CREATOR_WITHDRAWAL_FEE_RATE, MINIMUM_WALLET_WITHDRAWAL, calculateFee, feePercentage } from "@/lib/fees";
 
 const art = {
@@ -147,6 +154,22 @@ export function DisputeDetailScreen({ id }: { id: string }) {
 
 export function AccountDataScreen() {
   const [requested, setRequested] = useState(false);
+  const [requesting, setRequesting] = useState(false);
+  const [requestError, setRequestError] = useState("");
+  const [ticketId, setTicketId] = useState("");
+  const requestExport = async () => {
+    setRequesting(true);
+    setRequestError("");
+    try {
+      const ticket = await supportApi.create({ category: "Privacy", subject: "Data export request", message: "Please prepare a copy of the personal data linked to my Clippit account and send the download link to my account email." });
+      setTicketId(ticket.id);
+      setRequested(true);
+    } catch (err) {
+      setRequestError(errorMessage(err, "We couldn't send your request. Try again."));
+    } finally {
+      setRequesting(false);
+    }
+  };
   const archiveItems = [
     ["person", "Profile", "Your account details and preferences"],
     ["campaigns", "Campaigns", "Joins, submissions and decisions"],
@@ -157,7 +180,7 @@ export function AccountDataScreen() {
     <section className="data-vault__request">
       <header><div className="vault-door"><span><ProductIcon name="shield" /></span><i /><i /><i /></div><div><Status tone="lime">Private archive</Status><h2>{requested ? "We’re preparing it" : "Your account, packed neatly"}</h2><p>{requested ? "We’ll email the download link when it is ready. The link expires after 24 hours." : "Request one ZIP file containing the account information available for export."}</p></div></header>
       <div className="data-vault__facts"><span><small>Format</small><strong>ZIP archive</strong></span><span><small>Usually ready</small><strong>Within 24 hours</strong></span><span><small>Link access</small><strong>24 hours</strong></span></div>
-      {requested ? <div className="data-requested" role="status" aria-live="polite"><ProductIcon name="clock" /><span><strong>Request received</strong><small>We’ll send the link to your account email.</small></span></div> : <button className="completion-submit" onClick={() => setRequested(true)}>Request my data<ProductIcon name="arrow" /></button>}
+      {requested ? <div className="data-requested" role="status" aria-live="polite"><ProductIcon name="clock" /><span><strong>Request received</strong><small>We’ll send the link to your account email. <Link href={`/support/tickets/${ticketId}`}>Track the request</Link></small></span></div> : <>{requestError && <p className="auth-error" role="alert">{requestError}</p>}<button className="completion-submit" disabled={requesting} onClick={requestExport}>{requesting ? "Sending request…" : "Request my data"}<ProductIcon name="arrow" /></button></>}
     </section>
     <aside className="data-vault__contents"><header><span><ProductIcon name="brief" /></span><div><small>Inside the archive</small><h2>Four tidy folders</h2></div></header><div>{archiveItems.map(([icon, title, copy]) => <article key={title}><span><ProductIcon name={icon} /></span><p><strong>{title}</strong><small>{copy}</small></p><ProductIcon name="check" /></article>)}</div><footer><ProductIcon name="shield" /><span>Passwords and security secrets are never included.</span></footer></aside>
   </div><nav className="account-page-links" aria-label="More account options"><Link href="/dashboard/settings"><ProductIcon name="settings" /><span><strong>Account settings</strong><small>Profile, security and notifications</small></span><ProductIcon name="arrow" /></Link><Link href="/legal/privacy"><ProductIcon name="shield" /><span><strong>Privacy policy</strong><small>How Clippit uses account information</small></span><ProductIcon name="arrow" /></Link><Link href="/account/delete" className="is-danger"><ProductIcon name="person" /><span><strong>Delete account</strong><small>Check blockers and request deletion</small></span><ProductIcon name="arrow" /></Link></nav></section></ServiceFrame>;
@@ -169,6 +192,22 @@ export function DeleteAccountScreen() {
   const [stepPassword, setStepPassword] = useState("");
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [checks, setChecks] = useState<{ money: number; tickets: number; disputes: number } | null>(null);
+
+  useEffect(() => {
+    authApi.me().then(async (me: UserOut) => {
+      const [summary, tickets, disputes] = await Promise.all([
+        me.role === "creator" ? earningsApi.summary().catch(() => null) : Promise.resolve(null),
+        supportApi.list("open").catch(() => []),
+        disputesApi.list().catch(() => []),
+      ]);
+      setChecks({
+        money: summary ? summary.payable + summary.in_hold + summary.processing : 0,
+        tickets: tickets.length,
+        disputes: disputes.filter((item) => item.status === "open" || item.status === "awaiting_customer").length,
+      });
+    }).catch(() => setChecks({ money: 0, tickets: 0, disputes: 0 }));
+  }, []);
 
   const requestDeletion = async () => {
     if (!confirmed || !stepPassword) return;
@@ -187,7 +226,11 @@ export function DeleteAccountScreen() {
     }
   };
 
-  return <ServiceFrame active="Account"><section className="service-content completion-page"><CompletionHead back="/account/data" title="Delete account" copy="Check what must be settled before deletion can begin." /><div className="delete-layout"><section><h2>Two things need attention</h2><article><span><ProductIcon name="wallet" /></span><p><strong>₦18,400 is still payable</strong><small>Withdraw it before requesting deletion.</small></p><Link href="/dashboard/withdraw">Withdraw money</Link></article><article><span><ProductIcon name="brief" /></span><p><strong>One support ticket is open</strong><small>Close it or wait for the current reply.</small></p><Link href="/support/tickets">Open tickets</Link></article><article className="is-clear"><span><ProductIcon name="check" /></span><p><strong>No active campaigns or disputes</strong><small>This account has no other deletion blockers.</small></p></article></section><aside><MiniArt src={art.bank} tone="gold" /><h2>After the blockers are cleared</h2><p>Your public profile is hidden immediately. Required transaction and safety records are retained under the applicable policy; other eligible account data is deleted or anonymised.</p><label><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />I understand this cannot be undone.</label>{confirmed && <label className="delete-password-label"><span>Confirm your password to continue</span><input type="password" value={stepPassword} onChange={(event) => setStepPassword(event.target.value)} placeholder="Your current password" autoComplete="current-password" /></label>}{deleteError && <p className="auth-error" role="alert">{deleteError}</p>}<button disabled={!confirmed || (confirmed && !stepPassword) || deleteLoading} aria-busy={deleteLoading} onClick={requestDeletion}>{deleteLoading ? <ButtonLoader label="Closing your account safely" /> : "Request account deletion"}</button></aside></div></section></ServiceFrame>;
+  return <ServiceFrame active="Account"><section className="service-content completion-page"><CompletionHead back="/account/data" title="Delete account" copy="Check what must be settled before deletion can begin." /><div className="delete-layout"><section>{!checks ? <p>Checking your account…</p> : <><h2>{checks.money > 0 || checks.tickets || checks.disputes ? "Check these first" : "Nothing is blocking deletion"}</h2>
+      {checks.money > 0 ? <article><span><ProductIcon name="wallet" /></span><p><strong>{naira(checks.money)} hasn&apos;t been paid out yet</strong><small>Deletion is refused while earnings are payable, held or processing. Withdraw what&apos;s payable and wait for the rest to clear.</small></p><Link href="/dashboard/withdraw">Withdraw money</Link></article> : <article className="is-clear"><span><ProductIcon name="check" /></span><p><strong>No unsettled money</strong><small>Nothing is held, payable or processing.</small></p></article>}
+      {checks.tickets > 0 && <article><span><ProductIcon name="brief" /></span><p><strong>{checks.tickets} support ticket{checks.tickets === 1 ? " is" : "s are"} open</strong><small>You&apos;ll lose access to replies once the account is deleted.</small></p><Link href="/support/tickets">Open tickets</Link></article>}
+      {checks.disputes > 0 && <article><span><ProductIcon name="shield" /></span><p><strong>{checks.disputes} dispute{checks.disputes === 1 ? " is" : "s are"} still open</strong><small>Withdraw or wait for a decision before deleting.</small></p><Link href="/disputes">Open disputes</Link></article>}
+    </>}</section><aside><MiniArt src={art.bank} tone="gold" /><h2>After the blockers are cleared</h2><p>Your public profile is hidden immediately. Required transaction and safety records are retained under the applicable policy; other eligible account data is deleted or anonymised.</p><label><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />I understand this cannot be undone.</label>{confirmed && <label className="delete-password-label"><span>Confirm your password to continue</span><input type="password" value={stepPassword} onChange={(event) => setStepPassword(event.target.value)} placeholder="Your current password" autoComplete="current-password" /></label>}{deleteError && <p className="auth-error" role="alert">{deleteError}</p>}<button disabled={!confirmed || (confirmed && !stepPassword) || deleteLoading} aria-busy={deleteLoading} onClick={requestDeletion}>{deleteLoading ? <ButtonLoader label="Closing your account safely" /> : "Request account deletion"}</button></aside></div></section></ServiceFrame>;
 }
 
 const legalDocs = [
@@ -211,8 +254,19 @@ export function ConsentUpdateScreen() {
   return <ServiceFrame active="Legal"><section className="consent-screen"><div className="consent-sheet"><Status tone="gold">Action required</Status><h1>Campaign funding terms changed.</h1><p>Review the changes before you fund or join another campaign.</p><ol><li><span>1</span><div><strong>Refund timing is clearer</strong><p>Unused balances show their expected return date after campaign close.</p></div></li><li><span>2</span><div><strong>Platform reading disputes have a deadline</strong><p>The deadline now appears beside every eligible transaction.</p></div></li><li><span>3</span><div><strong>No change to your current money</strong><p>Existing earnings, pots and transaction references remain unchanged.</p></div></li></ol><label><input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />I have read and accept version 2.1 of the campaign funding terms.</label><button className="completion-submit" disabled={!accepted}>Accept and continue<ProductIcon name="arrow" /></button><Link href="/legal/campaign-funding">Read the full document</Link></div><MiniArt src={art.brief} tone="gold" /></section></ServiceFrame>;
 }
 
+const RECEIPT_TYPES: Record<string, string> = { payout: "Creator payout", funding: "Campaign funding", refund: "Campaign refund" };
+
 export function ReceiptVerificationScreen({ reference }: { reference: string }) {
-  return <ServiceFrame><section className="verify-receipt"><div className="verify-radar"><i /><i /><i /><span><ProductIcon name="check" /></span></div><Status tone="lime">Authentic Clippit record</Status><h1>This receipt is valid.</h1><p>The transaction reference and amount match an immutable Clippit record.</p><section><header><Mark /><div><strong>Clippit</strong><span>Receipt verification</span></div></header><dl><div><dt>Reference</dt><dd>{reference}</dd></div><div><dt>Amount</dt><dd>₦18,400</dd></div><div><dt>Status</dt><dd>Settled</dd></div><div><dt>Processed</dt><dd>20 Sep 2026 · 15:07 WAT</dd></div><div><dt>Recipient</dt><dd>Tobi Adeyemi · GTBank ••6789</dd></div></dl><footer><ProductIcon name="shield" />Verified on 22 Sep 2026</footer></section><small>Clippit will never ask for a password or verification code on a receipt verification page.</small></section></ServiceFrame>;
+  const [receipt, setReceipt] = useState<ReceiptVerifyOut | null>(null);
+  const [error, setError] = useState<{ notFound: boolean; message: string } | null>(null);
+  useEffect(() => {
+    receiptsApi.verify(reference).then(setReceipt).catch((err) => setError({ notFound: err instanceof ApiError && err.status === 404, message: errorMessage(err, "We couldn't check this receipt right now.") }));
+  }, [reference]);
+
+  if (error) return <ServiceFrame><section className="verify-receipt is-invalid"><div className="verify-radar"><i /><i /><i /><span><ProductIcon name="shield" /></span></div><Status tone="danger">{error.notFound ? "No matching record" : "Check unavailable"}</Status><h1>{error.notFound ? "We can't find this receipt." : "We couldn't check this receipt."}</h1><p>{error.notFound ? `No Clippit transaction has the reference ${reference}. Check the reference, and treat the receipt as unverified until it matches.` : error.message}</p><small>Clippit will never ask for a password or verification code on a receipt verification page.</small></section></ServiceFrame>;
+  if (!receipt) return <ServiceFrame><section className="verify-receipt"><ClippitLoader contained compact label="Checking this receipt" /></section></ServiceFrame>;
+
+  return <ServiceFrame><section className="verify-receipt"><div className="verify-radar"><i /><i /><i /><span><ProductIcon name="check" /></span></div><Status tone="lime">Authentic Clippit record</Status><h1>This receipt is valid.</h1><p>The reference matches a Clippit record. Compare the amount and date below with the receipt you were shown.</p><section><header><Mark /><div><strong>{receipt.issuer}</strong><span>Receipt verification</span></div></header><dl><div><dt>Reference</dt><dd>{receipt.reference}</dd></div><div><dt>Type</dt><dd>{RECEIPT_TYPES[receipt.type] ?? receipt.type}</dd></div><div><dt>Amount</dt><dd>{naira(receipt.amount)}</dd></div><div><dt>Status</dt><dd>{receipt.status}</dd></div><div><dt>Date</dt><dd>{formatDateTime(receipt.date)}</dd></div><div><dt>Record fingerprint</dt><dd>{receipt.digest.slice(0, 16).toUpperCase()}</dd></div></dl><footer><ProductIcon name="shield" />Checked {formatDateTime(new Date().toISOString())}</footer></section><small>Clippit will never ask for a password or verification code on a receipt verification page.</small></section></ServiceFrame>;
 }
 
 function VerificationStart({ role }: { role: "creator" | "brand" }) {
@@ -221,7 +275,26 @@ function VerificationStart({ role }: { role: "creator" | "brand" }) {
   return <div className={`${brand ? "brand-page" : "dashboard-page"} completion-workspace`}><CompletionHead title={brand ? "Verify Gbedu Records" : "Verify your identity"} copy={brand ? "Required before higher campaign limits and organisation billing are enabled." : "Required before your first withdrawal."} action={<Status tone="gold">Not started</Status>} /><section className="verification-intro"><div><span className="verification-number">01</span><h2>{brand ? "Business details" : "Identity details"}</h2><p>{brand ? "Legal business name, registration number, address and an authorised representative." : "Your legal name, date of birth, phone number and address."}</p></div><div><span className="verification-number">02</span><h2>{brand ? "Business documents" : "Identity document"}</h2><p>{brand ? "Registration document and a recent proof of business address." : "A clear government-issued document and a quick face check."}</p></div><div><span className="verification-number">03</span><h2>Review</h2><p>Track every check and correct anything that cannot be verified.</p></div><aside><MiniArt src={brand ? art.brief : art.proof} tone={brand ? "gold" : "lime"} /><strong>Usually reviewed within one working day</strong><small>Your documents are encrypted and are not shown on your public profile.</small><BigAction href={`${base}/${brand ? "business" : "identity"}`}>Start verification</BigAction></aside></section></div>;
 }
 
-export function CreatorVerificationScreen() { return <VerificationStart role="creator" />; }
+function CreatorReadinessScreen() {
+  const [state, setState] = useState<{ user: UserOut; bank: BankAccountOut | null; connected: number } | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    Promise.all([authApi.me(), bankDetailsApi.get().catch(() => null), socialApi.accounts().catch(() => [])])
+      .then(([user, bank, accounts]) => setState({ user, bank, connected: accounts.filter((a) => a.connected).length }))
+      .catch((err) => setError(errorMessage(err)));
+  }, []);
+  if (error) return <div className="dashboard-page completion-workspace"><CompletionHead title="Account checks" copy={error} /></div>;
+  if (!state) return <div className="dashboard-page"><ClippitLoader contained label="Checking your account" /></div>;
+  const items = [
+    { done: state.user.email_verified, title: "Email address confirmed", copy: "Needed to join campaigns, submit clips and withdraw.", href: "/auth/verify-email", cta: "Confirm email" },
+    { done: state.connected > 0, title: "A social account connected", copy: "Proves you own the posts you submit and lets us read verified views.", href: "/dashboard/accounts", cta: "Connect an account" },
+    { done: !!state.bank?.verified, title: "Payout account verified", copy: state.bank ? "Your bank confirmed the account name." : "Where your withdrawals land.", href: "/dashboard/payout-account", cta: state.bank ? "Verify account" : "Add account" },
+  ];
+  const doneCount = items.filter((item) => item.done).length;
+  return <div className="dashboard-page completion-workspace"><CompletionHead title="Account checks" copy="What your account needs before you can earn and withdraw." action={<Status tone={doneCount === items.length ? "lime" : "gold"}>{doneCount}/{items.length} complete</Status>} /><section className="verification-status"><div className="status-orbit"><i /><i /><i /><span><ProductIcon name={doneCount === items.length ? "check" : "shield"} /></span><strong>{doneCount === items.length ? "Ready" : "Almost there"}</strong><small>{doneCount === items.length ? "You can join, submit and withdraw." : `${items.length - doneCount} step${items.length - doneCount === 1 ? "" : "s"} left`}</small></div><section>{items.map((item, index) => <article className={item.done ? "is-complete" : index === items.findIndex((i) => !i.done) ? "is-current" : ""} key={item.title}><span>{item.done ? <ProductIcon name="check" /> : index + 1}</span><p><strong>{item.title}</strong><small>{item.copy}</small></p>{item.done ? <Status tone="lime">Done</Status> : <Link href={item.href}>{item.cta}</Link>}</article>)}</section><aside><ProductIcon name="shield" /><div><strong>Identity document checks aren&apos;t required yet.</strong><span>If Clippit ever needs more, this page will tell you exactly what to send.</span></div></aside></section></div>;
+}
+
+export function CreatorVerificationScreen() { return <CreatorReadinessScreen />; }
 export function BrandVerificationScreen() { return <VerificationStart role="brand" />; }
 
 function DetailsForm({ role }: { role: "creator" | "brand" }) {
@@ -230,7 +303,7 @@ function DetailsForm({ role }: { role: "creator" | "brand" }) {
   return <div className={`${brand ? "brand-page" : "dashboard-page"} completion-workspace`}><CompletionHead back={base} kicker="Step 1 of 3" title={brand ? "Business details" : "Identity details"} copy="Enter the details exactly as they appear on the document." /><form className="identity-sheet"><div className="identity-grid">{brand ? <><label><span>Registered business name</span><input defaultValue="Gbedu Records Limited" /></label><label><span>Registration number</span><input placeholder="RC number" /></label><label className="is-wide"><span>Registered address</span><input placeholder="Street, city and state" /></label><label><span>Representative's legal name</span><input defaultValue="Tomi Odukoya" /></label><label><span>Role in the organisation</span><select defaultValue="Director"><option>Director</option><option>Owner</option><option>Employee</option><option>Authorised agent</option></select></label></> : <><label><span>Legal first name</span><input defaultValue="Tobi" /></label><label><span>Legal last name</span><input defaultValue="Adeyemi" /></label><label><span>Date of birth</span><input type="date" /></label><label><span>Phone number</span><input defaultValue="+234 803 000 2041" /></label><label className="is-wide"><span>Residential address</span><input placeholder="Street, city and state" /></label></>}</div><div className="identity-confirm"><ProductIcon name="shield" /><p><strong>Use your legal details.</strong><span>They are used for verification and money controls, not your public display name.</span></p></div><BigAction href={`${base}/documents`}>Save and continue</BigAction></form></div>;
 }
 
-export function CreatorIdentityScreen() { return <DetailsForm role="creator" />; }
+export function CreatorIdentityScreen() { return <CreatorReadinessScreen />; }
 export function BrandBusinessScreen() { return <DetailsForm role="brand" />; }
 
 function DocumentsScreen({ role }: { role: "creator" | "brand" }) {
@@ -241,7 +314,7 @@ function DocumentsScreen({ role }: { role: "creator" | "brand" }) {
   return <div className={`${brand ? "brand-page" : "dashboard-page"} completion-workspace`}><CompletionHead back={`${base}/${brand ? "business" : "identity"}`} kicker="Step 2 of 3" title={brand ? "Business documents" : "Identity document"} copy="Make every edge visible and keep text in focus." /><section className="document-studio"><div className="document-guide"><div className="document-frame"><i /><i /><i /><i /><ProductIcon name={brand ? "brief" : "person"} /></div><h2>{brand ? "Required documents" : "Choose a document"}</h2><p>{brand ? "CAC registration document and proof of business address issued within the last three months." : "National ID, driver's licence, voter card or international passport."}</p><ul><li><ProductIcon name="check" />Original document</li><li><ProductIcon name="check" />Colour image or PDF</li><li><ProductIcon name="check" />No glare or covered details</li></ul></div><div className="upload-stack"><label><ProductIcon name="upload" /><strong>{brand ? "Upload registration document" : "Upload the front of your document"}</strong><span>JPG, PNG or PDF · up to 10 MB</span><input type="file" onChange={add} /></label><label><ProductIcon name="camera" /><strong>{brand ? "Upload proof of address" : "Take a quick face photo"}</strong><span>{brand ? "Bank statement or utility bill" : "Use this device camera in good light"}</span><input type="file" accept="image/*" capture="user" onChange={add} /></label>{files.length > 0 && <div className="upload-ready">{files.map((file) => <p key={file}><ProductIcon name="check" /><span><strong>{file}</strong><small>Ready to submit</small></span></p>)}</div>}<BigAction href={`${base}/status`}>Submit for review</BigAction></div></section></div>;
 }
 
-export function CreatorDocumentsScreen() { return <DocumentsScreen role="creator" />; }
+export function CreatorDocumentsScreen() { return <CreatorReadinessScreen />; }
 export function BrandDocumentsScreen() { return <DocumentsScreen role="brand" />; }
 
 function VerificationStatus({ role }: { role: "creator" | "brand" }) {
@@ -249,28 +322,65 @@ function VerificationStatus({ role }: { role: "creator" | "brand" }) {
   return <div className={`${brand ? "brand-page" : "dashboard-page"} completion-workspace`}><CompletionHead title="Verification status" copy={brand ? "Gbedu Records Limited" : "Tobi Adeyemi"} action={<Status tone="gold">In review</Status>} /><section className="verification-status"><div className="status-orbit"><i /><i /><i /><span><ProductIcon name="shield" /></span><strong>Reviewing</strong><small>Submitted today · 14:28</small></div><section><article className="is-complete"><span><ProductIcon name="check" /></span><p><strong>{brand ? "Business details" : "Identity details"}</strong><small>Details passed format and duplicate checks.</small></p><Status tone="lime">Complete</Status></article><article className="is-current"><span><ProductIcon name="eye" /></span><p><strong>{brand ? "Document check" : "Identity document"}</strong><small>A reviewer is checking the submitted images.</small></p><Status tone="gold">In review</Status></article><article><span>3</span><p><strong>Final decision</strong><small>You will get a notification as soon as this is complete.</small></p><Status>Waiting</Status></article></section><aside><ProductIcon name="clock" /><div><strong>Nothing else is needed right now.</strong><span>If a document needs correction, this screen will show exactly what to replace.</span></div></aside></section></div>;
 }
 
-export function CreatorVerificationStatusScreen() { return <VerificationStatus role="creator" />; }
+export function CreatorVerificationStatusScreen() { return <CreatorReadinessScreen />; }
 export function BrandVerificationStatusScreen() { return <VerificationStatus role="brand" />; }
 
-const statementRows = [
-  ["20 Sep", "Main character sound", "36,800 views", 18400, "Payable"],
-  ["18 Sep", "No long thing", "64,000 views", 32000, "On hold"],
-  ["14 Sep", "Campus chop stories", "22,000 views", 11000, "Paid"],
-  ["09 Sep", "Weekend reset", "18,000 views", 9000, "Paid"],
-] as const;
+function monthKey(iso: string) {
+  const date = new Date(iso);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function monthLabel(key: string) {
+  const [year, month] = key.split("-").map(Number);
+  return new Date(year, month - 1, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+}
 
 export function EarningsStatementScreen() {
-  const [range, setRange] = useState("September 2026");
-  const total = useMemo(() => statementRows.reduce((sum, row) => sum + row[3], 0), []);
-  return <div className="dashboard-page completion-workspace"><CompletionHead back="/dashboard/earnings" title="Earnings statement" copy="Every earning entry, view source and payout status." action={<button className="statement-download" onClick={() => window.print()}>Download statement<ProductIcon name="brief" /></button>} /><section className="statement-summary"><div><small>Statement period</small><select value={range} onChange={(event) => setRange(event.target.value)}><option>September 2026</option><option>August 2026</option><option>All time</option></select></div><div><small>Total earned</small><strong><AnimatedNumber value={total} format="money" /></strong></div><div><small>Entries</small><strong><AnimatedNumber value={statementRows.length} padStart={2} /></strong></div><MiniArt src={art.wallet} tone="gold" /></section><section className="statement-table"><header><span>Date</span><span>Campaign</span><span>Platform reading</span><span>Amount</span><span>Status</span></header>{statementRows.map((row) => <article key={row[0] + row[1]}><time>{row[0]}</time><strong>{row[1]}</strong><span>{row[2]}</span><b>₦{row[3].toLocaleString()}</b><Status tone={row[4] === "Payable" ? "lime" : row[4] === "On hold" ? "gold" : "paper"}>{row[4]}</Status></article>)}<footer><span>Statement ID STMT-TO-0926</span><strong>₦{total.toLocaleString()}</strong></footer></section></div>;
+  const [rows, setRows] = useState<EarningRow[] | null>(null);
+  const [error, setError] = useState("");
+  const [range, setRange] = useState("all");
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const all: EarningRow[] = [];
+      for (let offset = 0; offset < 1000; offset += 100) {
+        const page = await earningsApi.history({ limit: 100, offset });
+        all.push(...page.items);
+        if (all.length >= page.total || !page.items.length) break;
+      }
+      return all;
+    })().then((all) => { if (!cancelled) setRows(all); }).catch((err) => { if (!cancelled) setError(errorMessage(err)); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const months = useMemo(() => Array.from(new Set((rows ?? []).map((row) => monthKey(row.date)))).sort().reverse(), [rows]);
+  const visible = useMemo(() => (rows ?? []).filter((row) => range === "all" || monthKey(row.date) === range), [rows, range]);
+  const total = visible.reduce((sum, row) => sum + row.amount, 0);
+
+  if (error) return <div className="dashboard-page completion-workspace"><CompletionHead back="/dashboard/earnings" title="Earnings statement" copy={error} /></div>;
+  if (!rows) return <div className="dashboard-page"><ClippitLoader contained label="Preparing your statement" /></div>;
+
+  return <div className="dashboard-page completion-workspace"><CompletionHead back="/dashboard/earnings" title="Earnings statement" copy="Every earning entry, view source and payout status." action={<button className="statement-download" onClick={() => window.print()} disabled={!visible.length}>Download statement<ProductIcon name="brief" /></button>} /><section className="statement-summary"><div><small>Statement period</small><select value={range} onChange={(event) => setRange(event.target.value)}><option value="all">All time</option>{months.map((key) => <option key={key} value={key}>{monthLabel(key)}</option>)}</select></div><div><small>Total earned</small><strong><AnimatedNumber value={total} format="money" /></strong></div><div><small>Entries</small><strong><AnimatedNumber value={visible.length} padStart={2} /></strong></div><MiniArt src={art.wallet} tone="gold" /></section><section className="statement-table"><header><span>Date</span><span>Campaign</span><span>Platform reading</span><span>Amount</span><span>Status</span></header>{!visible.length && <p className="statement-table__empty">No earnings in this period yet.</p>}{visible.map((row) => <article key={row.id}><time>{formatDate(row.date, { day: "numeric", month: "short" })}</time><strong>{row.campaign_title}<small> · {row.clip}</small></strong><span>{row.billable_views.toLocaleString()} views</span><b>{naira(row.amount)}</b><Status tone={row.state === "Payable" ? "lime" : row.state === "Accrued" ? "gold" : "paper"}>{row.state === "Accrued" ? "On hold" : row.state}</Status></article>)}<footer><span>{range === "all" ? "All time" : monthLabel(range)} · generated {formatDate(new Date().toISOString())}</span><strong>{naira(total)}</strong></footer></section></div>;
 }
 
 export function PublicCreatorProfileScreen({ handle }: { handle: string }) {
-  return <ServiceFrame><section className="public-profile"><header><div className="profile-photo"><Image src="/assets/photos/creator-vlogger-pexels-6954220.jpg" alt="Tobi On Cam" fill sizes="260px" /></div><div><Status tone="lime"><ProductIcon name="shield" />Verified creator</Status><h1>Tobi On Cam</h1><p>@{handle} · Lagos, Nigeria</p><blockquote>Comedy, food and everyday Lagos stories.</blockquote><div><span>Comedy</span><span>Food</span><span>Lifestyle</span></div></div><aside><small>Verified views</small><strong><AnimatedNumber value={428600} format="compact" suffix=" views" /></strong><span>Across approved Clippit campaigns</span></aside></header><section className="profile-work"><div className="profile-work__head"><div><h2>Approved campaign work</h2><p>Only clips approved through Clippit appear here.</p></div><span>6 clips</span></div><div>{[
-    ["/assets/photos/creator-studio-pexels-8359963.jpg", "Main character sound", "128K"],
-    ["/assets/photos/creator-fashion-pexels-7585630.jpg", "Weekend reset", "94K"],
-    ["/assets/photos/afro-style.jpg", "No long thing", "72K"],
-  ].map(([src, title, views]) => <article key={title}><div><Image src={src} alt="" fill sizes="(max-width: 700px) 100vw, 33vw" /><span><ProductIcon name="play" /></span></div><p><strong>{title}</strong><small>{views} verified views</small></p></article>)}</div></section><footer><span><Mark /><strong>Profile verified by Clippit</strong></span><Link href="/auth/sign-up">Create your Clippit profile<ProductIcon name="arrow" /></Link></footer></section></ServiceFrame>;
+  const [profile, setProfile] = useState<PublicCreatorProfileOut | null>(null);
+  const [work, setWork] = useState<PublicCreatorWork[]>([]);
+  const [error, setError] = useState<{ notFound: boolean; message: string } | null>(null);
+
+  useEffect(() => {
+    publicProfilesApi.creator(handle).then((data) => {
+      setProfile(data);
+      setWork(data.recent_work);
+      publicProfilesApi.creatorClips(handle, 12).then(setWork).catch(() => undefined);
+    }).catch((err) => setError({ notFound: err instanceof ApiError && err.status === 404, message: errorMessage(err) }));
+  }, [handle]);
+
+  if (error) return <ServiceFrame><section className="public-profile"><div className="completion-empty"><ProductIcon name="person" /><h2>{error.notFound ? `@${handle} isn't on Clippit` : "We couldn't load this profile"}</h2><p>{error.notFound ? "The handle may have changed, or the creator has made their profile private." : error.message}</p><BigAction href="/auth/sign-up">Create your Clippit profile</BigAction></div></section></ServiceFrame>;
+  if (!profile) return <ServiceFrame><section className="public-profile"><ClippitLoader contained compact label="Loading creator profile" /></section></ServiceFrame>;
+
+  return <ServiceFrame><section className="public-profile"><header><div className="profile-photo">{profile.photo_url ? <Image src={profile.photo_url} alt={profile.display_name} fill sizes="260px" unoptimized /> : <strong className="profile-photo__initials">{profile.display_name.split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase()}</strong>}</div><div><Status tone="lime"><ProductIcon name="shield" />Verified creator</Status><h1>{profile.display_name}</h1><p>@{profile.handle}</p>{profile.bio && <blockquote>{profile.bio}</blockquote>}<div>{profile.interests.map((lane) => <span key={lane}>{lane}</span>)}</div></div><aside><small>Verified views</small><strong><AnimatedNumber value={profile.stats.verified_views} format="compact" suffix=" views" /></strong><span>Across {profile.stats.approved_clips} approved Clippit clip{profile.stats.approved_clips === 1 ? "" : "s"}</span></aside></header><section className="profile-work"><div className="profile-work__head"><div><h2>Approved campaign work</h2><p>Only clips approved through Clippit appear here.</p></div><span>{profile.stats.approved_clips} clips</span></div>{!work.length ? <p className="profile-work__empty">No approved campaign work to show yet.</p> : <div>{work.map((item) => <article key={`${item.campaign_slug}-${item.submitted_at}`}><div><Image src="/assets/photos/creator-studio-pexels-8359963.jpg" alt="" fill sizes="(max-width: 700px) 100vw, 33vw" /><span><ProductIcon name="play" /></span></div><p><strong>{item.campaign_title}</strong><small>{item.brand_name ?? "Brand"} · {platformLabel(item.platform)} · {formatDate(item.submitted_at)}</small></p></article>)}</div>}</section><footer><span><Mark /><strong>Profile verified by Clippit</strong></span><Link href="/auth/sign-up">Create your Clippit profile<ProductIcon name="arrow" /></Link></footer></section></ServiceFrame>;
 }
 
 const members = [
@@ -445,21 +555,34 @@ export function ProductionHelpArticleScreen({ slug }: { slug: string }) {
   return <ServiceFrame><article className="article-shell"><CompletionHead back="/help" kicker="Help guide" title={guide.title} copy={guide.summary} /><div className="article-layout"><aside><strong>In this guide</strong>{guide.sections.map((section, index) => <a href={`#guide-${index + 1}`} key={section.title}>{index + 1}. {section.title}</a>)}<BigAction href="/support/tickets/new" tone="gold">Contact support</BigAction></aside><div className="article-copy"><div className="article-note"><ProductIcon name="shield" /><p><strong>These are the current Clippit product rules.</strong><span>Campaign-specific terms shown on a funded brief take precedence where they are more restrictive.</span></p></div>{guide.sections.map((section, index) => <section id={`guide-${index + 1}`} key={section.title}><span>{String(index + 1).padStart(2, "0")}</span><div><h2>{section.title}</h2><p>{section.body}</p>{section.points && <ul>{section.points.map((point) => <li key={point}>{point}</li>)}</ul>}</div></section>)}</div></div></article></ServiceFrame>;
 }
 
-type CustomerTicket = { id: string; category: string; subject: string; message: string; reference: string; createdAt: string; replies: string[] };
-type CustomerDispute = { id: string; kind: string; reference: string; claim: string; createdAt: string };
-const SUPPORT_STORE = "clippit:customer-support-tickets";
-const DISPUTE_STORE = "clippit:customer-disputes";
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const shortRef = (id: string) => id.slice(0, 8).toUpperCase();
 
-function readStored<T>(key: string): T[] {
-  try { return JSON.parse(window.localStorage.getItem(key) || "[]") as T[]; } catch { return []; }
+function ticketTone(ticket: TicketOut): { tone: Tone; label: string } {
+  if (ticket.status === "closed") return { tone: "paper", label: "Closed" };
+  if (ticket.unread_count > 0) return { tone: "lime", label: "Support replied" };
+  return { tone: "gold", label: "Awaiting support" };
+}
+
+async function uploadAll(files: File[], upload: (file: File) => Promise<{ id: string }>) {
+  const ids: string[] = [];
+  for (const file of files) ids.push((await upload(file)).id);
+  return ids;
+}
+
+function ThreadMessages({ messages, you }: { messages: TicketDetailOut["messages"]; you: string }) {
+  return <>{messages.map((message) => <article className={message.from_admin ? "is-support" : "is-customer"} key={message.id}><span>{message.from_admin ? <Mark /> : you}</span><div><header><strong>{message.from_admin ? "Clippit support" : "You"}</strong><time>{formatDateTime(message.created_at)}</time></header><p>{message.body}</p>{!!(message.attachment_upload_ids?.length || message.evidence_upload_ids?.length) && <small>{(message.attachment_upload_ids ?? message.evidence_upload_ids ?? []).length} attachment(s)</small>}</div></article>)}</>;
 }
 
 export function ProductionSupportTicketsScreen() {
-  const [tickets, setTickets] = useState<CustomerTicket[]>([]);
-  const [ready, setReady] = useState(false);
-  useEffect(() => { const frame = window.requestAnimationFrame(() => { setTickets(readStored<CustomerTicket>(SUPPORT_STORE)); setReady(true); }); return () => window.cancelAnimationFrame(frame); }, []);
-  return <ServiceFrame active="Support"><section className="service-content completion-page"><CompletionHead title="Support tickets" copy="Questions and replies attached to your account." action={<BigAction href="/support/tickets/new">New ticket</BigAction>} />{!ready ? <ClippitLoader compact contained label="Opening your support history" note="Your conversations are being arranged by most recent activity." /> : tickets.length === 0 ? <section className="real-empty-panel"><MiniArt src={art.review} tone="gold" /><div><Status tone="lime">No open tickets</Status><h2>You have not contacted support yet.</h2><p>Search the help centre first. If the answer is not there, send the issue with its campaign, payout or transaction reference.</p><div><BigAction href="/help" tone="gold">Search help</BigAction><BigAction href="/support/tickets/new">Contact support</BigAction></div></div></section> : <div className="ticket-board ticket-board--real"><aside><strong>{String(tickets.length).padStart(2, "0")}</strong><span>Your tickets</span><b>Saved on this device</b><MiniArt src={art.review} tone="gold" /></aside><section>{tickets.map((ticket) => <Link href={`/support/tickets/${ticket.id}`} key={ticket.id} className="ticket-row"><span><ProductIcon name="brief" /></span><p><small>{ticket.id} · {ticket.category}</small><strong>{ticket.subject}</strong><em>{new Date(ticket.createdAt).toLocaleString("en-NG", { dateStyle: "medium", timeStyle: "short" })}</em></p><Status tone="gold">Awaiting support</Status><ProductIcon name="arrow" /></Link>)}</section></div>}</section></ServiceFrame>;
+  const [tickets, setTickets] = useState<TicketOut[] | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => { supportApi.list().then(setTickets).catch((err) => setError(errorMessage(err))); }, []);
+  const open = (tickets ?? []).filter((ticket) => ticket.status === "open").length;
+  return <ServiceFrame active="Support"><section className="service-content completion-page"><CompletionHead title="Support tickets" copy="Questions and replies attached to your account." action={<BigAction href="/support/tickets/new">New ticket</BigAction>} />{error ? <p className="auth-error" role="alert">{error}</p> : !tickets ? <ClippitLoader compact contained label="Opening your support history" note="Your conversations are being arranged by most recent activity." /> : tickets.length === 0 ? <section className="real-empty-panel"><MiniArt src={art.review} tone="gold" /><div><Status tone="lime">No tickets</Status><h2>You have not contacted support yet.</h2><p>Search the help centre first. If the answer is not there, send the issue with its campaign, payout or transaction reference.</p><div><BigAction href="/help" tone="gold">Search help</BigAction><BigAction href="/support/tickets/new">Contact support</BigAction></div></div></section> : <div className="ticket-board ticket-board--real"><aside><strong>{String(open).padStart(2, "0")}</strong><span>Open tickets</span><b>{tickets.length} in total</b><MiniArt src={art.review} tone="gold" /></aside><section>{tickets.map((ticket) => { const state = ticketTone(ticket); return <Link href={`/support/tickets/${ticket.id}`} key={ticket.id} className="ticket-row"><span><ProductIcon name={ticket.category === "Money" ? "wallet" : ticket.category === "Connected accounts" ? "link" : "brief"} /></span><p><small>#{shortRef(ticket.id)} · {ticket.category}</small><strong>{ticket.subject}</strong><em>Updated {formatDateTime(ticket.updated_at)}</em></p><Status tone={state.tone}>{state.label}</Status><ProductIcon name="arrow" /></Link>; })}</section></div>}</section></ServiceFrame>;
 }
+
+const SUPPORT_CATEGORIES = ["Campaigns", "Money", "Connected accounts", "Account access", "Privacy"];
 
 export function ProductionNewSupportTicketScreen() {
   const router = useRouter();
@@ -467,49 +590,173 @@ export function ProductionNewSupportTicketScreen() {
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [reference, setReference] = useState("");
-  const submit = (event: FormEvent<HTMLFormElement>) => {
+  const [files, setFiles] = useState<File[]>([]);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const ticket: CustomerTicket = { id: `CLP-${Date.now().toString().slice(-6)}`, category, subject: subject.trim(), message: message.trim(), reference: reference.trim(), createdAt: new Date().toISOString(), replies: [] };
-    window.localStorage.setItem(SUPPORT_STORE, JSON.stringify([ticket, ...readStored<CustomerTicket>(SUPPORT_STORE)]));
-    router.push(`/support/tickets/${ticket.id}`);
+    setSending(true);
+    setError("");
+    try {
+      const ref = reference.trim();
+      const attachmentIds = await uploadAll(files, uploadsApi.supportAttachment);
+      const ticket = await supportApi.create({
+        category,
+        subject: subject.trim(),
+        message: ref && !UUID_RE.test(ref) ? `${message.trim()}\n\nReference: ${ref}` : message.trim(),
+        resource_type: ref && UUID_RE.test(ref) ? category.toLowerCase().replace(/\s+/g, "_").slice(0, 40) : null,
+        resource_id: ref && UUID_RE.test(ref) ? ref : null,
+        attachment_upload_ids: attachmentIds,
+      });
+      router.push(`/support/tickets/${ticket.id}`);
+    } catch (err) {
+      setError(errorMessage(err, "We couldn't send your ticket. Try again."));
+      setSending(false);
+    }
   };
-  return <ServiceFrame active="Support"><section className="service-content completion-page"><CompletionHead back="/support/tickets" title="Contact support" copy="Send the exact issue and attach the relevant Clippit reference." /><form className="completion-form support-form" onSubmit={submit}><div className="form-main"><fieldset><legend>What is this about?</legend><div className="choice-grid choice-grid--compact">{["Campaigns", "Money", "Connected accounts", "Account access"].map((item) => <label className={category === item ? "is-selected" : ""} key={item}><input type="radio" checked={category === item} onChange={() => setCategory(item)} /><ProductIcon name={item === "Money" ? "wallet" : item === "Campaigns" ? "campaigns" : item === "Connected accounts" ? "link" : "shield"} /><span>{item}</span></label>)}</div></fieldset><label><span>Subject</span><input required minLength={5} value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="A short description of the problem" /></label><label><span>What happened?</span><textarea required minLength={20} rows={7} value={message} onChange={(event) => setMessage(event.target.value)} placeholder="What did you expect, what happened and when?" /></label><label><span>Related Clippit reference <small>Optional</small></span><input value={reference} onChange={(event) => setReference(event.target.value)} placeholder="Campaign, submission, payout or transaction ID" /></label></div><aside className="form-aside"><div><ProductIcon name="upload" /><strong>Add evidence</strong><span>PNG, JPG or PDF · up to 10 MB each</span><input type="file" multiple /></div><p><ProductIcon name="shield" />Never upload a password, one-time code or full card number.</p><button className="completion-submit" type="submit" disabled={subject.trim().length < 5 || message.trim().length < 20}>Send to support<ProductIcon name="arrow" /></button></aside></form></section></ServiceFrame>;
+  return <ServiceFrame active="Support"><section className="service-content completion-page"><CompletionHead back="/support/tickets" title="Contact support" copy="Send the exact issue and attach the relevant Clippit reference." /><form className="completion-form support-form" onSubmit={submit}><div className="form-main"><fieldset><legend>What is this about?</legend><div className="choice-grid choice-grid--compact">{SUPPORT_CATEGORIES.map((item) => <label className={category === item ? "is-selected" : ""} key={item}><input type="radio" checked={category === item} onChange={() => setCategory(item)} /><ProductIcon name={item === "Money" ? "wallet" : item === "Campaigns" ? "campaigns" : item === "Connected accounts" ? "link" : "shield"} /><span>{item}</span></label>)}</div></fieldset><label><span>Subject</span><input required minLength={2} maxLength={200} value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="A short description of the problem" /></label><label><span>What happened?</span><textarea required rows={7} maxLength={5000} value={message} onChange={(event) => setMessage(event.target.value)} placeholder="What did you expect, what happened and when?" /></label><label><span>Related Clippit reference <small>Optional</small></span><input value={reference} onChange={(event) => setReference(event.target.value)} placeholder="Campaign, submission, payout or transaction ID" /></label></div><aside className="form-aside"><div><ProductIcon name="upload" /><strong>{files.length ? `${files.length} file${files.length === 1 ? "" : "s"} ready` : "Add evidence"}</strong><span>Images or screen recordings · up to 10 files</span><input type="file" multiple accept="image/*,video/*" onChange={(event: ChangeEvent<HTMLInputElement>) => setFiles(Array.from(event.target.files ?? []).slice(0, 10))} /></div><p><ProductIcon name="shield" />Never upload a password, one-time code or full card number.</p>{error && <p className="auth-error" role="alert">{error}</p>}<button className="completion-submit" type="submit" disabled={sending || subject.trim().length < 2 || !message.trim()}>{sending ? "Sending…" : "Send to support"}<ProductIcon name="arrow" /></button></aside></form></section></ServiceFrame>;
 }
 
 export function ProductionSupportTicketDetailScreen({ id }: { id: string }) {
-  const [ticket, setTicket] = useState<CustomerTicket | null>(null);
-  const [ready, setReady] = useState(false);
+  const [ticket, setTicket] = useState<TicketDetailOut | null>(null);
+  const [error, setError] = useState<{ notFound: boolean; message: string } | null>(null);
   const [reply, setReply] = useState("");
-  useEffect(() => { const frame = window.requestAnimationFrame(() => { setTicket(readStored<CustomerTicket>(SUPPORT_STORE).find((item) => item.id === id) ?? null); setReady(true); }); return () => window.cancelAnimationFrame(frame); }, [id]);
-  const addReply = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); if (!ticket || !reply.trim()) return; const next = { ...ticket, replies: [...ticket.replies, reply.trim()] }; const all = readStored<CustomerTicket>(SUPPORT_STORE).map((item) => item.id === id ? next : item); window.localStorage.setItem(SUPPORT_STORE, JSON.stringify(all)); setTicket(next); setReply(""); };
-  if (ready && !ticket) return <ServiceFrame active="Support"><section className="service-content completion-page"><CompletionHead back="/support/tickets" title="Ticket not found" copy={`No support ticket named ${id} belongs to this browser session.`} /><section className="real-empty-panel real-empty-panel--compact"><MiniArt src={art.review} tone="gold" /><div><h2>Open your ticket list or start a new request.</h2><p>Signed-in production accounts will load their support history from the support service.</p><div><BigAction href="/support/tickets" tone="gold">Ticket list</BigAction><BigAction href="/support/tickets/new">New ticket</BigAction></div></div></section></section></ServiceFrame>;
-  if (!ticket) return null;
-  return <ServiceFrame active="Support"><section className="service-content completion-page"><CompletionHead back="/support/tickets" kicker={ticket.id} title={ticket.subject} action={<Status tone="gold">Awaiting support</Status>} /><div className="thread-layout"><section className="message-thread"><div className="thread-day">{new Date(ticket.createdAt).toLocaleDateString("en-NG", { dateStyle: "long" })}</div><article className="is-customer"><span>YOU</span><div><header><strong>You</strong><time>{new Date(ticket.createdAt).toLocaleTimeString("en-NG", { hour: "2-digit", minute: "2-digit" })}</time></header><p>{ticket.message}</p></div></article>{ticket.replies.map((message, index) => <article className="is-customer" key={`${message}-${index}`}><span>YOU</span><div><header><strong>You</strong><time>Saved</time></header><p>{message}</p></div></article>)}<form onSubmit={addReply}><textarea value={reply} onChange={(event) => setReply(event.target.value)} placeholder="Add more information" rows={4} /><div><span /><button type="submit" disabled={!reply.trim()}>Add message<ProductIcon name="arrow" /></button></div></form></section><aside className="case-facts"><h2>Ticket details</h2><dl><div><dt>Status</dt><dd>Awaiting support</dd></div><div><dt>Category</dt><dd>{ticket.category}</dd></div><div><dt>Reference</dt><dd>{ticket.reference || "Not supplied"}</dd></div><div><dt>Created</dt><dd>{new Date(ticket.createdAt).toLocaleDateString("en-NG", { dateStyle: "medium" })}</dd></div></dl></aside></div></section></ServiceFrame>;
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState("");
+  useEffect(() => {
+    supportApi.get(id).then(setTicket).catch((err) => setError({ notFound: err instanceof ApiError && (err.status === 404 || err.status === 403 || err.status === 422), message: errorMessage(err) }));
+  }, [id]);
+  if (error) return <ServiceFrame active="Support"><section className="service-content completion-page"><CompletionHead back="/support/tickets" title={error.notFound ? "Ticket not found" : "We couldn't open this ticket"} copy={error.notFound ? "This ticket doesn't exist or belongs to another account." : error.message} /><section className="real-empty-panel real-empty-panel--compact"><MiniArt src={art.review} tone="gold" /><div><div><BigAction href="/support/tickets" tone="gold">Ticket list</BigAction><BigAction href="/support/tickets/new">New ticket</BigAction></div></div></section></section></ServiceFrame>;
+  if (!ticket) return <ServiceFrame active="Support"><section className="service-content completion-page"><ClippitLoader contained compact label="Opening your ticket" /></section></ServiceFrame>;
+  const closed = ticket.status === "closed";
+  const send = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!reply.trim()) return;
+    setBusy(true);
+    setActionError("");
+    try { setTicket(await supportApi.reply(ticket.id, reply.trim())); setReply(""); }
+    catch (err) { setActionError(errorMessage(err)); }
+    finally { setBusy(false); }
+  };
+  const toggle = async () => {
+    setBusy(true);
+    setActionError("");
+    try { const updated = closed ? await supportApi.reopen(ticket.id) : await supportApi.close(ticket.id); setTicket({ ...ticket, ...updated }); }
+    catch (err) { setActionError(errorMessage(err)); }
+    finally { setBusy(false); }
+  };
+  const state = ticketTone(ticket);
+  return <ServiceFrame active="Support"><section className="service-content completion-page"><CompletionHead back="/support/tickets" kicker={`#${shortRef(ticket.id)}`} title={ticket.subject} action={<Status tone={state.tone}>{state.label}</Status>} /><div className="thread-layout"><section className="message-thread"><div className="thread-day">{formatDate(ticket.created_at, { day: "numeric", month: "long", year: "numeric" })}</div><ThreadMessages messages={ticket.messages} you="YOU" />{actionError && <p className="auth-error" role="alert">{actionError}</p>}{closed ? <p className="thread-closed">This ticket is closed. Reopen it to add more information.</p> : <form onSubmit={send}><textarea value={reply} onChange={(event) => setReply(event.target.value)} placeholder="Add more information" rows={4} maxLength={5000} /><div><span /><button type="submit" disabled={busy || !reply.trim()}>{busy ? "Sending…" : "Send reply"}<ProductIcon name="arrow" /></button></div></form>}</section><aside className="case-facts"><h2>Ticket details</h2><dl><div><dt>Status</dt><dd>{closed ? `Closed ${formatDate(ticket.closed_at)}` : "Open"}</dd></div><div><dt>Category</dt><dd>{ticket.category}</dd></div><div><dt>Priority</dt><dd>{ticket.priority}</dd></div><div><dt>Created</dt><dd>{formatDate(ticket.created_at)}</dd></div></dl><button type="button" className="customer-text-button" disabled={busy} onClick={toggle}>{closed ? "Reopen ticket" : "Close ticket"}</button></aside></div></section></ServiceFrame>;
+}
+
+const DISPUTE_TYPES: Array<{ type: DisputeType; label: string; copy: string; icon: ProductIconName }> = [
+  { type: "earning_entry", label: "Earning", copy: "Amount, view reading or hold", icon: "wallet" },
+  { type: "payout", label: "Payout", copy: "Failed or missing transfer", icon: "bank" },
+  { type: "submission_verdict", label: "Submission verdict", copy: "Escalate after an appeal", icon: "play" },
+];
+const DISPUTE_LABEL: Record<string, string> = { earning_entry: "Earning", payout: "Payout", submission_verdict: "Submission verdict", funding_order: "Campaign funding", refund: "Refund" };
+
+function disputeTone(item: DisputeOut): { tone: Tone; label: string } {
+  if (item.status === "awaiting_customer") return { tone: "gold", label: "Needs your reply" };
+  if (item.status === "resolved") return { tone: item.resolution === "denied" ? "paper" : "lime", label: item.resolution ? `Resolved · ${item.resolution}` : "Resolved" };
+  if (item.status === "withdrawn") return { tone: "paper", label: "Withdrawn" };
+  return { tone: "gold", label: "Under review" };
 }
 
 export function ProductionDisputesScreen() {
-  const [cases, setCases] = useState<CustomerDispute[]>([]);
-  const [ready, setReady] = useState(false);
-  useEffect(() => { const frame = window.requestAnimationFrame(() => { setCases(readStored<CustomerDispute>(DISPUTE_STORE)); setReady(true); }); return () => window.cancelAnimationFrame(frame); }, []);
-  return <ServiceFrame active="Support"><section className="service-content completion-page"><CompletionHead title="Disputes" copy="Formal reviews of eligible decisions and money records." action={<BigAction href="/disputes/new">Open a dispute</BigAction>} />{ready && cases.length === 0 ? <section className="real-empty-panel"><MiniArt src={art.proof} /><div><Status tone="lime">No disputes</Status><h2>There are no formal cases on this device.</h2><p>Use support for ordinary questions. Open a dispute only when you need a formal review of an eligible verdict, earning, payout, funding order, refund or transaction.</p><div><BigAction href="/support/tickets/new" tone="gold">Ask support</BigAction><BigAction href="/disputes/new">Open a dispute</BigAction></div></div></section> : <div className="dispute-ledger"><header><span>Case</span><span>Type</span><span>Status</span><span>Created</span></header>{cases.map((item) => <Link href={`/disputes/${item.id}`} key={item.id}><p><small>{item.id}</small><strong>{item.reference}</strong></p><b>{item.kind}</b><Status tone="gold">Submitted</Status><time>{new Date(item.createdAt).toLocaleDateString("en-NG", { dateStyle: "medium" })}</time><ProductIcon name="arrow" /></Link>)}</div>}</section></ServiceFrame>;
+  const [cases, setCases] = useState<DisputeOut[] | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => { disputesApi.list().then(setCases).catch((err) => setError(errorMessage(err))); }, []);
+  return <ServiceFrame active="Support"><section className="service-content completion-page"><CompletionHead title="Disputes" copy="Formal reviews of eligible decisions and money records." action={<BigAction href="/disputes/new">Open a dispute</BigAction>} />{error ? <p className="auth-error" role="alert">{error}</p> : !cases ? <ClippitLoader compact contained label="Opening your cases" /> : cases.length === 0 ? <section className="real-empty-panel"><MiniArt src={art.proof} /><div><Status tone="lime">No disputes</Status><h2>You have no formal cases.</h2><p>Use support for ordinary questions. Open a dispute only when you need a formal review of an earning, payout or submission verdict.</p><div><BigAction href="/support/tickets/new" tone="gold">Ask support</BigAction><BigAction href="/disputes/new">Open a dispute</BigAction></div></div></section> : <div className="dispute-ledger"><header><span>Case</span><span>Value</span><span>Status</span><span>Deadline</span></header>{cases.map((item) => { const state = disputeTone(item); return <Link href={`/disputes/${item.id}`} key={item.id}><p><small>#{shortRef(item.id)}</small><strong>{DISPUTE_LABEL[item.type] ?? item.type} · {shortRef(item.resource_id)}</strong></p><b>{item.amount_at_risk ? naira(item.amount_at_risk) : "No money held"}</b><Status tone={state.tone}>{state.label}</Status><time>{item.status === "open" || item.status === "awaiting_customer" ? `Decision by ${formatDate(item.deadline_at, { day: "numeric", month: "short" })}` : formatDate(item.resolved_at ?? item.updated_at, { day: "numeric", month: "short" })}</time><ProductIcon name="arrow" /></Link>; })}</div>}</section></ServiceFrame>;
 }
+
+type DisputeOption = { id: string; label: string; detail: string };
 
 export function ProductionNewDisputeScreen() {
   const router = useRouter();
-  const [kind, setKind] = useState("Earning");
-  const [reference, setReference] = useState("");
+  const [type, setType] = useState<DisputeType>("earning_entry");
+  const [options, setOptions] = useState<Record<string, DisputeOption[]> | null>(null);
+  const [resourceId, setResourceId] = useState("");
   const [claim, setClaim] = useState("");
-  const submit = (event: FormEvent<HTMLFormElement>) => { event.preventDefault(); const item: CustomerDispute = { id: `DSP-${Date.now().toString().slice(-6)}`, kind, reference: reference.trim(), claim: claim.trim(), createdAt: new Date().toISOString() }; window.localStorage.setItem(DISPUTE_STORE, JSON.stringify([item, ...readStored<CustomerDispute>(DISPUTE_STORE)])); router.push(`/disputes/${item.id}`); };
-  return <ServiceFrame active="Support"><section className="service-content completion-page"><CompletionHead back="/disputes" title="Open a dispute" copy="Use the exact Clippit reference so the original record stays attached." /><form className="completion-form" onSubmit={submit}><div className="form-main"><fieldset><legend>What should be reviewed?</legend><div className="choice-grid">{["Earning", "Payout", "Submission verdict", "Campaign funding"].map((item) => <label className={kind === item ? "is-selected" : ""} key={item}><input type="radio" checked={kind === item} onChange={() => setKind(item)} /><ProductIcon name={item === "Earning" || item === "Payout" ? "wallet" : item === "Submission verdict" ? "play" : "campaigns"} /><span>{item}</span></label>)}</div></fieldset><label><span>Clippit reference</span><input required value={reference} onChange={(event) => setReference(event.target.value)} placeholder="Earning, payout, submission or funding reference" /></label><label><span>What decision is incorrect?</span><textarea required minLength={30} rows={7} value={claim} onChange={(event) => setClaim(event.target.value)} placeholder="Explain the record, the issue and the outcome you are requesting." /></label></div><aside className="form-aside"><div><ProductIcon name="upload" /><strong>Add evidence</strong><span>Original platform insights, receipts or documents</span><input type="file" multiple /></div><p><ProductIcon name="shield" />Submitting a dispute preserves the original decision and evidence.</p><button className="completion-submit" type="submit" disabled={!reference.trim() || claim.trim().length < 30}>Submit dispute<ProductIcon name="arrow" /></button></aside></form></section></ServiceFrame>;
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const presetType = params.get("type") as DisputeType | null;
+    const presetResource = params.get("resource");
+    Promise.all([
+      earningsApi.history({ limit: 50 }).then((data) => data.items).catch(() => [] as EarningRow[]),
+      payoutsApi.list({ limit: 30 }).then((data) => data.items).catch(() => [] as PayoutOut[]),
+      creatorApi.clips().then((data) => data.items).catch(() => [] as ClipRow[]),
+    ]).then(([earnings, payouts, clips]) => {
+      setOptions({
+        earning_entry: earnings.map((row) => ({ id: row.id, label: `${naira(row.amount)} · ${row.campaign_title}`, detail: `${row.clip} · ${formatDate(row.date)} · ${row.state}` })),
+        payout: payouts.map((payout) => ({ id: payout.id, label: `${naira(payout.amount)} · ${payout.reference}`, detail: `${payout.status} · ${formatDate(payout.initiated_at)}` })),
+        submission_verdict: clips.map((clip) => ({ id: clip.id, label: clip.title || clip.campaign_title, detail: `${clip.label} · ${platformLabel(clip.platform)} · ${formatDate(clip.submitted_at)}` })),
+      });
+      if (presetType && DISPUTE_TYPES.some((item) => item.type === presetType)) setType(presetType);
+      if (presetResource) setResourceId(presetResource);
+    });
+  }, []);
+
+  const list = options?.[type] ?? [];
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setSending(true);
+    setError("");
+    try {
+      const created = await disputesApi.create({ type, resource_id: resourceId, reason: claim.trim() });
+      router.push(`/disputes/${created.id}`);
+    } catch (err) {
+      setError(errorMessage(err, "We couldn't open this dispute. Try again."));
+      setSending(false);
+    }
+  };
+
+  return <ServiceFrame active="Support"><section className="service-content completion-page"><CompletionHead back="/disputes" title="Open a dispute" copy="Pick the exact record so the original evidence stays attached." /><form className="completion-form" onSubmit={submit}><div className="form-main"><fieldset><legend>What should be reviewed?</legend><div className="choice-grid">{DISPUTE_TYPES.map((item) => <label className={type === item.type ? "is-selected" : ""} key={item.type}><input type="radio" checked={type === item.type} onChange={() => { setType(item.type); setResourceId(""); }} /><ProductIcon name={item.icon} /><span>{item.label}</span><small>{item.copy}</small></label>)}</div></fieldset>
+    <label><span>Which record?</span>{!options ? <input disabled placeholder="Loading your records…" /> : list.length ? <select required value={resourceId} onChange={(event) => setResourceId(event.target.value)}><option value="">Choose a record</option>{list.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}{resourceId && !list.some((option) => option.id === resourceId) && <option value={resourceId}>Record {shortRef(resourceId)}</option>}</select> : <input disabled placeholder={`You have no ${DISPUTE_TYPES.find((item) => item.type === type)?.label.toLowerCase()} records to dispute yet`} />}</label>
+    <label><span>What decision is incorrect?</span><textarea required minLength={20} maxLength={2000} rows={7} value={claim} onChange={(event) => setClaim(event.target.value)} placeholder="Explain the record, the issue and the outcome you are requesting." /><small>{claim.trim().length}/2000 · minimum 20</small></label></div><aside className="form-aside"><p><ProductIcon name="shield" />Submitting a dispute preserves the original decision and evidence. You can add screenshots to the case after it opens.</p><p><ProductIcon name="clock" />Earnings can be disputed for 30 days, payouts for 14 days and verdicts for 7 days.</p>{error && <p className="auth-error" role="alert">{error}</p>}<button className="completion-submit" type="submit" disabled={sending || !resourceId || claim.trim().length < 20}>{sending ? "Submitting…" : "Submit dispute"}<ProductIcon name="arrow" /></button></aside></form></section></ServiceFrame>;
 }
 
 export function ProductionDisputeDetailScreen({ id }: { id: string }) {
-  const [item, setItem] = useState<CustomerDispute | null>(null);
-  const [ready, setReady] = useState(false);
-  useEffect(() => { const frame = window.requestAnimationFrame(() => { setItem(readStored<CustomerDispute>(DISPUTE_STORE).find((entry) => entry.id === id) ?? null); setReady(true); }); return () => window.cancelAnimationFrame(frame); }, [id]);
-  if (ready && !item) return <ServiceFrame active="Support"><section className="service-content completion-page"><CompletionHead back="/disputes" title="Dispute not found" copy={`No dispute named ${id} belongs to this browser session.`} /><section className="real-empty-panel real-empty-panel--compact"><MiniArt src={art.proof} /><div><h2>Open the dispute list to find an existing case.</h2><p>A production account loads owned cases from the dispute service and never exposes another customer's record.</p><BigAction href="/disputes">Open disputes</BigAction></div></section></section></ServiceFrame>;
-  if (!item) return null;
-  return <ServiceFrame active="Support"><section className="service-content completion-page"><CompletionHead back="/disputes" kicker={item.id} title={item.reference} action={<Status tone="gold">Submitted</Status>} /><div className="dispute-case"><section className="case-timeline"><article className="is-current"><span><ProductIcon name="brief" /></span><div><small>{new Date(item.createdAt).toLocaleString("en-NG", { dateStyle: "medium", timeStyle: "short" })}</small><h2>Dispute received</h2><p>{item.claim}</p></div></article><article><span><ProductIcon name="eye" /></span><div><small>Next</small><h2>Eligibility and evidence review</h2><p>Clippit will verify that the case is within the applicable review window and attach the original record.</p></div></article><article><span><ProductIcon name="check" /></span><div><small>After review</small><h2>Written decision</h2><p>The case will retain its decision, reasons and any approved money or verdict action.</p></div></article></section><aside className="decision-clock"><span>Case type</span><strong className="decision-clock__word">{item.kind}</strong><small>No deadline has been assigned yet</small><dl><div><dt>Reference</dt><dd>{item.reference}</dd></div><div><dt>Status</dt><dd>Submitted</dd></div><div><dt>Evidence</dt><dd>Original record requested</dd></div></dl></aside></div></section></ServiceFrame>;
+  const [item, setItem] = useState<DisputeDetailOut | null>(null);
+  const [error, setError] = useState<{ notFound: boolean; message: string } | null>(null);
+  const [reply, setReply] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const [now] = useState(() => Date.now());
+  useEffect(() => {
+    disputesApi.get(id).then(setItem).catch((err) => setError({ notFound: err instanceof ApiError && (err.status === 404 || err.status === 403 || err.status === 422), message: errorMessage(err) }));
+  }, [id]);
+  if (error) return <ServiceFrame active="Support"><section className="service-content completion-page"><CompletionHead back="/disputes" title={error.notFound ? "Dispute not found" : "We couldn't open this case"} copy={error.notFound ? "This case doesn't exist or belongs to another account." : error.message} /><section className="real-empty-panel real-empty-panel--compact"><MiniArt src={art.proof} /><div><BigAction href="/disputes">Open disputes</BigAction></div></section></section></ServiceFrame>;
+  if (!item) return <ServiceFrame active="Support"><section className="service-content completion-page"><ClippitLoader contained compact label="Opening your case" /></section></ServiceFrame>;
+  const active = item.status === "open" || item.status === "awaiting_customer";
+  const state = disputeTone(item);
+  const send = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!reply.trim()) return;
+    setBusy(true);
+    setActionError("");
+    try {
+      const evidence = await uploadAll(files, uploadsApi.evidence);
+      setItem(await disputesApi.reply(item.id, reply.trim(), evidence));
+      setReply("");
+      setFiles([]);
+    } catch (err) { setActionError(errorMessage(err)); }
+    finally { setBusy(false); }
+  };
+  const withdraw = async () => {
+    if (!window.confirm("Withdraw this dispute? The original decision stands.")) return;
+    setBusy(true);
+    try { const updated = await disputesApi.withdraw(item.id); setItem({ ...item, ...updated }); }
+    catch (err) { setActionError(errorMessage(err)); }
+    finally { setBusy(false); }
+  };
+  const deadline = new Date(item.deadline_at);
+  const daysLeft = Math.max(0, Math.ceil((deadline.getTime() - now) / 86400000));
+  return <ServiceFrame active="Support"><section className="service-content completion-page"><CompletionHead back="/disputes" kicker={`#${shortRef(item.id)}`} title={`${DISPUTE_LABEL[item.type] ?? item.type} · ${shortRef(item.resource_id)}`} action={<Status tone={state.tone}>{state.label}</Status>} /><div className="dispute-case"><section className="case-timeline message-thread"><article className="is-current"><span><ProductIcon name="brief" /></span><div><small>{formatDateTime(item.created_at)}</small><h2>Your claim</h2><p>{item.reason}</p></div></article><ThreadMessages messages={item.messages} you="YOU" />{item.resolution_note && <article><span><ProductIcon name="check" /></span><div><small>{formatDateTime(item.resolved_at)}</small><h2>Decision: {item.resolution}</h2><p>{item.resolution_note}</p></div></article>}{actionError && <p className="auth-error" role="alert">{actionError}</p>}{active && <form onSubmit={send}><textarea value={reply} onChange={(event) => setReply(event.target.value)} placeholder={item.status === "awaiting_customer" ? "Reply with the information requested" : "Add more information"} rows={4} maxLength={5000} /><div><label className="customer-text-button"><ProductIcon name="upload" />{files.length ? `${files.length} file(s)` : "Attach evidence"}<input type="file" multiple hidden accept="image/*,video/*" onChange={(event: ChangeEvent<HTMLInputElement>) => setFiles(Array.from(event.target.files ?? []).slice(0, 10))} /></label><button type="submit" disabled={busy || !reply.trim()}>{busy ? "Sending…" : "Send"}<ProductIcon name="arrow" /></button></div></form>}</section><aside className="decision-clock">{active ? <><span>Decision due</span><strong>{deadline.getDate()}</strong><b>{deadline.toLocaleDateString("en-GB", { month: "long" })}</b><small>{daysLeft} day{daysLeft === 1 ? "" : "s"} remaining</small></> : <><span>Case</span><strong className="decision-clock__word">{state.label}</strong></>}<dl><div><dt>Money at stake</dt><dd>{item.amount_at_risk ? naira(item.amount_at_risk) : "None"}</dd></div><div><dt>Case type</dt><dd>{DISPUTE_LABEL[item.type] ?? item.type}</dd></div><div><dt>Opened</dt><dd>{formatDate(item.created_at)}</dd></div></dl>{active && <button type="button" className="customer-text-button" disabled={busy} onClick={withdraw}>Withdraw dispute</button>}</aside></div></section></ServiceFrame>;
 }
 
 type LegalSection = { title: string; paragraphs: string[]; points?: string[] };
@@ -556,17 +803,70 @@ const productionLegalDocs: LegalDocument[] = [
   ] },
 ];
 
+const BACKEND_LEGAL_SLUG: Record<string, string> = { "campaign-funding": "campaign-funding-terms" };
+const FRONTEND_LEGAL_SLUG: Record<string, string> = { "campaign-funding-terms": "campaign-funding" };
+
+function useLegalVersions() {
+  const [versions, setVersions] = useState<Record<string, LegalDocumentOut>>({});
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all(productionLegalDocs.map((doc) => legalApi.document(BACKEND_LEGAL_SLUG[doc.slug] ?? doc.slug).catch(() => null))).then((docs) => {
+      if (cancelled) return;
+      const map: Record<string, LegalDocumentOut> = {};
+      docs.forEach((doc) => { if (doc) map[FRONTEND_LEGAL_SLUG[doc.slug] ?? doc.slug] = doc; });
+      setVersions(map);
+    });
+    return () => { cancelled = true; };
+  }, []);
+  return versions;
+}
+
 export function ProductionLegalCentreScreen() {
-  return <ServiceFrame active="Legal"><section className="legal-hero"><div><Status tone="gold">Current product documents</Status><h1>Legal centre</h1><p>Clippit's account, privacy, community and campaign-funding rules.</p></div><div className="legal-stamp"><ProductIcon name="shield" /><strong>1.0</strong><span>current document set</span></div></section><section className="service-content legal-list">{productionLegalDocs.map((doc, index) => <Link href={`/legal/${doc.slug}`} key={doc.slug}><span>{String(index + 1).padStart(2, "0")}</span><p><strong>{doc.title}</strong><small>{doc.summary}</small></p><time>{doc.date}</time><ProductIcon name="arrow" /></Link>)}<aside className="legal-account-links"><Link href="/account/data"><ProductIcon name="person" />Account data<ProductIcon name="arrow" /></Link><Link href="/consent/update"><ProductIcon name="check" />Accepted documents<ProductIcon name="arrow" /></Link><Link href="/support/tickets/new"><ProductIcon name="brief" />Ask a legal question<ProductIcon name="arrow" /></Link></aside></section></ServiceFrame>;
+  const versions = useLegalVersions();
+  return <ServiceFrame active="Legal"><section className="legal-hero"><div><Status tone="gold">Current product documents</Status><h1>Legal centre</h1><p>Clippit's account, privacy, community and campaign-funding rules.</p></div><div className="legal-stamp"><ProductIcon name="shield" /><strong>{productionLegalDocs.length}</strong><span>current documents</span></div></section><section className="service-content legal-list">{productionLegalDocs.map((doc, index) => { const live = versions[doc.slug]; return <Link href={`/legal/${doc.slug}`} key={doc.slug}><span>{String(index + 1).padStart(2, "0")}</span><p><strong>{live?.title ?? doc.title}</strong><small>{doc.summary}</small></p><time>{live ? `Version ${live.version} · effective ${formatDate(live.effective_date)}` : doc.date}</time><ProductIcon name="arrow" /></Link>; })}<aside className="legal-account-links"><Link href="/account/data"><ProductIcon name="person" />Account data<ProductIcon name="arrow" /></Link><Link href="/consent/update"><ProductIcon name="check" />Accepted documents<ProductIcon name="arrow" /></Link><Link href="/support/tickets/new"><ProductIcon name="brief" />Ask a legal question<ProductIcon name="arrow" /></Link></aside></section></ServiceFrame>;
 }
 
 export function ProductionLegalDocumentScreen({ slug }: { slug: string }) {
   const doc = productionLegalDocs.find((item) => item.slug === slug) ?? productionLegalDocs[0];
-  return <ServiceFrame active="Legal"><article className="legal-document"><CompletionHead back="/legal" kicker={`Version ${doc.version}`} title={doc.title} copy={doc.date} /><div className="legal-document__body"><aside><strong>Contents</strong>{doc.sections.map((section, index) => <a href={`#legal-${index + 1}`} key={section.title}>{index + 1}. {section.title}</a>)}<button onClick={() => window.print()}>Print document<ProductIcon name="brief" /></button></aside><div>{doc.sections.map((section, index) => <section id={`legal-${index + 1}`} key={section.title}><h2>{index + 1}. {section.title}</h2>{section.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}{section.points && <ul>{section.points.map((point) => <li key={point}>{point}</li>)}</ul>}</section>)}<section className="legal-authorities"><h2>Official resources</h2><p>Privacy rights: <a href="https://ndpc.gov.ng/" target="_blank" rel="noreferrer">Nigeria Data Protection Commission</a>. Consumer rights: <a href="https://fccpc.gov.ng/consumers/" target="_blank" rel="noreferrer">Federal Competition and Consumer Protection Commission</a>.</p><p>For a question about your Clippit account, use the in-product support centre.</p><BigAction href="/support/tickets/new" tone="ink">Contact support</BigAction></section></div></div></article></ServiceFrame>;
+  const live = useLegalVersions()[doc.slug];
+  return <ServiceFrame active="Legal"><article className="legal-document"><CompletionHead back="/legal" kicker={`Version ${live?.version ?? doc.version}`} title={live?.title ?? doc.title} copy={live ? `Effective ${formatDate(live.effective_date, { day: "numeric", month: "long", year: "numeric" })}` : doc.date} /><div className="legal-document__body"><aside><strong>Contents</strong>{doc.sections.map((section, index) => <a href={`#legal-${index + 1}`} key={section.title}>{index + 1}. {section.title}</a>)}<button onClick={() => window.print()}>Print document<ProductIcon name="brief" /></button></aside><div>{doc.sections.map((section, index) => <section id={`legal-${index + 1}`} key={section.title}><h2>{index + 1}. {section.title}</h2>{section.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}{section.points && <ul>{section.points.map((point) => <li key={point}>{point}</li>)}</ul>}</section>)}<section className="legal-authorities"><h2>Official resources</h2><p>Privacy rights: <a href="https://ndpc.gov.ng/" target="_blank" rel="noreferrer">Nigeria Data Protection Commission</a>. Consumer rights: <a href="https://fccpc.gov.ng/consumers/" target="_blank" rel="noreferrer">Federal Competition and Consumer Protection Commission</a>.</p><p>For a question about your Clippit account, use the in-product support centre.</p><BigAction href="/support/tickets/new" tone="ink">Contact support</BigAction></section></div></div></article></ServiceFrame>;
 }
 
 export function ProductionConsentUpdateScreen() {
-  return <ServiceFrame active="Legal"><section className="consent-screen consent-screen--current"><div className="consent-sheet"><Status tone="lime">No action required</Status><h1>Your legal documents are current.</h1><p>There is no new document waiting for acceptance on this browser session.</p><ol>{productionLegalDocs.map((doc) => <li key={doc.slug}><span><ProductIcon name="check" /></span><div><strong>{doc.title}</strong><p>Version {doc.version} · {doc.date}</p></div></li>)}</ol><BigAction href="/legal">Open legal centre</BigAction></div><MiniArt src={art.proof} /></section></ServiceFrame>;
+  const [required, setRequired] = useState<LegalDocumentOut[] | null>(null);
+  const [accepted, setAccepted] = useState<Array<{ slug: string; version: string; accepted_at: string }>>([]);
+  const [agree, setAgree] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    legalApi.myAcceptances().then(async (data) => {
+      setAccepted(data.accepted);
+      const docs = await Promise.all(data.newly_required.map((slug) => legalApi.document(slug).catch(() => null)));
+      setRequired(docs.filter((doc): doc is LegalDocumentOut => !!doc));
+    }).catch((err) => { setError(errorMessage(err)); setRequired([]); });
+  }, []);
+
+  const acceptAll = async () => {
+    if (!required) return;
+    setSaving(true);
+    setError("");
+    try {
+      for (const doc of required) await legalApi.accept(doc.slug, doc.version);
+      setAccepted((current) => [...current, ...required.map((doc) => ({ slug: doc.slug, version: doc.version, accepted_at: new Date().toISOString() }))]);
+      setRequired([]);
+    } catch (err) {
+      setError(errorMessage(err, "We couldn't record your acceptance. Try again."));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!required) return <ServiceFrame active="Legal"><section className="consent-screen"><ClippitLoader contained compact label="Checking your accepted documents" /></section></ServiceFrame>;
+
+  if (required.length) return <ServiceFrame active="Legal"><section className="consent-screen"><div className="consent-sheet"><Status tone="gold">Action required</Status><h1>{required.length === 1 ? `${required[0].title} changed.` : "Some terms changed."}</h1><p>Review the updated document{required.length === 1 ? "" : "s"} before you fund, join or withdraw.</p><ol>{required.map((doc, index) => <li key={doc.slug}><span>{index + 1}</span><div><strong>{doc.title}</strong><p>Version {doc.version} · effective {formatDate(doc.effective_date)} · <Link href={`/legal/${FRONTEND_LEGAL_SLUG[doc.slug] ?? doc.slug}`}>Read it</Link></p></div></li>)}</ol><label><input type="checkbox" checked={agree} onChange={(event) => setAgree(event.target.checked)} />I have read and accept {required.length === 1 ? "this version" : "these versions"}.</label>{error && <p className="auth-error" role="alert">{error}</p>}<button className="completion-submit" disabled={!agree || saving} onClick={acceptAll}>{saving ? "Saving…" : "Accept and continue"}<ProductIcon name="arrow" /></button></div><MiniArt src={art.brief} tone="gold" /></section></ServiceFrame>;
+
+  return <ServiceFrame active="Legal"><section className="consent-screen consent-screen--current"><div className="consent-sheet"><Status tone="lime">No action required</Status><h1>Your legal documents are current.</h1><p>{error || "There is no new document waiting for your acceptance."}</p>{!!accepted.length && <ol>{accepted.map((item) => <li key={`${item.slug}-${item.version}`}><span><ProductIcon name="check" /></span><div><strong>{productionLegalDocs.find((doc) => doc.slug === (FRONTEND_LEGAL_SLUG[item.slug] ?? item.slug))?.title ?? item.slug}</strong><p>Version {item.version} · accepted {formatDate(item.accepted_at)}</p></div></li>)}</ol>}<BigAction href="/legal">Open legal centre</BigAction></div><MiniArt src={art.proof} /></section></ServiceFrame>;
 }
 
 const reviewRoutes = [

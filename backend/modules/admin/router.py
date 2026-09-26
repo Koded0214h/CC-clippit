@@ -955,7 +955,7 @@ async def invite_operator(
     db.add(invitation)
     await db.flush()
     token = create_admin_invite_token(invitation.id, minutes=3 * 24 * 60)
-    link = f"{get_settings().frontend_origin.split(',')[0].strip()}/admin/operators/accept?token={token}"
+    link = f"{get_settings().app_url}/admin/operators/accept?token={token}"
     audit.record(db, "admin.operator_invited", actor_id=admin.id, subject_id=invitation.id, email=payload.email)
     await db.commit()
     try:

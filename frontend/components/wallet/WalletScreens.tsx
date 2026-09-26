@@ -2,11 +2,18 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { ProductIcon } from "@/components/ui/ProductIcon";
+import { ClippitLoader } from "@/components/ui/ClippitLoader";
 import { MINIMUM_WALLET_WITHDRAWAL } from "@/lib/fees";
 import { money } from "@/lib/product";
+import { walletApi, type CreatorWalletOut } from "@/lib/api/account";
+import { bankDetailsApi, type BankAccountOut } from "@/lib/api/bankDetails";
+import { earningsApi } from "@/lib/api/earnings";
+import { payoutsApi } from "@/lib/api/payouts";
+import { errorMessage } from "@/lib/api/client";
+import { formatDate } from "@/lib/format";
 
 function WalletHeading({ title, copy, back, actions }: { title: string; copy: string; back?: string; actions?: ReactNode }) {
   return <header className="wallet-page-head"><div>{back && <Link href={back}><ProductIcon name="chevron" />Back</Link>}<h1>{title}</h1><p>{copy}</p></div>{actions}</header>;
@@ -20,12 +27,6 @@ const brandMovements = [
   { id: "REF-00812", label: "Campaign refund", detail: "Campus chop stories", amount: 42800, credit: true },
   { id: "CLP-0926-041", label: "Campaign funding", detail: "No long thing", amount: 500000, credit: false },
   { id: "FEE-00419", label: "Campaign fee", detail: "No long thing", amount: 75000, credit: false },
-];
-
-const creatorMovements = [
-  { label: "Clip earning cleared", detail: "Indomie · TikTok", amount: 9200, state: "Available" },
-  { label: "Clip earning cleared", detail: "Gbedu Records · Instagram", amount: 9200, state: "Available" },
-  { label: "Review window", detail: "PalmPay · TikTok", amount: 6000, state: "Held" },
 ];
 
 export function BrandWalletScreen() {
@@ -42,16 +43,51 @@ export function BrandWalletScreen() {
   </div>;
 }
 
+type CreatorMovement = { key: string; href: string; label: string; detail: string; amount: number; state: string; credit: boolean; at: string };
+
 export function CreatorWalletScreen() {
+  const [wallet, setWallet] = useState<CreatorWalletOut | null>(null);
+  const [movements, setMovements] = useState<CreatorMovement[]>([]);
+  const [bank, setBank] = useState<BankAccountOut | null | undefined>(undefined);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    walletApi.get().then(setWallet).catch((err) => setError(errorMessage(err)));
+    bankDetailsApi.get().then(setBank).catch(() => setBank(null));
+    Promise.all([earningsApi.history({ limit: 5 }).catch(() => null), payoutsApi.list({ limit: 5 }).catch(() => null)]).then(([history, payouts]) => {
+      const earned: CreatorMovement[] = (history?.items ?? []).map((row) => ({
+        key: `e-${row.id}`, href: "/dashboard/earnings", label: row.state === "Payable" ? "Clip earning cleared" : row.state === "Paid" ? "Clip earning paid out" : "Clip earning in review",
+        detail: `${row.brand ?? row.campaign_title} · ${row.clip}`, amount: row.amount, state: row.state === "Payable" ? "Available" : row.state === "Accrued" ? "Held" : row.state, credit: true, at: row.date,
+      }));
+      const paidOut: CreatorMovement[] = (payouts?.items ?? []).map((payout) => ({
+        key: `p-${payout.id}`, href: `/dashboard/payouts/receipt?id=${payout.id}`, label: "Withdrawal to bank", detail: `${payout.destination.bank_name} · ${payout.reference}`,
+        amount: payout.amount, state: payout.status === "succeeded" ? "Sent" : payout.status === "failed" ? "Failed" : "Processing", credit: false, at: payout.initiated_at,
+      }));
+      setMovements([...earned, ...paidOut].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 6));
+    });
+  }, []);
+
+  if (error) return <div className="dashboard-page wallet-page"><div className="campaign-empty" role="alert"><ProductIcon name="wallet" /><h2>We couldn&apos;t load your wallet.</h2><p>{error}</p></div></div>;
+  if (!wallet) return <div className="dashboard-page"><ClippitLoader contained label="Opening your wallet" note="Checking available money, held earnings and transfers." /></div>;
+
+  const total = wallet.available + wallet.held + wallet.processing;
+  const pct = (value: number) => (total > 0 ? `${(value / total) * 100}%` : "0%");
+
   return <div className="dashboard-page wallet-page wallet-page--creator">
     <WalletHeading title="Your wallet" copy="See what you can withdraw now and what is still in review." actions={<Link className="wallet-action" href="/dashboard/withdraw">Withdraw money<ProductIcon name="bank" /></Link>} />
     <section className="wallet-console">
-      <div className="wallet-console__balance"><span className="wallet-console__icon"><ProductIcon name="wallet" /></span><p><small>Available to withdraw</small><strong><Money value={18400} /></strong><em>From approved clips and verified views</em></p><Image src="/assets/illustrations/clippit-icons/payout-wallet.webp" alt="" width={170} height={170} aria-hidden="true" /></div>
-      <div className="wallet-console__allocation"><header><span>Money status</span><strong><Money value={24400} /></strong></header><div className="wallet-allocation-track" aria-label="Creator wallet allocation"><i style={{ width: "75.4%" }} /><i style={{ width: "24.6%" }} /></div><dl><div><dt><i />Available now</dt><dd><Money value={18400} /></dd></div><div><dt><i />In review window</dt><dd><Money value={6000} /></dd></div><div><dt><i />Processing</dt><dd><Money value={0} /></dd></div></dl><p><ProductIcon name="shield" />Only approved, verified views enter your wallet.</p></div>
+      <div className="wallet-console__balance"><span className="wallet-console__icon"><ProductIcon name="wallet" /></span><p><small>Available to withdraw</small><strong><Money value={wallet.available} /></strong><em>{wallet.available >= wallet.min_withdrawal ? "From approved clips and verified views" : `Withdrawals start at ${money(wallet.min_withdrawal)}`}</em></p><Image src="/assets/illustrations/clippit-icons/payout-wallet.webp" alt="" width={170} height={170} aria-hidden="true" /></div>
+      <div className="wallet-console__allocation"><header><span>Money status</span><strong><Money value={total} /></strong></header><div className="wallet-allocation-track" aria-label="Creator wallet allocation"><i style={{ width: pct(wallet.available) }} /><i style={{ width: pct(wallet.held) }} /><i style={{ width: pct(wallet.processing) }} /></div><dl><div><dt><i />Available now</dt><dd><Money value={wallet.available} /></dd></div><div><dt><i />In review window</dt><dd><Money value={wallet.held} /></dd></div><div><dt><i />Processing</dt><dd><Money value={wallet.processing} /></dd></div></dl><p><ProductIcon name="shield" />Paid out so far: {money(wallet.paid_all_time)}. Only approved, verified views enter your wallet.</p></div>
     </section>
     <section className="wallet-body-grid">
-      <div className="wallet-movements"><header><div><h2>Recent wallet activity</h2><p>New earnings and status changes.</p></div><Link href="/dashboard/earnings">Earning history<ProductIcon name="arrow" /></Link></header>{creatorMovements.map((item) => <Link href="/dashboard/earnings" key={item.label + item.detail}><span><ProductIcon name={item.state === "Held" ? "clock" : "check"} /></span><p><strong>{item.label}</strong><small>{item.detail}</small></p><b className={item.state === "Available" ? "is-credit" : ""}>+{money(item.amount)}</b><em>{item.state}</em></Link>)}</div>
-      <aside className="wallet-account-card"><span><ProductIcon name="bank" /></span><small>Payout account</small><h2>GTBank</h2><strong>•••• 6789</strong><p>Tobi Adeyemi</p><div><ProductIcon name="check" />Verified payout account</div><Link href="/dashboard/payout-account">Change payout account<ProductIcon name="arrow" /></Link></aside>
+      <div className="wallet-movements"><header><div><h2>Recent wallet activity</h2><p>New earnings and transfers.</p></div><Link href="/dashboard/earnings">Earning history<ProductIcon name="arrow" /></Link></header>
+        {!movements.length && <p className="wallet-movements__empty">No wallet activity yet. Earnings from approved clips show up here.</p>}
+        {movements.map((item) => <Link href={item.href} key={item.key}><span><ProductIcon name={item.credit ? (item.state === "Held" ? "clock" : "check") : "bank"} /></span><p><strong>{item.label}</strong><small>{item.detail} · {formatDate(item.at, { day: "numeric", month: "short" })}</small></p><b className={item.credit && item.state === "Available" ? "is-credit" : ""}>{item.credit ? "+" : "−"}{money(item.amount)}</b><em>{item.state}</em></Link>)}
+      </div>
+      <aside className="wallet-account-card"><span><ProductIcon name="bank" /></span><small>Payout account</small>
+        {bank === undefined ? <p>Loading…</p> : bank ? <><h2>{bank.bank_name}</h2><strong>•••• {bank.account_number_masked.slice(-4)}</strong><p>{bank.account_name ?? "Name pending"}</p><div><ProductIcon name={bank.verified ? "check" : "shield"} />{bank.verified ? "Verified payout account" : "Needs verification before you withdraw"}</div><Link href="/dashboard/payout-account">{bank.verified ? "Change payout account" : "Verify account"}<ProductIcon name="arrow" /></Link></>
+          : <><h2>No account yet</h2><p>Add the bank account your earnings should land in.</p><Link href="/dashboard/payout-account">Add payout account<ProductIcon name="arrow" /></Link></>}
+      </aside>
     </section>
   </div>;
 }
