@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { BrandShell } from "@/components/brand/BrandShell";
 import { AuthGuard } from "@/components/auth/AuthGuard";
+import { UserProvider } from "@/lib/user-context";
 import "../../styles/brand.css";
 
 export const metadata: Metadata = {
@@ -11,8 +12,10 @@ export const metadata: Metadata = {
 
 export default function BrandLayout({ children }: { children: ReactNode }) {
   return (
-    <AuthGuard>
-      <BrandShell>{children}</BrandShell>
-    </AuthGuard>
+    <UserProvider>
+      <AuthGuard>
+        <BrandShell>{children}</BrandShell>
+      </AuthGuard>
+    </UserProvider>
   );
 }

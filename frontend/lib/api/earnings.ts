@@ -47,27 +47,49 @@ export interface LeaderRow {
 
 export interface Leaderboard {
   period: string;
+  scope?: string;
   updated_at: string;
   items: LeaderRow[];
   me: LeaderRow | null;
 }
 
+export interface EarningEntryDetail {
+  id: string;
+  date: string;
+  submission_id: string;
+  clip: string;
+  campaign_slug: string;
+  campaign_title: string;
+  brand: string | null;
+  billable_views: number;
+  amount: number;
+  state: string;
+  payable_at: string;
+  views_total?: number;
+  thousands?: number;
+  rate_per_1000_views?: number;
+  cap_amount?: number | null;
+  reference?: string | null;
+  payout_id?: string | null;
+}
+
+function qs(params: Record<string, string | number | undefined | null>) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== "") query.set(key, String(value));
+  }
+  const text = query.toString();
+  return text ? `?${text}` : "";
+}
+
 export const earningsApi = {
   summary: () => api.get<EarningsSummary>("/earnings/summary"),
 
-  history: (params?: { cursor?: string; limit?: number }) => {
-    const query = new URLSearchParams();
-    if (params?.cursor) query.set("cursor", params.cursor);
-    if (params?.limit) query.set("limit", String(params.limit));
-    const qs = query.toString();
-    return api.get<EarningsHistory>(`/earnings/history${qs ? `?${qs}` : ""}`);
-  },
+  history: (params?: { limit?: number; offset?: number }) =>
+    api.get<EarningsHistory>(`/earnings/history${qs({ ...params })}`),
 
-  leaderboard: (params?: { period?: "week" | "all"; campaign?: string }) => {
-    const query = new URLSearchParams();
-    if (params?.period) query.set("period", params.period);
-    if (params?.campaign) query.set("campaign", params.campaign);
-    const qs = query.toString();
-    return api.get<Leaderboard>(`/leaderboard${qs ? `?${qs}` : ""}`);
-  },
+  entry: (entryId: string) => api.get<EarningEntryDetail>(`/earnings/entries/${entryId}`),
+
+  leaderboard: (params?: { period?: "week" | "all"; scope?: "global" | "country"; campaign_id?: string; limit?: number }) =>
+    api.get<Leaderboard>(`/leaderboard${qs({ ...params })}`),
 };

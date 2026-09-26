@@ -53,9 +53,12 @@ export interface CampaignOut {
   end_condition?: "duration" | "budget";
   video_cap?: number | null;
   max_submissions?: number | null;
-  status: string;
+  status: "draft" | "pending_funding" | "active" | "closed" | string;
   phase: string;
   accepting_entries: boolean;
+  ends_at?: string | null;
+  duration_days?: number | null;
+  source_link?: string | null;
   time_left: TimeLeft | null;
   pot: number;
   spent: number;
@@ -67,12 +70,6 @@ export interface CampaignOut {
   metrics: CampaignMetrics | null;
   created_at: string;
   updated_at: string;
-}
-
-export interface CampaignListOut {
-  items: CampaignOut[];
-  total: number;
-  next_cursor: string | null;
 }
 
 export interface CampaignStats {
@@ -108,43 +105,49 @@ export interface CampaignSubmissionRow {
   submitted_at: string;
 }
 
-export interface CampaignSubmissionsOut {
-  items: CampaignSubmissionRow[];
-  total: number;
-  next_cursor: string | null;
-}
-
 export interface MyCampaignRow {
   campaign: CampaignOut;
-  membership_status: string;
+  membership_status: "joined" | "submitted" | "active" | "completed" | "left" | string;
   joined_at: string | null;
+  left_at: string | null;
   submission_id: string | null;
   submission_status: string | null;
 }
 
+export interface MembershipOut {
+  id: string;
+  campaign_id: string;
+  joined_at: string;
+  left_at: string | null;
+}
+
+export type CampaignFeed = "all" | "for_you" | "joined" | "closing_soon" | "open";
+
+function qs(params: Record<string, string | number | undefined | null>) {
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== "") query.set(key, String(value));
+  }
+  const text = query.toString();
+  return text ? `?${text}` : "";
+}
+
 export const campaignsApi = {
-  list: (params?: { feed?: string; category?: string; platform?: string; search?: string; cursor?: string; page_size?: number }) => {
-    const query = new URLSearchParams();
-    if (params?.feed) query.set("feed", params.feed);
-    if (params?.category) query.set("category", params.category);
-    if (params?.platform) query.set("platform", params.platform);
-    if (params?.search) query.set("search", params.search);
-    if (params?.cursor) query.set("cursor", params.cursor);
-    if (params?.page_size) query.set("page_size", String(params.page_size));
-    const qs = query.toString();
-    return api.get<CampaignListOut>(`/campaigns${qs ? `?${qs}` : ""}`);
-  },
+  list: (params?: { feed?: CampaignFeed; category?: string; platform?: string; q?: string; limit?: number; offset?: number }) =>
+    api.get<CampaignOut[]>(`/campaigns${qs({ ...params })}`),
+
+  mine: (params?: { membership_status?: string; limit?: number; offset?: number }) =>
+    api.get<MyCampaignRow[]>(`/creators/me/campaigns${qs({ ...params })}`),
 
   get: (ref: string) => api.get<CampaignOut>(`/campaigns/${ref}`),
 
   getStats: (ref: string) => api.get<CampaignStats>(`/campaigns/${ref}/stats`),
 
-  getSubmissions: (ref: string, cursor?: string) => {
-    const qs = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
-    return api.get<CampaignSubmissionsOut>(`/campaigns/${ref}/submissions${qs}`);
-  },
+  getSubmissions: (ref: string, limit?: number) =>
+    api.get<CampaignSubmissionRow[]>(`/campaigns/${ref}/submissions${qs({ limit })}`),
 
-  join: (ref: string) => api.post<void>(`/campaigns/${ref}/join`, {}),
+  join: (ref: string, inviteCode?: string) =>
+    api.post<MembershipOut>(`/campaigns/${ref}/join${qs({ invite_code: inviteCode })}`, {}),
 
-  leave: (ref: string) => api.delete<void>(`/campaigns/${ref}/join`),
+  leave: (ref: string) => api.delete<MembershipOut>(`/campaigns/${ref}/join`),
 };

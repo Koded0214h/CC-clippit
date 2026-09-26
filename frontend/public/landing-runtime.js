@@ -647,7 +647,8 @@
     loading = false,
     ready = false,
     failed = false,
-    finaleCelebrated = false;
+    finaleCelebrated = false,
+    firstFramePromise = null;
   let manifest = {
     frames: 84,
     w: 560,
@@ -672,25 +673,43 @@
     phone.removeAttribute("style");
     content.removeAttribute("style");
   }
+  function loadFrame(index) {
+    if (frames[index]) return Promise.resolve(frames[index]);
+    return new Promise((resolve, reject) => {
+      const image = new Image();
+      image.decoding = "async";
+      image.fetchPriority = index === 0 ? "high" : "low";
+      image.onload = () => {
+        frames[index] = image;
+        scheduleScene();
+        resolve(image);
+      };
+      image.onerror = reject;
+      image.src = `/assets/throw/f${String(index).padStart(2, "0")}.webp`;
+    });
+  }
+  function loadFirstFrame() {
+    if (!firstFramePromise) {
+      firstFramePromise = loadFrame(0).then((image) => {
+        ready = true;
+        sizeThrow();
+        scheduleScene();
+        requestAnimationFrame(() => canvas.classList.add("has-frame"));
+        return image;
+      });
+    }
+    return firstFramePromise;
+  }
   async function loadFrames() {
     if (loading || failed || reduced.matches) return;
     loading = true;
     try {
+      await loadFirstFrame();
       const response = await fetch("/assets/throw/manifest.json");
       if (!response.ok) throw new Error("Missing animation manifest");
       manifest = await response.json();
-      frames = await Promise.all(
-        Array.from(
-          { length: manifest.frames },
-          (_, i) =>
-            new Promise((resolve, reject) => {
-              const image = new Image();
-              image.onload = () => resolve(image);
-              image.onerror = reject;
-              image.src = `/assets/throw/f${String(i).padStart(2, "0")}.webp`;
-            }),
-        ),
-      );
+      frames.length = manifest.frames;
+      await Promise.all(Array.from({ length: manifest.frames - 1 }, (_, i) => loadFrame(i + 1)));
       ready = true;
       sizeThrow();
       scheduleScene();
@@ -732,7 +751,13 @@
           manifest.frames - 1,
           Math.floor((progress / split) * (manifest.frames - 1)),
         );
-        throwContext.drawImage(frames[frame], fx, fy, fw, fh);
+        let drawable = frames[frame];
+        if (!drawable) {
+          for (let distance = 1; distance < manifest.frames && !drawable; distance++) {
+            drawable = frames[frame - distance] || frames[frame + distance];
+          }
+        }
+        if (drawable) throwContext.drawImage(drawable, fx, fy, fw, fh);
       }
       return;
     }
@@ -777,9 +802,10 @@
       requestAnimationFrame(updateScene);
     }
   }
-  if (!reduced.matches && throwContext) {
+  if (!reduced.matches && throwContext && innerWidth > 700) {
     stage.classList.add("throw-enabled");
     phone.inert = true;
+    loadFirstFrame().catch(fallbackThrow);
     const preload = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) {
@@ -787,9 +813,15 @@
           preload.disconnect();
         }
       },
-      { rootMargin: "1800px" },
+      { rootMargin: "6000px 0px" },
     );
     preload.observe(stage);
+    const warmThrow = () => loadFrames();
+    if ("requestIdleCallback" in window) {
+      requestIdleCallback(warmThrow, { timeout: 1400 });
+    } else {
+      setTimeout(warmThrow, 700);
+    }
   }
   addEventListener("scroll", scheduleScene, { passive: true });
   addEventListener("resize", () => {

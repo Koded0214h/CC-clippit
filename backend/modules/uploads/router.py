@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.config import get_settings
 from core.deps import get_db
 from core.rate_limit import limiter
-from core.storage import CHUNK, Storage, UploadRejected, get_storage
+from core.storage import CHUNK, Storage, StorageUnavailable, UploadRejected, get_storage
 from modules.auth.deps import get_current_user, get_verified_user
 from modules.auth.models import User
 
@@ -32,6 +32,8 @@ async def _store(
     except UploadRejected as exc:
         # Literal codes: Starlette is mid-rename on the constant names.
         raise HTTPException(413 if "larger than" in str(exc) else 422, str(exc)) from exc
+    except StorageUnavailable as exc:
+        raise HTTPException(502, "We couldn't store that file right now. Try again in a few minutes.") from exc
 
     upload = models.Upload(
         owner_id=user.id,
@@ -203,6 +205,8 @@ async def complete_multipart_upload(
         upload.status = "failed"
         await db.commit()
         raise HTTPException(413 if "larger than" in str(exc) else 422, str(exc)) from exc
+    except StorageUnavailable as exc:
+        raise HTTPException(502, "We couldn't store that file right now. Try again in a few minutes.") from exc
 
     upload.key = stored.key
     upload.content_type = stored.content_type

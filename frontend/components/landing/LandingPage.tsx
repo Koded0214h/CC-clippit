@@ -4,6 +4,7 @@ import Script from "next/script";
 export function LandingPage() {
   return (
     <>
+      <link rel="preload" as="image" href="/assets/throw/f00.webp" type="image/webp" fetchPriority="high" />
       <a className="skip" href="#main">
         Skip to content
       </a>

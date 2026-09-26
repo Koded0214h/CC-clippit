@@ -154,7 +154,7 @@ export function BrandCampaignsScreen() {
 
   useEffect(() => {
     campaignsApi.list().then((data) => {
-      if (data.items.length > 0) setAllCampaigns(data.items.map(campaignOutToBrand));
+      if (data.length > 0) setAllCampaigns(data.map(campaignOutToBrand));
     }).catch(() => undefined).finally(() => setLoading(false));
   }, []);
 
@@ -279,7 +279,7 @@ export function LiveCampaignScreen({ slug }: { slug?: string }) {
     }).catch(() => undefined);
     campaignsApi.getStats(slug).then(setStats).catch(() => undefined);
     campaignsApi.getSubmissions(slug).then((data) => {
-      if (data.items.length > 0) setSubmissions(data.items);
+      if (data.length > 0) setSubmissions(data);
     }).catch(() => undefined);
   }, [slug]);
 

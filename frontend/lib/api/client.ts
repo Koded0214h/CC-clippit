@@ -1,15 +1,20 @@
 import { AUTH_PROTECTION_ENABLED } from "@/lib/auth-protection";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://clippit-5b5j.onrender.com";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://clippit-5b5j.onrender.com";
 
 export class ApiError extends Error {
   constructor(
     public status: number,
     public detail: string,
+    public code: string | null = null,
   ) {
     super(detail);
     this.name = "ApiError";
   }
+}
+
+export function errorMessage(err: unknown, fallback = "Something went wrong. Please try again.") {
+  return err instanceof ApiError ? err.detail : fallback;
 }
 
 
@@ -67,22 +72,44 @@ async function request<T>(path: string, init: RequestInit = {}, isRetry = false)
     }
 
     let detail = res.statusText;
+    let code: string | null = null;
     try {
       const body = await res.json();
       if (typeof body.detail === "string") detail = body.detail;
       else if (typeof body.detail?.message === "string") detail = body.detail.message;
+      else if (Array.isArray(body.detail) && typeof body.detail[0]?.msg === "string") detail = body.detail[0].msg.replace(/^Value error, /, "");
+      if (typeof body.detail?.code === "string") code = body.detail.code;
     } catch {
       // keep statusText
     }
-    throw new ApiError(res.status, detail);
+    throw new ApiError(res.status, detail, code);
   }
 
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 
+const inFlightGets = new Map<string, Promise<unknown>>();
+
+function get<T>(path: string): Promise<T> {
+  const token = typeof window !== "undefined"
+    ? localStorage.getItem("clippit:access-token")
+    : null;
+  const key = `${token ?? "anonymous"}:${path}`;
+  const existing = inFlightGets.get(key) as Promise<T> | undefined;
+  if (existing) return existing;
+
+  const pending = request<T>(path);
+  inFlightGets.set(key, pending);
+  const clear = () => {
+    if (inFlightGets.get(key) === pending) inFlightGets.delete(key);
+  };
+  pending.then(clear, clear);
+  return pending;
+}
+
 export const api = {
-  get: <T>(path: string) => request<T>(path),
+  get,
   post: <T>(path: string, body: unknown) =>
     request<T>(path, { method: "POST", body: JSON.stringify(body) }),
   put: <T>(path: string, body: unknown) =>
