@@ -1,27 +1,36 @@
 "use client";
 
-import { useId } from "react";
+import { type CSSProperties, useId } from "react";
 
 type LoaderTone = "paper" | "ink" | "gold" | "lime";
 
 export function ClippitMarkMotion({ compact = false, light = false }: { compact?: boolean; light?: boolean }) {
   const instanceId = useId().replace(/:/g, "");
-  const bodyMaskId = `clippit-write-body-${instanceId}`;
-  const accentMaskId = `clippit-write-accent-${instanceId}`;
+  const accentGradientId = `clippit-loader-accent-${instanceId}`;
+  const bodyPath = "M69.38 16.25L24.69 27.19L20 29.38L15 34.06L12.5 38.12L10.94 42.5L4.38 69.69L.31 83.12L0 87.19L.62 90.31L2.5 93.75L5 96.25L10.31 98.75L16.25 99.06L62.19 91.56L65.94 90.62L70.62 88.44L76.25 83.44L77.81 81.25L79.69 77.19L81.88 65L81.88 62.5L81.25 62.19L67.81 66.25L67.5 56.56L80.62 51.88L81.88 50.62L81.88 33.12L81.25 33.12L65.94 47.5L65.62 43.75L69.69 40L51.56 40L47.5 43.75L41.25 43.75L46.88 39.06L69.69 17.19Z";
+  const arrowPath = "M99.38 3.12L97.81 1.88L95.94 1.88L72.19 8.12L71.25 9.38L71.88 11.56L78.44 14.38L47.5 43.75L65.62 43.75L86.88 23.75L89.69 29.38L90.94 30.31L92.81 30L93.75 28.75L99.69 4.38Z";
+  const playPath = "M42.5 48.75L40.62 49.06L39.06 51.25L39.06 71.25L39.69 72.5L40.62 73.12L42.5 73.12L57.81 62.5L59.38 60.62L59.06 58.44L58.12 57.5Z";
+
   return <span className={`clippit-mark-motion${compact ? " clippit-mark-motion--compact" : ""}${light ? " clippit-mark-motion--light" : ""}`} aria-hidden="true">
     <svg viewBox="0 0 100 100" role="presentation">
       <defs>
-        <mask id={bodyMaskId} maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100">
-          <path className="clippit-logo-path clippit-logo-path--body" pathLength="1" d="M69 48 C59 42 45 42 33 48 C21 54 15 66 15 79 C15 91 25 96 39 92 L57 87 C68 84 74 77 73 64" />
-        </mask>
-        <mask id={accentMaskId} maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="100">
-          <path className="clippit-logo-path clippit-logo-path--play" pathLength="1" d="M42 54 L58 64 L42 75 Z" />
-          <path className="clippit-logo-path clippit-logo-path--arrow" pathLength="1" d="M50 46 L89 8" />
-          <path className="clippit-logo-path clippit-logo-path--arrow-head" pathLength="1" d="M71 15 L89 8 L85 28" />
-        </mask>
+        <linearGradient id={accentGradientId} x1="38" y1="72" x2="98" y2="2" gradientUnits="userSpaceOnUse">
+          <stop offset="0" stopColor="var(--load-accent-start, #a5ff12)" />
+          <stop offset="1" stopColor="var(--load-accent-end, #c4ff2f)" />
+        </linearGradient>
       </defs>
-      <image href={light ? "/assets/clippit-mark-light-loader.webp" : "/assets/clippit-mark-loader.webp"} width="100" height="100" preserveAspectRatio="xMidYMid meet" mask={`url(#${bodyMaskId})`} />
-      <image href="/assets/clippit-mark-accent-loader.webp" width="100" height="100" preserveAspectRatio="xMidYMid meet" mask={`url(#${accentMaskId})`} />
+      <g className="clippit-logo-piece clippit-logo-piece--body">
+        <path className="clippit-logo-fill" d={bodyPath} />
+        <path className="clippit-logo-trace" pathLength="1" d={bodyPath} />
+      </g>
+      <g className="clippit-logo-piece clippit-logo-piece--play" style={{ "--clippit-accent": `url(#${accentGradientId})` } as CSSProperties}>
+        <path className="clippit-logo-fill" d={playPath} />
+        <path className="clippit-logo-trace" pathLength="1" d={playPath} />
+      </g>
+      <g className="clippit-logo-piece clippit-logo-piece--arrow" style={{ "--clippit-accent": `url(#${accentGradientId})` } as CSSProperties}>
+        <path className="clippit-logo-fill" d={arrowPath} />
+        <path className="clippit-logo-trace" pathLength="1" d={arrowPath} />
+      </g>
     </svg>
   </span>;
 }
