@@ -51,8 +51,8 @@
   background: color-mix(in srgb, var(--load-ink) 25%, transparent);
   filter: blur(10px);
   content: "";
-  transform-origin: center;
-  animation: clippit-contact-shadow 3.2s cubic-bezier(.45, 0, .2, 1) infinite;
+  opacity: .24;
+  transform: scaleX(.88) scaleY(.74);
 }
 .clippit-loader__stage::after {
   position: absolute;
@@ -62,7 +62,7 @@
   background: radial-gradient(circle, color-mix(in srgb, var(--load-accent) 21%, transparent), transparent 68%);
   content: "";
   filter: blur(12px);
-  animation: clippit-underlight 3.2s ease-in-out infinite;
+  opacity: .32;
 }
 
 .clippit-mark-motion {
@@ -71,8 +71,6 @@
   width: clamp(108px, 12vw, 138px);
   aspect-ratio: 1;
   filter: drop-shadow(0 8px 7px rgba(21, 23, 19, .12)) drop-shadow(0 17px 22px rgba(21, 23, 19, .08));
-  transform-origin: 50% 76%;
-  animation: clippit-logo-hover 3.2s cubic-bezier(.45, 0, .2, 1) infinite;
 }
 
 .clippit-mark-motion svg {
@@ -90,23 +88,21 @@
   stroke-dasharray: 1;
   stroke-dashoffset: 1;
 }
-.clippit-logo-path--c {
-  stroke-width: 34;
-  animation: clippit-write-c 3.2s cubic-bezier(.45, 0, .2, 1) infinite;
+.clippit-logo-path--body {
+  stroke-width: 48;
+  animation: clippit-write-body 4.6s linear infinite;
 }
 .clippit-logo-path--play {
-  fill: #fff;
-  stroke: none;
-  opacity: 0;
-  animation: clippit-write-play 3.2s ease-in-out infinite;
+  stroke-width: 13;
+  animation: clippit-write-play 4.6s linear infinite;
 }
 .clippit-logo-path--arrow,
 .clippit-logo-path--arrow-head {
   stroke-width: 22;
-  animation: clippit-write-arrow 3.2s cubic-bezier(.45, 0, .2, 1) infinite;
+  animation: clippit-write-arrow 4.6s linear infinite;
 }
 .clippit-logo-path--arrow-head {
-  stroke-width: 21;
+  stroke-width: 20;
   animation-name: clippit-write-arrow-head;
 }
 
@@ -124,7 +120,6 @@
   height: 82px;
   flex-basis: 82px;
   filter: drop-shadow(0 6px 6px rgba(21, 23, 19, .11)) drop-shadow(0 13px 17px rgba(21, 23, 19, .07));
-  animation: clippit-logo-hover 3.2s cubic-bezier(.45, 0, .2, 1) infinite;
 }
 
 .clippit-button-loader,
@@ -150,45 +145,28 @@
 .admin-button[aria-busy="true"] .clippit-button-loader,
 .completion-submit[aria-busy="true"] .clippit-button-loader { width: 100%; }
 
-@keyframes clippit-write-c {
-  0%, 4% { stroke-dashoffset: 1; }
-  30%, 82% { stroke-dashoffset: 0; }
-  100% { stroke-dashoffset: 1; }
+@keyframes clippit-write-body {
+  0%, 3% { stroke-dashoffset: 1; }
+  35%, 82% { stroke-dashoffset: 0; }
+  99%, 100% { stroke-dashoffset: 1; }
 }
 
 @keyframes clippit-write-play {
-  0%, 17%, 96%, 100% { opacity: 0; }
-  28%, 89% { opacity: 1; }
+  0%, 25% { stroke-dashoffset: 1; }
+  40%, 77% { stroke-dashoffset: 0; }
+  89%, 100% { stroke-dashoffset: 1; }
 }
 
 @keyframes clippit-write-arrow {
-  0%, 29% { stroke-dashoffset: 1; }
-  48%, 72% { stroke-dashoffset: 0; }
-  86%, 100% { stroke-dashoffset: 1; }
+  0%, 34% { stroke-dashoffset: 1; }
+  56%, 71% { stroke-dashoffset: 0; }
+  84%, 100% { stroke-dashoffset: 1; }
 }
 
 @keyframes clippit-write-arrow-head {
-  0%, 40% { stroke-dashoffset: 1; }
-  52%, 68% { stroke-dashoffset: 0; }
-  78%, 100% { stroke-dashoffset: 1; }
-}
-
-@keyframes clippit-logo-hover {
-  0%, 7%, 100% { transform: translate3d(0, 2px, 0) scale(.995); }
-  32%, 68% { transform: translate3d(0, -2px, 0) scale(1); }
-  84% { transform: translate3d(0, -1px, 0) scale(.998); }
-}
-
-@keyframes clippit-contact-shadow {
-  0%, 7%, 100% { opacity: .32; transform: scaleX(.78) scaleY(.82); }
-  32%, 68% { opacity: .19; transform: scaleX(.94) scaleY(.68); }
-  84% { opacity: .24; transform: scaleX(.87) scaleY(.74); }
-}
-
-@keyframes clippit-underlight {
-  0%, 8%, 100% { opacity: .18; transform: scale(.88); }
-  48%, 69% { opacity: .48; transform: scale(1.04); }
-  86% { opacity: .28; transform: scale(.96); }
+  0%, 48% { stroke-dashoffset: 1; }
+  60%, 68% { stroke-dashoffset: 0; }
+  76%, 100% { stroke-dashoffset: 1; }
 }
 
 @media (max-width: 700px) {
