@@ -6,13 +6,15 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
-import { ProfileAvatar, useStoredProfile, type StoredProfile } from "@/components/ui/ProfilePhotoPicker";
+import { ProfileAvatar, saveStoredProfile, useStoredProfile, type StoredProfile } from "@/components/ui/ProfilePhotoPicker";
 import { useAutoHideDock } from "@/components/ui/useAutoHideDock";
 import { useUser } from "@/lib/user-context";
 import { earningsApi } from "@/lib/api/earnings";
-import { notificationsApi } from "@/lib/api/notifications";
+import { NOTIFICATIONS_CHANGED, notificationsApi } from "@/lib/api/notifications";
+import { creatorProfileApi, socialApi } from "@/lib/api/social";
+import { timeAgo } from "@/lib/format";
 
-const CREATOR_PROFILE_FALLBACK: StoredProfile = { name: "Tobi On Cam", bio: "", photo: "" };
+const CREATOR_PROFILE_FALLBACK: StoredProfile = { name: "", bio: "", photo: "" };
 
 const navItems: Array<{ href: string; label: string; icon: ProductIconName }> = [
   { href: "/dashboard", label: "Overview", icon: "home" },
@@ -28,7 +30,7 @@ const mobileNavItems = navItems.filter((item) => !["Leaderboard", "Settings"].in
 const creatorMoreItems: Array<{ href: string; label: string; copy: string; icon: ProductIconName }> = [
   { href: "/dashboard/settings", label: "Settings", copy: "Profile, accounts and alerts", icon: "settings" },
   { href: "/dashboard/leaderboard", label: "Leaderboard", copy: "Creator rankings", icon: "trophy" },
-  { href: "/dashboard/verification", label: "Verification", copy: "Identity and documents", icon: "shield" },
+  { href: "/dashboard/verification", label: "Account checks", copy: "What you need to earn and withdraw", icon: "shield" },
   { href: "/account/data", label: "Account & data", copy: "Download or delete account data", icon: "person" },
   { href: "/help", label: "Help centre", copy: "Guides for using Clippit", icon: "brief" },
   { href: "/support/tickets", label: "Support", copy: "Messages and support tickets", icon: "users" },
@@ -49,17 +51,36 @@ export function ProductShell({ children }: { children: ReactNode }) {
   const dockHidden = useAutoHideDock();
   const [moreOpen, setMoreOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
-  const [payable, setPayable] = useState(18400);
+  const [payable, setPayable] = useState<number | null>(null);
   const [notifCount, setNotifCount] = useState(0);
+  const [lastChecked, setLastChecked] = useState<string | null | undefined>(undefined);
   const { user, logout } = useUser();
-  const displayName = user?.full_name ?? profile.name;
+  const displayName = profile.name || user?.full_name || "";
   const initials = displayName.trim().split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase() || "U";
   const moreIsCurrent = creatorMoreItems.some((item) => pathname.startsWith(item.href));
 
   useEffect(() => {
-    earningsApi.summary().then((data) => setPayable(data.payable)).catch(() => undefined);
-    notificationsApi.unreadCount().then((data) => setNotifCount(data.unread_count)).catch(() => undefined);
+    creatorProfileApi.get().then((data) => saveStoredProfile("creator", { name: data.display_name, bio: data.bio ?? "", photo: data.photo_url ?? "" })).catch(() => undefined);
+    socialApi.accounts().then((accounts) => {
+      const times = accounts.map((account) => account.last_checked_at).filter((value): value is string => !!value).sort();
+      setLastChecked(accounts.some((account) => account.connected) ? times[times.length - 1] ?? null : null);
+    }).catch(() => setLastChecked(null));
   }, []);
+
+  useEffect(() => {
+    earningsApi.summary().then((data) => setPayable(data.payable)).catch(() => undefined);
+    const refreshCount = () => notificationsApi.unreadCount().then((data) => setNotifCount(data.unread_count)).catch(() => undefined);
+    void refreshCount();
+    window.addEventListener(NOTIFICATIONS_CHANGED, refreshCount);
+    return () => window.removeEventListener(NOTIFICATIONS_CHANGED, refreshCount);
+  }, [pathname]);
+
+  const verifyEmail = () => {
+    try {
+      if (user?.email) window.sessionStorage.setItem("clippit:verify-email", user.email);
+      window.sessionStorage.setItem("clippit:verify-autosend", "1");
+    } catch { /* storage blocked */ }
+  };
 
   const signOut = async () => {
     if (signingOut) return;
@@ -120,15 +141,14 @@ export function ProductShell({ children }: { children: ReactNode }) {
             <Image src="/assets/clippit-mark.png" width={32} height={32} alt="" priority />
             <strong>Clippit</strong>
           </Link>
-          <div className="topbar-proof">
-            <span />
-            Views last checked 2 min ago
-          </div>
+          {lastChecked === null
+            ? <Link className="topbar-proof" href="/dashboard/accounts"><span />Connect an account to track views</Link>
+            : <div className="topbar-proof"><span />{lastChecked ? `Views last checked ${timeAgo(lastChecked)}` : "Views are checked after your first approved clip"}</div>}
           <div className="topbar-actions">
             <Link className="wallet-pill" href="/dashboard/wallet">
               <ProductIcon name="wallet" />
               <span>Payable</span>
-              <strong><AnimatedNumber value={payable} format="money" duration={1000} /></strong>
+              <strong>{payable === null ? "—" : <AnimatedNumber value={payable} format="money" duration={1000} />}</strong>
             </Link>
             <Link className="icon-button" href="/dashboard/notifications" aria-label="Notifications">
               <ProductIcon name="bell" />
@@ -139,6 +159,13 @@ export function ProductShell({ children }: { children: ReactNode }) {
             </Link>
           </div>
         </header>
+        {user && !user.email_verified && (
+          <div className="verify-email-banner" role="status">
+            <ProductIcon name="shield" />
+            <span><strong>Confirm your email to start earning.</strong> Joining campaigns, submitting clips and withdrawing all need a confirmed email.</span>
+            <Link href="/auth/verify-email" onClick={verifyEmail}>Send code<ProductIcon name="arrow" /></Link>
+          </div>
+        )}
         <main className="product-content">{children}</main>
       </div>
 

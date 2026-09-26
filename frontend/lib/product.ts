@@ -24,6 +24,9 @@ export interface Campaign {
   brief: string;
   mustDo: string[];
   mustAvoid: string[];
+  id?: string;
+  endsAt?: string | null;
+  acceptingEntries?: boolean;
 }
 
 export const campaigns: Campaign[] = [

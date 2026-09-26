@@ -23,6 +23,9 @@ async def _load_owned(ticket_id: uuid.UUID, user: User, db: AsyncSession) -> mod
         select(models.SupportTicket)
         .options(selectinload(models.SupportTicket.messages))
         .where(models.SupportTicket.id == ticket_id)
+        # The session doesn't expire on commit, so without this a reload after
+        # adding a message returns the cached, pre-reply message list.
+        .execution_options(populate_existing=True)
     )
     if ticket is None or (ticket.user_id != user.id and user.role != Role.admin):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ticket not found")

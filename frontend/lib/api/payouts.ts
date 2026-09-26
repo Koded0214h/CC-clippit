@@ -23,7 +23,7 @@ export interface ProvenanceOut {
 export interface PayoutOut {
   id: string;
   reference: string;
-  status: "pending" | "processing" | "completed" | "failed" | string;
+  status: "pending" | "processing" | "succeeded" | "failed" | string;
   amount: number;
   fee: number;
   net: number;
@@ -47,7 +47,17 @@ export interface PayoutCreateIn {
   idempotency_key: string;
 }
 
+export interface PayoutQuoteOut {
+  amount: number;
+  fee: number;
+  net_amount: number;
+  currency: string;
+  valid_for_minutes: number;
+}
+
 export const payoutsApi = {
+  quote: (payload: PayoutCreateIn) => api.post<PayoutQuoteOut>("/payouts/quote", payload),
+
   withdraw: (payload: PayoutCreateIn) => api.post<PayoutOut>("/payouts", payload),
 
   list: (params?: { limit?: number; offset?: number }) => {

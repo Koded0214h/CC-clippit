@@ -61,7 +61,7 @@ async def google_callback(
     db: AsyncSession = Depends(get_db),
 ):
     settings = get_settings()
-    origin = settings.frontend_origin.split(",")[0].strip()
+    origin = settings.app_url
     fail = lambda reason: RedirectResponse(f"{origin}/auth/sign-in?google_error={reason}")  # noqa: E731
 
     if error:

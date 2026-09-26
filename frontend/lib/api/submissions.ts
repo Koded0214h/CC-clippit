@@ -6,7 +6,7 @@ export interface RequirementResultOut {
   kind: string;
   text: string;
   position: number;
-  verdict: "pass" | "fail" | "review" | "skipped";
+  verdict: "pass" | "fail" | "review";
   note: string | null;
 }
 
@@ -136,7 +136,7 @@ export interface ProvenanceOut {
 }
 
 export interface TrackingStateOut {
-  status: "active" | "stopped" | "failed";
+  status: "active" | "stopped" | "dead_lettered";
   reason_code: string | null;
   message: string | null;
   next_poll_at: string | null;
@@ -169,8 +169,8 @@ export const submissionsApi = {
   get: (submissionId: string) => api.get<SubmissionOut>(`/submissions/${submissionId}`),
   getEarnings: (submissionId: string) => api.get<SubmissionEarningsOut>(`/submissions/${submissionId}/earnings`),
   appeal: (submissionId: string, reason: string, evidenceUploadId?: string) =>
-    api.post<void>(`/submissions/${submissionId}/appeal`, { reason, evidence_upload_id: evidenceUploadId ?? null }),
-  withdraw: (submissionId: string) => api.post<void>(`/submissions/${submissionId}/withdraw`, {}),
+    api.post<SubmissionOut>(`/submissions/${submissionId}/appeal`, { reason, evidence_upload_id: evidenceUploadId ?? null }),
+  withdraw: (submissionId: string) => api.post<SubmissionOut>(`/submissions/${submissionId}/withdraw`, {}),
   getPerformance: (submissionId: string, sinceSnapshotId?: string) => {
     const qs = sinceSnapshotId ? `?since_snapshot_id=${encodeURIComponent(sinceSnapshotId)}` : "";
     return api.get<PerformanceResultOut>(`/submissions/${submissionId}/performance${qs}`);

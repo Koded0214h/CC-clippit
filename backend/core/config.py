@@ -27,6 +27,13 @@ class Settings(BaseSettings):
     # backend is ever split out later. Not exposed to the browser.
     internal_service_secret: str = "dev-only-not-secret"
     frontend_origin: str = "http://localhost,http://localhost:5174,http://127.0.0.1:5174,https://clippit.click,https://www.clippit.click"
+    #: Where OAuth callbacks and emailed links send people. Not derived from
+    #: frontend_origin: that's a CORS allow-list whose first entry is localhost.
+    frontend_url: str = "https://clippit.click"
+
+    @property
+    def app_url(self) -> str:
+        return self.frontend_url.rstrip("/")
 
     # In-memory by default (fine for one process/dev). Point this at Redis
     # (e.g. redis://localhost:6379) once this runs as more than one worker,

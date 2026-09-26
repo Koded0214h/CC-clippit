@@ -20,6 +20,7 @@ admin_router = APIRouter(prefix="/admin/disputes", tags=["admin"])
 async def _load_owned(dispute_id: uuid.UUID, user: User, db: AsyncSession) -> models.Dispute:
     dispute = await db.scalar(
         select(models.Dispute).options(selectinload(models.Dispute.messages)).where(models.Dispute.id == dispute_id)
+        .execution_options(populate_existing=True)
     )
     if dispute is None or (dispute.user_id != user.id and user.role != Role.admin):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Dispute not found")
@@ -104,6 +105,7 @@ def _require_admin(user: User) -> None:
 async def _load(dispute_id: uuid.UUID, db: AsyncSession) -> models.Dispute:
     dispute = await db.scalar(
         select(models.Dispute).options(selectinload(models.Dispute.messages)).where(models.Dispute.id == dispute_id)
+        .execution_options(populate_existing=True)
     )
     if dispute is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Dispute not found")

@@ -25,6 +25,7 @@ async def _load(ticket_id: uuid.UUID, db: AsyncSession) -> models.SupportTicket:
         select(models.SupportTicket)
         .options(selectinload(models.SupportTicket.messages))
         .where(models.SupportTicket.id == ticket_id)
+        .execution_options(populate_existing=True)
     )
     if ticket is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Ticket not found")
