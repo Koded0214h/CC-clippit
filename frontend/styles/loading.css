@@ -113,6 +113,15 @@
   stroke-dashoffset: 1;
   stroke-width: 1.2;
 }
+.clippit-logo-play-space {
+  fill: #fff;
+  stroke: #fff;
+  stroke-width: 6.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+  animation: clippit-fill-body 3.4s cubic-bezier(.45, 0, .2, 1) infinite;
+}
 .clippit-logo-piece--body .clippit-logo-fill {
   animation: clippit-fill-body 3.4s cubic-bezier(.45, 0, .2, 1) infinite;
 }
@@ -214,6 +223,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .clippit-logo-fill { animation: none !important; opacity: 1; }
+  .clippit-logo-play-space { animation: none !important; opacity: 1; }
   .clippit-logo-trace { animation: none !important; stroke-dashoffset: 0; }
   .clippit-mark-motion,
   .clippit-loader__stage::before,
