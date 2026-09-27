@@ -73,6 +73,10 @@ class QwenComplianceVerifier:
         except Exception as exc:  # noqa: BLE001
             logger.exception("unexpected compliance failure submission=%s", submission.id)
             return _technical_failure(rules, ModelError(f"Unexpected compliance error: {exc}"))
+        finally:
+            # Scratch disk only — never retain creator videos as a library.
+            if not settings.compliance_keep_media:
+                shutil.rmtree(dest, ignore_errors=True)
 
         by_id = {str(r.id): r for r in rules}
         checks: list[RequirementCheck] = []
@@ -98,10 +102,6 @@ class QwenComplianceVerifier:
             summary = judgement.human_review_reason
         if summary:
             summary = f"[{judgement.model}] {summary}"
-
-        # Keep media on disk for audit when configured; otherwise tidy up.
-        if not settings.compliance_keep_media and media_path is not None:
-            shutil.rmtree(dest, ignore_errors=True)
 
         conf = judgement.confidence
         return Outcome(

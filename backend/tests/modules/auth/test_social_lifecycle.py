@@ -141,3 +141,34 @@ async def test_meta_data_deletion_returns_a_status_url_and_confirmation_code(api
 async def test_a_platform_with_no_signed_webhook_contract_is_404(api):
     r = await api.post("/webhooks/social/tiktok/deauthorize", data={"signed_request": "irrelevant"})
     assert r.status_code == 404
+
+
+async def test_connecting_a_platform_without_oauth_credentials_bounces_back_to_settings(api, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "instagram_app_id", "")
+    _, creator = await signup(api, "creator")
+    r = await api.get("/social/instagram/login", headers=auth(creator))
+    assert r.status_code == 307
+    assert r.headers["location"] == f"{settings.app_url}/dashboard/settings?social=instagram&status=error&reason=not_configured"
+
+
+async def test_connecting_a_configured_platform_sends_the_registered_redirect_uri(api, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "tiktok_client_key", "tk")
+    monkeypatch.setattr(settings, "tiktok_client_secret", "ts")
+    monkeypatch.setattr(settings, "tiktok_redirect_uri", "https://api.example.com/social/tiktok/callback")
+    _, creator = await signup(api, "creator")
+    r = await api.get("/social/tiktok/login", headers=auth(creator))
+    assert r.status_code == 307
+    location = r.headers["location"]
+    assert location.startswith("https://www.tiktok.com/v2/auth/authorize/")
+    assert "redirect_uri=https%3A%2F%2Fapi.example.com%2Fsocial%2Ftiktok%2Fcallback" in location
+
+
+async def test_threads_is_not_connectable_in_v1_even_with_credentials(api, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "threads_app_id", "tid")
+    monkeypatch.setattr(settings, "threads_app_secret", "tsecret")
+    _, creator = await signup(api, "creator")
+    r = await api.get("/social/threads/login", headers=auth(creator))
+    assert r.status_code == 307 and "reason=not_configured" in r.headers["location"]

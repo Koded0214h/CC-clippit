@@ -15,7 +15,7 @@ from core.security import create_oauth_state_token, decode_oauth_state_token
 
 from . import models, schemas
 from .deps import get_current_user, get_current_user_allow_query
-from .providers import get_provider
+from .providers import get_provider, is_connectable
 from .providers.base import OAuthError
 
 router = APIRouter(prefix="/social", tags=["social"])
@@ -64,6 +64,8 @@ async def login(
         provider = get_provider(platform)
     except KeyError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc))
+    if not is_connectable(platform):
+        return RedirectResponse(f"{settings.app_url}/dashboard/settings?social={platform}&status=error&reason=not_configured")
 
     code_verifier = secrets.token_urlsafe(64) if provider.USES_PKCE else None
     state = create_oauth_state_token(user.id, platform, code_verifier)

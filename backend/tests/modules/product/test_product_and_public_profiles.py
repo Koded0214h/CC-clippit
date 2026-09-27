@@ -3,18 +3,24 @@ acceptances (production-api-inventory.md §D, §R)."""
 
 import pytest
 
+from core.config import get_settings
 from tests.http_app import (
     api, approve_clip, auth, campaign_body, fund_campaign, intel, make_creator, signup, submit_clip,
 )
 
 
-async def test_product_config_is_public_and_shapes_the_client_needs(api):
+async def test_product_config_is_public_and_shapes_the_client_needs(api, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "tiktok_client_key", "tk")
+    monkeypatch.setattr(settings, "tiktok_client_secret", "ts")
+    monkeypatch.setattr(settings, "youtube_client_id", "")
     r = await api.get("/product-config")
     assert r.status_code == 200
     body = r.json()
     assert body["hold_days"] == 5 and body["currency"] == "NGN"
-    assert any(p["platform"] == "tiktok" and p["connectable"] for p in body["platforms"])
-    assert any(p["platform"] == "youtube" and p["connectable"] for p in body["platforms"])
+    platforms = {p["platform"]: p["connectable"] for p in body["platforms"]}
+    assert set(platforms) == {"tiktok", "instagram", "facebook", "x", "youtube"}
+    assert platforms["tiktok"] is True and platforms["youtube"] is False
     assert body["campaign_limits"]["max_duration_days"] == 90
     assert {d["slug"] for d in body["legal"]} >= {"terms", "privacy"}
 

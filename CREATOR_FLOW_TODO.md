@@ -104,7 +104,9 @@ Without these, **creators never earn**.
 
 **Why:** Creators must connect the platform they post on before they can join or submit. Every redirect URI on Render still points to `http://localhost:8000`.
 
-**Do:** Set these on Render, and add the **same URL** in each developer portal:
+**Code (done):** the Connect button now only appears for a platform whose OAuth app credentials are set on Render. Threads is hidden because it isn't in PRD V1. Platforms without credentials show "Soon", so creators never land on a broken consent screen.
+
+**Do:** Set these on Render, and add the **same URL, character for character** (https, no trailing slash) in each developer portal:
 
 | Platform | Render env | Value | Credentials set? |
 |---|---|---|---|
@@ -112,13 +114,24 @@ Without these, **creators never earn**.
 | X | `X_REDIRECT_URI` | `https://clippit-5b5j.onrender.com/social/x/callback` | ✅ yes (also needs `TWITTERAPI_IO_KEY` for views, ❌ empty) |
 | Instagram | `INSTAGRAM_REDIRECT_URI` | `https://clippit-5b5j.onrender.com/social/instagram/callback` | ❌ `INSTAGRAM_APP_ID` / `_SECRET` empty |
 | Facebook | `FACEBOOK_REDIRECT_URI` | `https://clippit-5b5j.onrender.com/social/facebook/callback` | ❌ `FACEBOOK_APP_ID` / `_SECRET` empty |
-| Threads | `THREADS_REDIRECT_URI` | `https://clippit-5b5j.onrender.com/social/threads/callback` | ❌ `THREADS_APP_ID` / `_SECRET` empty |
 | YouTube | `YOUTUBE_REDIRECT_URI` | `https://clippit-5b5j.onrender.com/social/youtube/callback` | ❌ `YOUTUBE_CLIENT_ID` / `_SECRET` / `YOUTUBE_API_KEY` empty |
+| Google sign-in | `GOOGLE_REDIRECT_URI` | `https://clippit-5b5j.onrender.com/auth/google/callback` | check |
+
+Also check `FRONTEND_URL=https://clippit.click` (or leave it unset, since that's the default). After OAuth, the backend sends creators back to `FRONTEND_URL/dashboard/settings`.
+
+Where each URL goes:
+- **TikTok for Developers** → your app → Login Kit → Redirect URI. Products: Login Kit and the Display API, with scopes `user.info.basic` and `video.list`.
+- **X Developer Portal** → your app → User authentication settings → Callback URI / Redirect URL. App type: Web App (confidential client). Scopes: `tweet.read`, `users.read` and `offline.access`.
+- **Meta for Developers (Facebook)** → Facebook Login → Settings → Valid OAuth Redirect URIs. Permissions: `pages_show_list`, `pages_read_engagement`, `pages_read_user_content`.
+- **Meta for Developers (Instagram)** → Instagram → API setup with Instagram login → Business login settings → OAuth redirect URIs. Permissions: `instagram_business_basic`, `instagram_business_manage_insights`. Use the **Instagram** app ID and secret here, which are different from the Facebook app ones.
+- **Meta, both apps:** set Deauthorize callback `https://clippit-5b5j.onrender.com/webhooks/social/{facebook|instagram}/deauthorize` and Data deletion request URL `https://clippit-5b5j.onrender.com/webhooks/social/{facebook|instagram}/data-deletion`. Set Privacy Policy URL `https://www.clippit.click/legal/privacy`.
+- **Google Cloud Console** → APIs & Services → Credentials → the OAuth client (Web application) → Authorized redirect URIs. Add both the YouTube and the Google sign-in URLs. Enable YouTube Data API v3. Scope: `youtube.readonly`. This is a sensitive scope, so the consent screen must be verified, or creators must be added as test users while it's in Testing.
 
 - [ ] Set the redirect URIs on Render
 - [ ] Register them in TikTok for Developers, X Developer Portal, Meta for Developers and Google Cloud Console
-- [ ] Add the missing credentials, **or** tell me which platforms to hide (the UI shows Connect for all six today)
+- [ ] Add the missing credentials (Instagram, Facebook, YouTube). Their Connect buttons appear automatically once the credentials are set.
 - [ ] TikTok: submit the app for review, or add test creators as sandbox users
+- [ ] Meta / X / Google: while an app is in development or testing mode, only the accounts added as testers can connect
 
 **Confirm:** `/dashboard/accounts` → Connect TikTok → approve → you land on clippit.click Settings with "TikTok is connected".
 

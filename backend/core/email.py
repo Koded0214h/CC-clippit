@@ -29,6 +29,8 @@ class EmailMessage:
     to: str
     subject: str
     text: str
+    #: Branded version; `text` is always sent too, as the plain-text part.
+    html: str | None = None
 
 
 class EmailSender(Protocol):
@@ -62,6 +64,8 @@ class SmtpEmailSender:
         mime["To"] = message.to
         mime["Subject"] = message.subject
         mime.set_content(message.text)
+        if message.html:
+            mime.add_alternative(message.html, subtype="html")
         with smtplib.SMTP(self._host, self._port, timeout=15) as smtp:
             smtp.starttls()
             if self._user:
@@ -82,12 +86,15 @@ class ResendEmailSender:
     def _send_blocking(self, message: EmailMessage) -> None:
         import resend as _resend
         _resend.api_key = self._api_key
-        _resend.Emails.send({
+        payload = {
             "from": self._sender,
             "to": [message.to],
             "subject": message.subject,
             "text": message.text,
-        })
+        }
+        if message.html:
+            payload["html"] = message.html
+        _resend.Emails.send(payload)
 
     async def send(self, message: EmailMessage) -> None:
         await asyncio.to_thread(self._send_blocking, message)

@@ -11,8 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.config import get_settings
 from core.deps import get_db
 from core.handles import is_valid, normalize
-from core.platforms import Platform
-from modules.auth.providers import REGISTRY as OAUTH_PROVIDERS
+from core.platforms import V1_PLATFORMS, Platform
+from modules.auth.providers import is_connectable
 from modules.campaigns.models import Campaign, CampaignStatus
 from modules.campaigns.service import brands
 from modules.creators.models import CreatorProfile
@@ -37,7 +37,9 @@ async def product_config():
         min_withdrawal_naira=settings.min_withdrawal,
         funding_fee_rate=settings.funding_fee_rate,
         platforms=[
-            schemas.PlatformConfig(platform=p, connectable=p.value in OAUTH_PROVIDERS) for p in Platform
+            schemas.PlatformConfig(platform=p, connectable=is_connectable(p.value))
+            for p in Platform
+            if p in V1_PLATFORMS
         ],
         campaign_limits=schemas.CampaignLimits(min_duration_days=1, max_duration_days=90, max_rules=20),
         upload_limits=schemas.UploadLimits(

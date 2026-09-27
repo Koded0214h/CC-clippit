@@ -11,10 +11,10 @@ from sqlalchemy.orm import selectinload
 from core.deps import get_db
 from modules.auth.deps import get_current_user
 from core.money import ZERO
-from core.platforms import Platform as CorePlatform
+from core.platforms import V1_PLATFORMS, Platform as CorePlatform
 from modules.auth import schemas as auth_schemas
 from modules.auth.models import Role, SocialAccount, User
-from modules.auth.providers import REGISTRY as OAUTH_PROVIDERS
+from modules.auth.providers import is_connectable
 from modules.campaigns import models as campaign_models
 from modules.campaigns import schemas as campaign_schemas
 from modules.campaigns import service as campaign_service
@@ -465,8 +465,9 @@ async def my_campaigns(
 
 @router.get("/me/accounts", response_model=list[schemas.ConnectedAccountOut])
 async def my_accounts(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
-    """"Connected accounts": every platform Clippit knows, whether this
-    creator has connected it, and when Clippit last read their views there."""
+    """"Connected accounts": every V1 platform (plus any other one this
+    creator already connected, so they can disconnect it), whether it's
+    connected, and when Clippit last read their views there."""
     _require_creator(user)
     connected = {a.platform.value: a for a in await db.scalars(select(SocialAccount).where(SocialAccount.user_id == user.id))}
     last_read = {
@@ -481,10 +482,12 @@ async def my_accounts(user: User = Depends(get_current_user), db: AsyncSession =
     out = []
     for platform in CorePlatform:
         account = connected.get(platform.value)
+        if platform not in V1_PLATFORMS and account is None:
+            continue
         out.append(
             schemas.ConnectedAccountOut(
                 platform=platform,
-                connectable=platform.value in OAUTH_PROVIDERS,
+                connectable=is_connectable(platform.value),
                 connected=account is not None,
                 handle=account.handle if account else None,
                 display_name=account.display_name if account else None,

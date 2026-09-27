@@ -13,7 +13,8 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.email import EmailMessage, get_email_sender
+from core.email import get_email_sender
+from modules.auth.emails import notification_email
 from modules.auth.models import User, UserPreferences
 from modules.auth.schemas import NotificationSettings
 
@@ -60,7 +61,7 @@ async def notify(
         user = await db.get(User, user_id)
         if user is not None:
             try:
-                await get_email_sender().send(EmailMessage(to=user.email, subject=title, text=body or title))
+                await get_email_sender().send(notification_email(user.email, title, body, link))
             except Exception:  # noqa: BLE001 — the in-app row still stands
                 logger.exception("notification email to %s failed", user.email)
     return note

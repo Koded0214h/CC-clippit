@@ -218,8 +218,8 @@ class ClipsOut(BaseModel):
 
 class ConnectedAccountOut(BaseModel):
     platform: Platform
-    #: Clippit can start a connection for this platform. False for a
-    #: platform whose sign-in flow isn't built yet (YouTube).
+    #: Clippit can start a connection for this platform. False when its
+    #: OAuth app credentials aren't set on the server, or it isn't in V1.
     connectable: bool
     connected: bool
     handle: str | None

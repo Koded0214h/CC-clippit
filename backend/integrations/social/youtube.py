@@ -170,33 +170,33 @@ class YouTubeAdapter:
         except httpx.HTTPError as exc:
             raise UpstreamError(f"YouTube Data API request failed: {exc}") from exc
 
+        try:
+            payload = resp.json()
+        except ValueError as exc:
+            raise UpstreamError("YouTube Data API returned a non-JSON body.") from exc
+
         if resp.status_code == 429:
             retry = resp.headers.get("Retry-After")
             raise RateLimited(
                 "YouTube Data API quota / rate limit hit.",
                 retry_after=int(retry) if retry and str(retry).isdigit() else None,
             )
-        if resp.status_code in (401, 403):
-            # 403 is also how YouTube reports disabled comments, private
-            # videos on some paths, and dead API keys — classify carefully.
-            try:
-                body = resp.json()
-            except ValueError:
-                body = {}
-            reason = _first_reason(body)
+        if resp.status_code >= 400:
+            reason = _first_reason(payload) or "unknown"
+            message = ((payload.get("error") or {}).get("message")) or f"HTTP {resp.status_code}"
             if reason in {"commentsDisabled", "processingFailure"}:
                 raise ContentUnavailable(f"YouTube comments unavailable ({reason}).")
             if reason in {"videoNotFound", "playlistNotFound"}:
                 raise ContentNotFound(f"YouTube resource not found ({reason}).")
-            raise CreatorTokenExpired(
-                f"YouTube Data API rejected the request (HTTP {resp.status_code}, {reason or 'unknown'})."
-            )
-        if resp.status_code >= 500:
-            raise UpstreamError(f"YouTube Data API returned HTTP {resp.status_code}.")
-        try:
-            return resp.json()
-        except ValueError as exc:
-            raise UpstreamError("YouTube Data API returned a non-JSON body.") from exc
+            if reason in {"API_KEY_INVALID", "badRequest"} or resp.status_code in (401, 403):
+                raise CreatorTokenExpired(
+                    f"YouTube Data API rejected the key/request: {message} ({reason}). "
+                    "Check YOUTUBE_API_KEY and that YouTube Data API v3 is enabled."
+                )
+            if resp.status_code >= 500:
+                raise UpstreamError(f"YouTube Data API returned HTTP {resp.status_code}: {message}")
+            raise UpstreamError(f"YouTube Data API error: {message} ({reason})")
+        return payload
 
     @staticmethod
     def _to_content(video: dict[str, Any]) -> PlatformContent:
