@@ -16,6 +16,16 @@ coverage/
 /.tmp-chrome-*/
 /.tmp-*.png
 
+# Generated presentation decks and assets
+/.codex-build/
+/deliverables/
+*.ppt
+*.pptx
+*.pps
+*.ppsx
+*.pot
+*.potx
+
 # Environment files and local secrets
 .env
 .env.*
