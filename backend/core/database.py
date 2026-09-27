@@ -17,6 +17,9 @@ def _asyncpg_url_and_connect_args(url: str) -> tuple[str, dict]:
     the same 'require'/'verify-full'/... vocabulary there)."""
     parts = urlsplit(url)
     query = dict(parse_qsl(parts.query))
+    if "sslmode" not in query and "channel_binding" not in query:
+        # urlunsplit would turn `sqlite+aiosqlite://` into `sqlite+aiosqlite:`.
+        return url, {}
     sslmode = query.pop("sslmode", None)
     query.pop("channel_binding", None)
     clean_url = urlunsplit(parts._replace(query=urlencode(query)))

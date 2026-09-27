@@ -174,4 +174,4 @@ services:
       - key: COMPLIANCE_MAX_FILESIZE_MB
         value: "80"
       - key: COMPLIANCE_KEEP_MEDIA
-        value: "true"
+        value: "false"

@@ -1,3 +1,4 @@
+from core.config import get_settings
 from tests.http_app import (  # noqa: F401
     api, approve_clip, auth, clear_hold, earn, intel, make_creator, open_campaign, signup, submit_clip,
 )
@@ -54,15 +55,29 @@ async def test_a_withdrawn_clip_is_labelled_and_not_active(api, intel):
     assert out["items"][0]["status"] == "withdrawn" and out["active_clips"] == 0
 
 
-async def test_connected_accounts_list_every_platform_and_what_can_be_connected(api, intel):
+async def test_connected_accounts_list_every_platform_and_what_can_be_connected(api, intel, monkeypatch):
+    settings = get_settings()
+    monkeypatch.setattr(settings, "tiktok_client_key", "tk")
+    monkeypatch.setattr(settings, "tiktok_client_secret", "ts")
+    monkeypatch.setattr(settings, "youtube_client_id", "yid")
+    monkeypatch.setattr(settings, "youtube_client_secret", "ysecret")
+    monkeypatch.setattr(settings, "instagram_app_id", "")
+    monkeypatch.setattr(settings, "instagram_app_secret", "")
     creator = await make_creator(api, platform="tiktok", handle="@tobioncam")
     accounts = {a["platform"]: a for a in (await api.get("/creators/me/accounts", headers=auth(creator))).json()}
-    assert set(accounts) == {"tiktok", "instagram", "facebook", "threads", "x", "youtube"}
+    # PRD V1 platforms only — Threads isn't offered.
+    assert set(accounts) == {"tiktok", "instagram", "facebook", "x", "youtube"}
     t = accounts["tiktok"]
     assert t["connected"] is True and t["handle"] == "@tobioncam" and t["connectable"] is True and t["connected_at"]
-    assert accounts["instagram"]["connected"] is False and accounts["instagram"]["connectable"] is True
-    # YouTube is connectable once the OAuth provider is registered.
+    # No OAuth app credentials on the server → can't start a connection.
+    assert accounts["instagram"]["connected"] is False and accounts["instagram"]["connectable"] is False
     assert accounts["youtube"]["connectable"] is True and accounts["youtube"]["connected"] is False
+
+
+async def test_a_connected_non_v1_account_is_still_listed_so_it_can_be_disconnected(api, intel):
+    creator = await make_creator(api, platform="threads", handle="@legacy")
+    accounts = {a["platform"]: a for a in (await api.get("/creators/me/accounts", headers=auth(creator))).json()}
+    assert accounts["threads"]["connected"] is True and accounts["threads"]["connectable"] is False
 
 
 async def test_last_checked_is_when_clippit_last_read_a_post_on_that_platform(api, intel):
