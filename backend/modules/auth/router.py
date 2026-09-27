@@ -66,7 +66,7 @@ async def signup(
     await db.commit()
     await db.refresh(user)
 
-    await _deliver(sender, emails.verification_email(user.email, code))
+    await _deliver(sender, emails.verification_email(user.email, code, user.role.value))
 
     return schemas.TokenResponse(
         access_token=issued.access_token, refresh_token=issued.refresh_token, user=schemas.UserOut.model_validate(user)
@@ -247,7 +247,7 @@ async def resend_verification(
             status.HTTP_429_TOO_MANY_REQUESTS, exc.message, headers={"Retry-After": str(exc.retry_after)}
         ) from exc
     await db.commit()
-    await _deliver(sender, emails.verification_email(user.email, code))
+    await _deliver(sender, emails.verification_email(user.email, code, user.role.value))
     return schemas.CodeSentResponse(resend_in=cooldown)
 
 
