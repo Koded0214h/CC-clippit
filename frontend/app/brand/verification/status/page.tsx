@@ -1,3 +1,3 @@
-import { BrandVerificationStatusScreen } from "@/components/completion/CustomerCompletionScreens";
+import { BrandVerificationConnectedScreen } from "@/components/brand/BrandAccountConnectedScreens";
 
-export default function Page() { return <BrandVerificationStatusScreen />; }
+export default function Page() { return <BrandVerificationConnectedScreen />; }

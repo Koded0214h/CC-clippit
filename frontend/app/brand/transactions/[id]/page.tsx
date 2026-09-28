@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { BrandTransactionReceiptScreen } from "@/components/customer/CustomerScreens";
+import { BrandTransactionReceiptScreen } from "@/components/wallet/BrandTransactionScreens";
 
 export const metadata: Metadata = { title: "Transaction receipt" };
 

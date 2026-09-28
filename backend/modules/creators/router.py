@@ -422,7 +422,11 @@ async def my_campaigns(
         for c in await db.scalars(
             select(campaign_models.Campaign)
             .where(campaign_models.Campaign.id.in_(campaign_ids))
-            .options(selectinload(campaign_models.Campaign.payout_rule), selectinload(campaign_models.Campaign.rules))
+            .options(
+                selectinload(campaign_models.Campaign.payout_rule),
+                selectinload(campaign_models.Campaign.rules),
+                selectinload(campaign_models.Campaign.performance_metrics),
+            )
             .order_by(campaign_models.Campaign.created_at.desc())
             .limit(limit)
             .offset(offset)

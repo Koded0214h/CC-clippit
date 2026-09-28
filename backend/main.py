@@ -35,6 +35,7 @@ from modules.legal.router import router as legal_router
 from modules.notifications.router import push_router, router as notifications_router
 from modules.organisations.router import router as organisations_router
 from modules.payments.router import router as payments_router
+from modules.performance.router import router as performance_router
 from modules.payouts.router import router as payouts_router
 from modules.product.router import router as product_router
 from modules.receipts.router import router as receipts_router
@@ -90,6 +91,7 @@ app.include_router(campaign_drafts_router)
 app.include_router(funding_router)
 app.include_router(brand_router)
 app.include_router(payments_router)
+app.include_router(performance_router)
 app.include_router(payouts_router)
 app.include_router(wallet_router)
 app.include_router(earnings_router)

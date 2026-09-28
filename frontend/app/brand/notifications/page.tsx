@@ -1,8 +1,8 @@
 import type { Metadata } from "next";
-import { BrandNotificationsScreen } from "@/components/customer/CustomerScreens";
+import { BrandNotificationsConnected } from "@/components/brand/BrandNotificationsConnected";
 
 export const metadata: Metadata = { title: "Notifications" };
 
 export default function Page() {
-  return <BrandNotificationsScreen />;
+  return <BrandNotificationsConnected />;
 }

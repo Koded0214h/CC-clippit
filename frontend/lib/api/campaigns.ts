@@ -15,6 +15,55 @@ export interface PayoutRuleOut {
   max_submissions?: number | null;
 }
 
+export type PerformanceMetricType =
+  | "view"
+  | "comment"
+  | "share"
+  | "visit"
+  | "signup"
+  | "lead"
+  | "purchase";
+
+export interface CampaignMetric {
+  id?: string;
+  metric_type: PerformanceMetricType;
+  rate_amount: number;
+  unit_size: number;
+  min_threshold: number;
+  verification_method?: string;
+  position?: number;
+}
+
+export interface ConversionSetup {
+  destination_type: "website" | "whatsapp";
+  destination_url?: string | null;
+  whatsapp_number?: string | null;
+  attribution_window_days: number;
+  attribution_model: "first_touch" | "last_touch";
+}
+
+export interface CampaignCreatePayload {
+  title: string;
+  description: string;
+  category?: string | null;
+  source_link?: string | null;
+  platforms: string[];
+  pot: number;
+  payout_rule: {
+    rate_per_1000_views: number;
+    cap_amount?: number | null;
+    video_cap_amount?: number | null;
+    max_submissions?: number | null;
+    min_views_threshold: number;
+  };
+  duration_days?: number | null;
+  rules: Array<{ kind: "must" | "avoid"; text: string }>;
+  access_mode: "public" | "invite";
+  end_condition: "duration" | "budget";
+  performance_metrics: CampaignMetric[];
+  conversion_setup?: ConversionSetup | null;
+}
+
 export interface RuleOut {
   id: string;
   kind: "must" | "avoid";
@@ -36,6 +85,7 @@ export interface CampaignMetrics {
   checking: number;
   rejected: number;
   earned: number;
+  performance?: Record<string, number>;
 }
 
 export interface CampaignOut {
@@ -64,6 +114,8 @@ export interface CampaignOut {
   spent: number;
   remaining: number;
   payout_rule: PayoutRuleOut | null;
+  performance_metrics: CampaignMetric[];
+  conversion_setup: ConversionSetup | null;
   rules: RuleOut[];
   feed_status: string | null;
   joined: boolean | null;
@@ -89,6 +141,7 @@ export interface CampaignStats {
   rejected: number;
   time_left: TimeLeft | null;
   last_reading_at: string | null;
+  performance: Record<string, number>;
 }
 
 export interface CampaignSubmissionRow {
@@ -101,13 +154,20 @@ export interface CampaignSubmissionRow {
   url: string;
   verified_views: number;
   earned: number;
+  performance?: Record<string, number>;
   state: string;
   submitted_at: string;
 }
 
 export interface MyCampaignRow {
   campaign: CampaignOut;
-  membership_status: "joined" | "submitted" | "active" | "completed" | "left" | string;
+  membership_status:
+    | "joined"
+    | "submitted"
+    | "active"
+    | "completed"
+    | "left"
+    | string;
   joined_at: string | null;
   left_at: string | null;
   submission_id: string | null;
@@ -121,33 +181,174 @@ export interface MembershipOut {
   left_at: string | null;
 }
 
-export type CampaignFeed = "all" | "for_you" | "joined" | "closing_soon" | "open";
+export interface FundingQuoteOut {
+  campaign_id: string;
+  pot: number;
+  fee: number;
+  fee_rate: number;
+  total: number;
+  currency: string;
+  methods: Array<"bank" | "card">;
+  valid_for_minutes: number;
+  terms_version: string;
+}
+
+export interface FundingOrderOut {
+  id: string;
+  campaign_id: string;
+  reference: string;
+  status: string;
+  method: "bank" | "card";
+  pot: number;
+  fee: number;
+  total: number;
+  provider: string;
+  sandbox: boolean;
+  provider_reference: string | null;
+  checkout_url: string | null;
+  collection: { bank_name: string; account_number: string; account_name: string } | null;
+  campaign_status: string;
+  created_at: string;
+  confirmed_at: string | null;
+}
+
+export interface RefundOut {
+  id: string;
+  campaign_id: string;
+  amount: number;
+  status: string;
+  reason: string;
+  provider: string;
+  sandbox: boolean;
+  provider_reference: string | null;
+  failure_reason: string | null;
+  created_at: string;
+  processed_at: string | null;
+}
+
+export interface CampaignDraftOut {
+  id: string;
+  schema_version: number;
+  status: "not_started" | "in_progress" | "finalized";
+  step: string | null;
+  revision: number;
+  answers: Record<string, unknown>;
+  blockers: Record<string, string>;
+  finalized_campaign_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CampaignDraftFinalizeOut {
+  campaign_id: string;
+  campaign_slug: string;
+  next_route: string;
+}
+
+export type CampaignFeed =
+  | "all"
+  | "for_you"
+  | "joined"
+  | "closing_soon"
+  | "open";
 
 function qs(params: Record<string, string | number | undefined | null>) {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== null && value !== "") query.set(key, String(value));
+    if (value !== undefined && value !== null && value !== "")
+      query.set(key, String(value));
   }
   const text = query.toString();
   return text ? `?${text}` : "";
 }
 
 export const campaignsApi = {
-  list: (params?: { feed?: CampaignFeed; category?: string; platform?: string; q?: string; limit?: number; offset?: number }) =>
-    api.get<CampaignOut[]>(`/campaigns${qs({ ...params })}`),
+  create: (payload: CampaignCreatePayload) =>
+    api.post<CampaignOut>("/campaigns", payload),
+  list: (params?: {
+    feed?: CampaignFeed;
+    category?: string;
+    platform?: string;
+    q?: string;
+    limit?: number;
+    offset?: number;
+  }) => api.get<CampaignOut[]>(`/campaigns${qs({ ...params })}`),
 
-  mine: (params?: { membership_status?: string; limit?: number; offset?: number }) =>
-    api.get<MyCampaignRow[]>(`/creators/me/campaigns${qs({ ...params })}`),
+  mine: (params?: {
+    membership_status?: string;
+    limit?: number;
+    offset?: number;
+  }) => api.get<MyCampaignRow[]>(`/creators/me/campaigns${qs({ ...params })}`),
 
   get: (ref: string) => api.get<CampaignOut>(`/campaigns/${ref}`),
 
   getStats: (ref: string) => api.get<CampaignStats>(`/campaigns/${ref}/stats`),
 
   getSubmissions: (ref: string, limit?: number) =>
-    api.get<CampaignSubmissionRow[]>(`/campaigns/${ref}/submissions${qs({ limit })}`),
+    api.get<CampaignSubmissionRow[]>(
+      `/campaigns/${ref}/submissions${qs({ limit })}`,
+    ),
 
   join: (ref: string, inviteCode?: string) =>
-    api.post<MembershipOut>(`/campaigns/${ref}/join${qs({ invite_code: inviteCode })}`, {}),
+    api.post<MembershipOut>(
+      `/campaigns/${ref}/join${qs({ invite_code: inviteCode })}`,
+      {},
+    ),
 
   leave: (ref: string) => api.delete<MembershipOut>(`/campaigns/${ref}/join`),
+
+  createAttributionLink: (ref: string, submissionId?: string) =>
+    api.post<{
+      id: string;
+      campaign_id: string;
+      short_code: string;
+      tracking_url: string;
+      destination_url: string;
+      expires_at: string | null;
+    }>(`/campaigns/${ref}/attribution-links`, {
+      submission_id: submissionId ?? null,
+    }),
+
+  rotateIntegrationSecret: (ref: string) =>
+    api.post<{
+      campaign_id: string;
+      secret: string;
+      last_four: string;
+      warning: string;
+    }>(`/campaigns/${ref}/integration-secret`, {}),
+
+  performance: (ref: string) =>
+    api.get<{
+      campaign_id: string;
+      metrics: Array<{
+        metric_type: string;
+        total: number;
+        approved: number;
+        pending: number;
+        earned: number;
+      }>;
+    }>(`/campaigns/${ref}/performance`),
+
+  pause: (ref: string, mode: "acquisition" | "full" = "acquisition") =>
+    api.post<CampaignOut>(`/campaigns/${ref}/pause?mode=${mode}`, {}),
+  resume: (ref: string) => api.post<CampaignOut>(`/campaigns/${ref}/resume`, {}),
+  close: (ref: string) => api.post<CampaignOut>(`/campaigns/${ref}/close`, {}),
+  activate: (ref: string) => api.post<CampaignOut>(`/campaigns/${ref}/activate`, {}),
+  fundingQuote: (ref: string) => api.post<FundingQuoteOut>(`/campaigns/${ref}/funding/quote`, {}),
+  fund: (ref: string, method: "bank" | "card") => api.post<FundingOrderOut>(`/campaigns/${ref}/funding`, { method }),
+  funding: (ref: string) => api.get<FundingOrderOut>(`/campaigns/${ref}/funding`),
+  confirmFunding: (ref: string) => api.post<FundingOrderOut>(`/campaigns/${ref}/funding/confirm`, {}),
+  cancelFunding: (ref: string) => api.delete<FundingOrderOut>(`/campaigns/${ref}/funding`),
+  refunds: (ref: string) => api.get<RefundOut[]>(`/campaigns/${ref}/refunds`),
+  requestRefund: (ref: string, reason: string) => api.post<RefundOut>(`/campaigns/${ref}/refunds`, { reason }),
+};
+
+export const campaignDraftsApi = {
+  create: () => api.post<CampaignDraftOut>("/campaign-drafts", {}),
+  list: () => api.get<CampaignDraftOut[]>("/campaign-drafts"),
+  get: (id: string) => api.get<CampaignDraftOut>(`/campaign-drafts/${id}`),
+  update: (id: string, payload: Record<string, unknown> & { revision: number }) =>
+    api.patch<CampaignDraftOut>(`/campaign-drafts/${id}`, payload),
+  remove: (id: string) => api.delete<void>(`/campaign-drafts/${id}`),
+  finalize: (id: string) => api.post<CampaignDraftFinalizeOut>(`/campaign-drafts/${id}/finalize`, {}),
 };

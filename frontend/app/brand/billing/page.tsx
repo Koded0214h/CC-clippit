@@ -1,3 +1,3 @@
-import { BrandBillingScreen } from "@/components/completion/CustomerCompletionScreens";
+import { BrandBillingScreen } from "@/components/brand/BrandBillingConnected";
 
 export default function Page() { return <BrandBillingScreen />; }

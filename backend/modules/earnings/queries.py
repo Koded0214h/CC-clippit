@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.config import get_settings
 from core.money import ZERO, to_decimal
 from modules.auth.models import SocialAccount, User
-from modules.campaigns.models import Campaign, CampaignPayoutRule
+from modules.campaigns.models import Campaign, CampaignMetric, CampaignPayoutRule
 from modules.campaigns.service import brands, now
 from modules.creators.models import CreatorProfile
 from modules.payouts.models import Payout, PayoutAllocation, PayoutStatus
@@ -164,7 +164,9 @@ async def history(db: AsyncSession, creator_id: uuid.UUID, limit: int, offset: i
                 id=entry.id, date=entry.accrued_at, submission_id=entry.submission_id,
                 clip=clip_title or "Untitled clip", campaign_slug=slug, campaign_title=campaign_title,
                 brand=brand_map[org_id].name if org_id in brand_map else None,
-                billable_views=int(entry.billable_views), amount=entry.amount, state=state, payable_at=entry.payable_at,
+                billable_views=int(entry.billable_views), metric_type=entry.metric_type,
+                billable_units=int(entry.billable_units), unit_size=int(entry.unit_size),
+                amount=entry.amount, state=state, payable_at=entry.payable_at,
             )
         )
     return schemas.EarningsHistory(items=items, total=int(total or 0))
@@ -188,6 +190,12 @@ async def entry_detail(db: AsyncSession, entry_id: uuid.UUID) -> schemas.Earning
     entry, clip_title, campaign, rule = row
 
     brand_map = await brands(db, {campaign.event_manager_id})
+    metric = await db.scalar(
+        select(CampaignMetric).where(
+            CampaignMetric.campaign_id == campaign.id,
+            CampaignMetric.metric_type == entry.metric_type,
+        )
+    )
     alloc = (
         await db.execute(
             select(PayoutAllocation.payout_id, _sum(PayoutAllocation.amount), Payout.status)
@@ -216,6 +224,8 @@ async def entry_detail(db: AsyncSession, entry_id: uuid.UUID) -> schemas.Earning
         brand=brand_map[campaign.event_manager_id].name if campaign.event_manager_id in brand_map else None,
         billable_views=int(entry.billable_views), views_total=int(entry.views_total), thousands=entry.thousands,
         rate_per_1000_views=rule.rate_per_1000_views if rule else 0.0,
+        metric_type=entry.metric_type, billable_units=int(entry.billable_units), unit_size=int(entry.unit_size),
+        rate_amount=float(metric.rate_amount) if metric else (rule.rate_per_1000_views if rule else 0.0),
         cap_amount=rule.cap_amount if rule else None,
         amount=entry.amount, state=state, accrued_at=entry.accrued_at, payable_at=entry.payable_at,
         snapshot_id=entry.snapshot_id, reference=entry.reference, payout_id=alloc[0] if alloc else None,

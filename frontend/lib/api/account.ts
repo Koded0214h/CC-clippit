@@ -10,12 +10,63 @@ export interface CreatorWalletOut {
   withdrawal_fee_rate: number;
 }
 
+export interface BrandWalletOut {
+  role: "organisation";
+  available: number;
+  reserved: number;
+  withdrawn_all_time: number;
+  min_withdrawal: number;
+  withdrawal_fee_rate: number;
+}
+
+export interface OrganisationBankAccountOut {
+  organisation_id: string;
+  bank_code: string;
+  bank_name: string;
+  account_number_masked: string;
+  account_name: string | null;
+  verified: boolean;
+  verified_at: string | null;
+  updated_at: string;
+}
+
+export interface BrandWithdrawalOut {
+  id: string;
+  reference: string;
+  status: string;
+  amount: number;
+  fee: number;
+  net: number;
+  organisation_name: string;
+  destination: {
+    bank_code: string;
+    bank_name: string;
+    account_number_masked: string;
+    account_name: string;
+  };
+  provider: string;
+  sandbox: boolean;
+  failure_reason: string | null;
+  initiated_at: string;
+  completed_at: string | null;
+}
+
 export interface UploadOut {
   id: string;
   kind: string;
   url: string;
   content_type: string;
   size_bytes: number;
+  created_at: string;
+}
+
+export interface UploadStatusOut {
+  id: string;
+  kind: string;
+  status: string;
+  url: string | null;
+  content_type: string | null;
+  size_bytes: number | null;
   created_at: string;
 }
 
@@ -127,14 +178,32 @@ async function uploadFile(path: string, file: Blob, name = "upload") {
 }
 
 export const walletApi = {
+  getCreator: () => api.get<CreatorWalletOut>("/wallet"),
+  getBrand: () => api.get<BrandWalletOut>("/wallet"),
   get: () => api.get<CreatorWalletOut>("/wallet"),
+  getOrganisationBank: () => api.get<OrganisationBankAccountOut>("/organisations/me/bank-details"),
+  saveOrganisationBank: (payload: { bank_code: string; bank_name: string; account_number: string }) =>
+    api.put<OrganisationBankAccountOut>("/organisations/me/bank-details", payload),
+  verifyOrganisationBank: () => api.post<OrganisationBankAccountOut>("/organisations/me/bank-details/verify", {}),
+  quoteBrandWithdrawal: (amount: number, idempotencyKey: string) =>
+    api.post<{ amount: number; fee: number; net_amount: number; currency: string }>("/wallet/withdraw/quote", {
+      amount,
+      idempotency_key: idempotencyKey,
+    }),
+  withdrawBrand: (amount: number, idempotencyKey: string) =>
+    api.post<BrandWithdrawalOut>("/wallet/withdraw", { amount, idempotency_key: idempotencyKey }),
+  brandWithdrawals: (limit = 20, offset = 0) =>
+    api.get<BrandWithdrawalOut[]>(`/wallet/withdrawals?limit=${limit}&offset=${offset}`),
+  brandWithdrawal: (id: string) => api.get<BrandWithdrawalOut>(`/wallet/withdrawals/${id}`),
 };
 
 export const uploadsApi = {
   image: (file: Blob) => uploadFile("/uploads/images", file, "image.jpg"),
+  video: (file: Blob) => uploadFile("/uploads/videos", file, "video.mp4"),
   evidence: (file: Blob) => uploadFile("/uploads/evidence", file, "evidence"),
   supportAttachment: (file: Blob) => uploadFile("/uploads/support-attachments", file, "attachment"),
   imageFromDataUrl: async (dataUrl: string) => uploadFile("/uploads/images", await (await fetch(dataUrl)).blob(), "profile.jpg"),
+  status: (id: string) => api.get<UploadStatusOut>(`/uploads/${id}`),
 };
 
 export const supportApi = {

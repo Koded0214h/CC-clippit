@@ -27,6 +27,13 @@ export interface Campaign {
   id?: string;
   endsAt?: string | null;
   acceptingEntries?: boolean;
+  performanceMetrics?: Array<{
+    metricType: string;
+    rate: number;
+    unitSize: number;
+    minimum: number;
+  }>;
+  conversionDestinationType?: "website" | "whatsapp" | null;
 }
 
 export const campaigns: Campaign[] = [

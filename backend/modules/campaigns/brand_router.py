@@ -28,7 +28,11 @@ async def overview(user: User = Depends(get_current_user), db: AsyncSession = De
     campaigns = list(
         await db.scalars(
             select(models.Campaign)
-            .options(selectinload(models.Campaign.payout_rule), selectinload(models.Campaign.rules))
+            .options(
+                selectinload(models.Campaign.payout_rule),
+                selectinload(models.Campaign.rules),
+                selectinload(models.Campaign.performance_metrics),
+            )
             .where(models.Campaign.event_manager_id == user.id)
             .order_by(models.Campaign.created_at.desc())
         )

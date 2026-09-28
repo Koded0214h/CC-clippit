@@ -1,3 +1,3 @@
-import { BrandInviteScreen } from "@/components/completion/CustomerCompletionScreens";
+import { BrandInviteConnectedScreen } from "@/components/brand/BrandAccountConnectedScreens";
 
-export default function Page() { return <BrandInviteScreen />; }
+export default function Page() { return <BrandInviteConnectedScreen />; }

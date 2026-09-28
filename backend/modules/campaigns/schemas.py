@@ -1,12 +1,85 @@
 import uuid
 from datetime import datetime
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from core.money import Money
 from core.platforms import Platform
 
-from .models import AccessMode, CampaignStatus, EndCondition, RuleKind
+from .models import AccessMode, CampaignStatus, EndCondition, PerformanceMetricType, RuleKind
+
+
+SOCIAL_METRICS = {
+    PerformanceMetricType.view,
+    PerformanceMetricType.comment,
+    PerformanceMetricType.share,
+}
+CONVERSION_METRICS = {
+    PerformanceMetricType.visit,
+    PerformanceMetricType.signup,
+    PerformanceMetricType.lead,
+    PerformanceMetricType.purchase,
+}
+
+
+class CampaignMetricIn(BaseModel):
+    metric_type: PerformanceMetricType
+    rate_amount: float = Field(gt=0, description="Amount paid for each unit batch")
+    unit_size: int = Field(default=1, gt=0, le=1_000_000)
+    min_threshold: int = Field(default=0, ge=0)
+
+    @model_validator(mode="after")
+    def sensible_units(self):
+        if self.metric_type == PerformanceMetricType.view and self.unit_size < 100:
+            raise ValueError("View rates must cover at least 100 views per unit.")
+        if self.metric_type != PerformanceMetricType.view and self.unit_size != 1:
+            raise ValueError(f"{self.metric_type.value} rates must be set per action.")
+        return self
+
+
+class CampaignMetricOut(CampaignMetricIn):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    verification_method: str
+    position: int
+
+
+class ConversionSetup(BaseModel):
+    destination_type: Literal["website", "whatsapp"]
+    destination_url: str | None = Field(default=None, max_length=2048)
+    whatsapp_number: str | None = Field(default=None, max_length=24)
+    attribution_window_days: int = Field(default=30, ge=1, le=90)
+    attribution_model: Literal["first_touch", "last_touch"] = "last_touch"
+
+    @field_validator("destination_url")
+    @classmethod
+    def valid_destination_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        if not value.lower().startswith(("https://", "http://")):
+            raise ValueError("Enter a complete website link beginning with https:// or http://.")
+        return value
+
+    @field_validator("whatsapp_number")
+    @classmethod
+    def normalize_phone(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        digits = "".join(ch for ch in value if ch.isdigit())
+        if len(digits) < 10 or len(digits) > 15:
+            raise ValueError("Enter a WhatsApp number with its country code.")
+        return digits
+
+    @model_validator(mode="after")
+    def destination_matches_type(self):
+        if self.destination_type == "website" and not self.destination_url:
+            raise ValueError("An online store or website link is required.")
+        if self.destination_type == "whatsapp" and not self.whatsapp_number:
+            raise ValueError("A business WhatsApp number is required.")
+        return self
 
 
 class PayoutRuleIn(BaseModel):
@@ -81,6 +154,8 @@ class CampaignCreate(BaseModel):
     access_mode: AccessMode = AccessMode.public
     assets: list[AssetIn] | None = Field(default=None, max_length=20)
     end_condition: EndCondition | None = None
+    performance_metrics: list[CampaignMetricIn] = Field(default_factory=list, max_length=7)
+    conversion_setup: ConversionSetup | None = None
 
     @field_validator("platforms")
     @classmethod
@@ -96,6 +171,20 @@ class CampaignCreate(BaseModel):
     def needs_a_budget(self):
         if self.pot is None and self.expected_views is None:
             raise ValueError("Set either pot or expected_views.")
+        if not self.performance_metrics:
+            self.performance_metrics = [
+                CampaignMetricIn(
+                    metric_type=PerformanceMetricType.view,
+                    rate_amount=self.payout_rule.rate_per_1000_views,
+                    unit_size=1000,
+                    min_threshold=self.payout_rule.min_views_threshold,
+                )
+            ]
+        kinds = [metric.metric_type for metric in self.performance_metrics]
+        if len(kinds) != len(set(kinds)):
+            raise ValueError("Choose each performance metric only once.")
+        if any(kind in CONVERSION_METRICS for kind in kinds) and self.conversion_setup is None:
+            raise ValueError("Set where customers should go for conversion tracking.")
         return self
 
 
@@ -118,6 +207,8 @@ class CampaignUpdate(BaseModel):
     access_mode: AccessMode | None = None
     assets: list[AssetIn] | None = Field(default=None, max_length=20)
     end_condition: EndCondition | None = None
+    performance_metrics: list[CampaignMetricIn] | None = Field(default=None, min_length=1, max_length=7)
+    conversion_setup: ConversionSetup | None = None
 
 
 class PoolOut(BaseModel):
@@ -160,6 +251,7 @@ class CampaignMetrics(BaseModel):
     checking: int
     rejected: int
     earned: Money
+    performance: dict[str, int] = Field(default_factory=dict)
 
 
 class CampaignOut(BaseModel):
@@ -195,6 +287,8 @@ class CampaignOut(BaseModel):
     spent: Money
     remaining: Money
     payout_rule: PayoutRuleOut | None
+    performance_metrics: list[CampaignMetricOut] = Field(default_factory=list)
+    conversion_setup: ConversionSetup | None = None
     rules: list[RuleOut] = []
     #: Creators only: Open / Closing soon / Joined.
     feed_status: str | None = None
@@ -221,6 +315,7 @@ class CampaignStats(BaseModel):
     rejected: int
     time_left: TimeLeft | None
     last_reading_at: datetime | None
+    performance: dict[str, int] = Field(default_factory=dict)
 
 
 class CampaignSubmissionRow(BaseModel):
@@ -302,6 +397,8 @@ class CampaignDraftPatch(BaseModel):
     access_mode: AccessMode | None = None
     assets: list[AssetIn] | None = Field(default=None, max_length=20)
     end_condition: EndCondition | None = None
+    performance_metrics: list[CampaignMetricIn] | None = Field(default=None, min_length=1, max_length=7)
+    conversion_setup: ConversionSetup | None = None
 
 
 class CampaignDraftOut(BaseModel):
@@ -324,3 +421,68 @@ class CampaignDraftFinalizeOut(BaseModel):
     campaign_id: uuid.UUID
     campaign_slug: str
     next_route: str
+
+
+class AttributionLinkCreate(BaseModel):
+    submission_id: uuid.UUID | None = None
+
+
+class AttributionLinkOut(BaseModel):
+    id: uuid.UUID
+    campaign_id: uuid.UUID
+    short_code: str
+    tracking_url: str
+    destination_url: str
+    expires_at: datetime | None
+
+
+class IntegrationSecretOut(BaseModel):
+    campaign_id: uuid.UUID
+    secret: str
+    last_four: str
+    warning: str = "Copy this secret now. It will not be shown again."
+
+
+class PerformanceEventIn(BaseModel):
+    campaign_id: uuid.UUID
+    event_type: PerformanceMetricType
+    attribution_code: str = Field(min_length=6, max_length=16)
+    source_event_id: str = Field(min_length=1, max_length=160)
+    quantity: int = Field(default=1, gt=0, le=1_000_000)
+    value_amount: float | None = Field(default=None, ge=0)
+    currency: str | None = Field(default=None, min_length=3, max_length=3)
+    occurred_at: datetime | None = None
+    metadata: dict[str, Any] | None = None
+
+    @field_validator("event_type")
+    @classmethod
+    def conversion_event_only(cls, value: PerformanceMetricType) -> PerformanceMetricType:
+        if value not in CONVERSION_METRICS:
+            raise ValueError("Server events can confirm visits, signups, leads or purchases.")
+        return value
+
+
+class PerformanceEventOut(BaseModel):
+    id: uuid.UUID
+    campaign_id: uuid.UUID
+    creator_id: uuid.UUID
+    submission_id: uuid.UUID | None
+    event_type: str
+    quantity: int
+    value_amount: Money | None
+    currency: str | None
+    verification_status: str
+    occurred_at: datetime
+
+
+class PerformanceMetricSummary(BaseModel):
+    metric_type: str
+    total: int
+    approved: int
+    pending: int
+    earned: Money
+
+
+class PerformanceSummaryOut(BaseModel):
+    campaign_id: uuid.UUID
+    metrics: list[PerformanceMetricSummary]
