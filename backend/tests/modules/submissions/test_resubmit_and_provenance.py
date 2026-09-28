@@ -112,7 +112,9 @@ async def test_earning_entry_detail_traces_the_amount_to_a_snapshot(api, intel):
     assert body["submission_id"] == sid and body["campaign_id"] == campaign["id"]
     assert body["thousands"] == 12 and body["amount"] == 6000
     assert body["rate_per_1000_views"] == 500 and body["state"] == "Accrued"
-    assert body["reference"] == f"{sid}:12"
+    import uuid as _uuid
+
+    assert body["reference"] == f"{_uuid.UUID(campaign['id']).hex[:10]}:{_uuid.UUID(sid).hex[:10]}:view:12"
 
     await clear_hold(creator["user"]["id"])
     cleared = (await api.get(f"/earnings/entries/{entry_id}", headers=auth(creator))).json()

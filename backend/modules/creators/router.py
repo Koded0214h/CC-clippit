@@ -541,4 +541,8 @@ async def my_overview(user: User = Depends(get_current_user), db: AsyncSession =
 def campaign_service_options():
     from sqlalchemy.orm import selectinload
 
-    return (selectinload(campaign_models.Campaign.payout_rule), selectinload(campaign_models.Campaign.rules))
+    return (
+        selectinload(campaign_models.Campaign.payout_rule),
+        selectinload(campaign_models.Campaign.rules),
+        selectinload(campaign_models.Campaign.performance_metrics),
+    )

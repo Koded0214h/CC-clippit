@@ -1,0 +1,5 @@
+# Replace with your real API domain (its DNS A record must point at the VPS).
+# Caddy provisions and renews the HTTPS certificate automatically.
+api.example.com {
+	reverse_proxy 127.0.0.1:8000
+}

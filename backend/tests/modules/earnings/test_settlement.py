@@ -72,7 +72,7 @@ async def test_each_whole_thousand_pays_the_rate(api, intel):
 async def test_partial_thousands_are_never_billed(api, intel):
     _, _, _, sid = await _live_clip(api, intel, rate=500, min_views=0)
     r = await _settle(intel, sid, 999)
-    assert r.status == "skipped" and r.reason == "no_new_thousand"
+    assert r.status == "skipped" and r.reason == "no_new_metric_units"
 
 
 async def test_two_partial_polls_add_up_instead_of_rounding_to_nothing(api, intel):
@@ -88,7 +88,7 @@ async def test_settling_twice_on_the_same_reading_pays_once(api, intel):
     _, _, _, sid = await _live_clip(api, intel, rate=500)
     assert (await _settle(intel, sid, 3000)).status == "accrued"
     again = await _settle(intel, sid)
-    assert again.status == "skipped" and again.reason == "no_new_thousand"
+    assert again.status == "skipped" and again.reason == "no_new_metric_units"
     assert len(await _entries(sid)) == 1
 
 
@@ -109,9 +109,12 @@ async def test_an_entry_records_where_it_came_from(api, intel):
     intel.set_views(sid, 2600)
     await _settle(intel, sid)
     e = (await _entries(sid))[0]
-    assert e.views_total == 2600 and e.billable_views == 2600 and e.thousands == 2
+    # billable_views is what was paid for (the 2 whole thousands), not the raw 2,600 reading.
+    assert e.views_total == 2600 and e.billable_views == 2000 and e.thousands == 2 and e.billable_units == 2000
     assert str(e.snapshot_id) == intel.snapshot[sid]
-    assert e.reference == f"{sid}:2"
+    import uuid as _uuid
+
+    assert e.reference == f"{_uuid.UUID(campaign['id']).hex[:10]}:{_uuid.UUID(sid).hex[:10]}:view:2"
     assert timedelta(days=4, hours=23) < e.payable_at - e.accrued_at <= timedelta(days=5, minutes=1)
 
 
@@ -120,7 +123,8 @@ async def test_billable_views_in_history_are_the_delta_since_the_last_entry(api,
     await _settle(intel, sid, 2000)
     await _settle(intel, sid, 5500)
     first, second = await _entries(sid)
-    assert (first.billable_views, second.billable_views) == (2000, 3500)
+    # Whole thousands billed per entry: 5,500 views = 5 thousands, 2 already billed by the first entry.
+    assert (first.billable_views, second.billable_views) == (2000, 3000)
 
 
 # --- what may earn -----------------------------------------------------------------------------------

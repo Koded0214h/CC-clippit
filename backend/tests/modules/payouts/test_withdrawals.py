@@ -97,7 +97,7 @@ async def test_the_receipt_says_where_the_money_came_from(api, intel):
     p = (await _withdraw(api, creator, 6000)).json()
     receipt = (await api.get(f"/payouts/{p['id']}", headers=auth(creator))).json()
     prov = receipt["provenance"]
-    assert prov["approved_clips"] == 1 and prov["campaigns"] == ["Indomie run"] and prov["billable_views"] == 12_400
+    assert prov["approved_clips"] == 1 and prov["campaigns"] == ["Indomie run"] and prov["billable_views"] == 12_000
     assert prov["sources"] == [{"campaign_title": "Indomie run", "clip": "Hunger interrupted", "amount": 6000}]
 
 

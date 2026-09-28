@@ -1,0 +1,77 @@
+name: backend
+
+on:
+  push:
+    branches: [main]
+    paths: ["backend/**", ".github/workflows/backend.yml"]
+  pull_request:
+    paths: ["backend/**", ".github/workflows/backend.yml"]
+
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      # The suite hard-codes localhost:5433 / clippit:clippit (tests/http_app.py).
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: clippit
+          POSTGRES_PASSWORD: clippit
+          POSTGRES_DB: clippit
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd "pg_isready -U clippit -d clippit"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgresql+asyncpg://clippit:clippit@localhost:5433/clippit
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - run: pip install -r requirements.txt
+      # Proves the migration chain applies cleanly from an empty database.
+      - run: alembic upgrade head
+      - run: pytest -q
+
+  deploy:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure SSH
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H "$VPS_HOST" >> ~/.ssh/known_hosts
+      - name: Sync code
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: |
+          # .env, .venv and var/ live only on the server; excluded paths are
+          # never deleted by --delete.
+          rsync -az --delete \
+            --exclude='.env' --exclude='.venv/' --exclude='var/' \
+            --exclude='__pycache__/' --exclude='tests/' --exclude='service-test/' \
+            backend/ "$VPS_USER@$VPS_HOST:/opt/clippit/backend/"
+      - name: Install, migrate, restart
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+        run: ssh "$VPS_USER@$VPS_HOST" 'bash /opt/clippit/backend/deploy/deploy.sh'
