@@ -9,7 +9,7 @@ import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
 import { ButtonLoader, ClippitLoader } from "@/components/ui/ClippitLoader";
 import { ClippitEmptyState } from "@/components/ui/ClippitEmptyState";
-import { authApi, clearTokens, type UserOut } from "@/lib/api/auth";
+import { authApi, clearTokens, getAccessToken, type UserOut } from "@/lib/api/auth";
 import { ApiError, errorMessage } from "@/lib/api/client";
 import { disputesApi, legalApi, publicProfilesApi, receiptsApi, supportApi, uploadsApi, type DisputeDetailOut, type DisputeOut, type DisputeType, type LegalDocumentOut, type PublicCreatorProfileOut, type PublicCreatorWork, type ReceiptVerifyOut, type TicketDetailOut, type TicketOut } from "@/lib/api/account";
 import { earningsApi, type EarningRow } from "@/lib/api/earnings";
@@ -35,17 +35,25 @@ function Mark() {
   return <Image src="/assets/clippit-mark-light.png" width={38} height={38} alt="" priority />;
 }
 
+function useSessionPresence() {
+  const [hasSession, setHasSession] = useState(false);
+  useEffect(() => setHasSession(Boolean(getAccessToken())), []);
+  return hasSession;
+}
+
 function ServiceFrame({ children, active = "Help" }: { children: ReactNode; active?: "Help" | "Support" | "Legal" | "Account" }) {
+  const hasSession = useSessionPresence();
+  const legalGuest = active === "Legal" && !hasSession;
   return <div className="completion-service">
     <header className="service-bar">
       <Link href="/" className="service-logo"><Mark /><strong>Clippit</strong></Link>
       <nav aria-label="Customer service navigation">
-        <Link className={active === "Help" ? "is-active" : ""} href="/help">Help</Link>
-        <Link className={active === "Support" ? "is-active" : ""} href="/support/tickets">Support</Link>
-        <Link className={active === "Account" ? "is-active" : ""} href="/account/data">Account</Link>
+        <Link className={active === "Help" ? "is-active" : ""} href={legalGuest ? "/auth" : "/help"}>Help</Link>
+        <Link className={active === "Support" ? "is-active" : ""} href={legalGuest ? "/auth" : "/support/tickets"}>Support</Link>
+        <Link className={active === "Account" ? "is-active" : ""} href={legalGuest ? "/auth" : "/account/data"}>Account</Link>
         <Link className={active === "Legal" ? "is-active" : ""} href="/legal">Legal</Link>
       </nav>
-      <Link className="service-workspace" href="/dashboard">Open workspace<ProductIcon name="arrow" /></Link>
+      <Link className="service-workspace" href={hasSession ? "/dashboard" : "/auth"}>{hasSession ? "Open workspace" : "Sign in"}<ProductIcon name="arrow" /></Link>
     </header>
     <main>{children}</main>
   </div>;
@@ -824,13 +832,15 @@ function useLegalVersions() {
 
 export function ProductionLegalCentreScreen() {
   const versions = useLegalVersions();
-  return <ServiceFrame active="Legal"><section className="legal-hero"><div><Status tone="gold">Current product documents</Status><h1>Legal centre</h1><p>Clippit's account, privacy, community and campaign-funding rules.</p></div><div className="legal-stamp"><ProductIcon name="shield" /><strong>{productionLegalDocs.length}</strong><span>current documents</span></div></section><section className="service-content legal-list">{productionLegalDocs.map((doc, index) => { const live = versions[doc.slug]; return <Link href={`/legal/${doc.slug}`} key={doc.slug}><span>{String(index + 1).padStart(2, "0")}</span><p><strong>{live?.title ?? doc.title}</strong><small>{doc.summary}</small></p><time>{live ? `Version ${live.version} · effective ${formatDate(live.effective_date)}` : doc.date}</time><ProductIcon name="arrow" /></Link>; })}<aside className="legal-account-links"><Link href="/account/data"><ProductIcon name="person" />Account data<ProductIcon name="arrow" /></Link><Link href="/consent/update"><ProductIcon name="check" />Accepted documents<ProductIcon name="arrow" /></Link><Link href="/support/tickets/new"><ProductIcon name="brief" />Ask a legal question<ProductIcon name="arrow" /></Link></aside></section></ServiceFrame>;
+  const hasSession = useSessionPresence();
+  return <ServiceFrame active="Legal"><section className="legal-hero"><div><Status tone="gold">Current product documents</Status><h1>Legal centre</h1><p>Clippit's account, privacy, community and campaign-funding rules.</p></div><div className="legal-stamp"><ProductIcon name="shield" /><strong>{productionLegalDocs.length}</strong><span>current documents</span></div></section><section className="service-content legal-list">{productionLegalDocs.map((doc, index) => { const live = versions[doc.slug]; return <Link href={`/legal/${doc.slug}`} key={doc.slug}><span>{String(index + 1).padStart(2, "0")}</span><p><strong>{live?.title ?? doc.title}</strong><small>{doc.summary}</small></p><time>{live ? `Version ${live.version} · effective ${formatDate(live.effective_date)}` : doc.date}</time><ProductIcon name="arrow" /></Link>; })}<aside className="legal-account-links"><Link href={hasSession ? "/account/data" : "/auth"}><ProductIcon name="person" />Account data<ProductIcon name="arrow" /></Link><Link href={hasSession ? "/consent/update" : "/auth"}><ProductIcon name="check" />Accepted documents<ProductIcon name="arrow" /></Link><Link href={hasSession ? "/support/tickets/new" : "/auth"}><ProductIcon name="brief" />Ask a legal question<ProductIcon name="arrow" /></Link></aside></section></ServiceFrame>;
 }
 
 export function ProductionLegalDocumentScreen({ slug }: { slug: string }) {
   const doc = productionLegalDocs.find((item) => item.slug === slug) ?? productionLegalDocs[0];
   const live = useLegalVersions()[doc.slug];
-  return <ServiceFrame active="Legal"><article className="legal-document"><CompletionHead back="/legal" kicker={`Version ${live?.version ?? doc.version}`} title={live?.title ?? doc.title} copy={live ? `Effective ${formatDate(live.effective_date, { day: "numeric", month: "long", year: "numeric" })}` : doc.date} /><div className="legal-document__body"><aside><strong>Contents</strong>{doc.sections.map((section, index) => <a href={`#legal-${index + 1}`} key={section.title}>{index + 1}. {section.title}</a>)}<button onClick={() => window.print()}>Print document<ProductIcon name="brief" /></button></aside><div>{doc.sections.map((section, index) => <section id={`legal-${index + 1}`} key={section.title}><h2>{index + 1}. {section.title}</h2>{section.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}{section.points && <ul>{section.points.map((point) => <li key={point}>{point}</li>)}</ul>}</section>)}<section className="legal-authorities"><h2>Official resources</h2><p>Privacy rights: <a href="https://ndpc.gov.ng/" target="_blank" rel="noreferrer">Nigeria Data Protection Commission</a>. Consumer rights: <a href="https://fccpc.gov.ng/consumers/" target="_blank" rel="noreferrer">Federal Competition and Consumer Protection Commission</a>.</p><p>For a question about your Clippit account, use the in-product support centre.</p><BigAction href="/support/tickets/new" tone="ink">Contact support</BigAction></section></div></div></article></ServiceFrame>;
+  const hasSession = useSessionPresence();
+  return <ServiceFrame active="Legal"><article className="legal-document"><CompletionHead back="/legal" kicker={`Version ${live?.version ?? doc.version}`} title={live?.title ?? doc.title} copy={live ? `Effective ${formatDate(live.effective_date, { day: "numeric", month: "long", year: "numeric" })}` : doc.date} /><div className="legal-document__body"><aside className="legal-toc"><div className="legal-toc__head"><strong>Contents</strong><button onClick={() => window.print()}>Print<ProductIcon name="brief" /></button></div><nav aria-label="Document contents">{doc.sections.map((section, index) => <a href={`#legal-${index + 1}`} key={section.title}><span>{index + 1}</span>{section.title}</a>)}</nav></aside><div>{doc.sections.map((section, index) => <section id={`legal-${index + 1}`} key={section.title}><h2>{index + 1}. {section.title}</h2>{section.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}{section.points && <ul>{section.points.map((point) => <li key={point}>{point}</li>)}</ul>}</section>)}<section className="legal-authorities"><header><span><ProductIcon name="shield" /></span><div><small>Verified public bodies</small><h2>Official resources</h2></div></header><div className="legal-authorities__links"><a href="https://ndpc.gov.ng/" target="_blank" rel="noreferrer"><span><small>Privacy rights</small><strong>Nigeria Data Protection Commission</strong></span><ProductIcon name="arrow" /></a><a href="https://fccpc.gov.ng/consumers/" target="_blank" rel="noreferrer"><span><small>Consumer rights</small><strong>Federal Competition and Consumer Protection Commission</strong></span><ProductIcon name="arrow" /></a></div><footer><p>Need help with your Clippit account or a policy?</p><BigAction href={hasSession ? "/support/tickets/new" : "/auth"} tone="ink">Contact support</BigAction></footer></section></div></div></article></ServiceFrame>;
 }
 
 export function ProductionConsentUpdateScreen() {
