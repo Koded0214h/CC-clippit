@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable react/no-unescaped-entities */
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -21,7 +22,7 @@ import { useAuthFlow } from "./AuthFlowProvider";
 import { Icon } from "@/components/ui/Icon";
 import { isEmail, isStrongPassword, type AccountRole } from "@/lib/auth";
 import { ApiError, API_URL } from "@/lib/api/client";
-import { authApi, storeTokens } from "@/lib/api/auth";
+import { authApi, clearTokens, rememberCurrentDevice, storeTokens, type UserOut } from "@/lib/api/auth";
 import { homeFor, onboardingApi, onboardingFor } from "@/lib/api/onboarding";
 import { saveStoredProfile } from "@/components/ui/ProfilePhotoPicker";
 
@@ -395,6 +396,14 @@ export function SignIn() {
   const [apiError, setApiError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [prefill, setPrefill] = useState("");
+  const [rememberUser, setRememberUser] = useState<UserOut | null>(null);
+  const [rememberEmail, setRememberEmail] = useState("");
+  const [rememberDigits, setRememberDigits] = useState<string[]>(Array(6).fill(""));
+  const [rememberError, setRememberError] = useState("");
+  const [rememberNotice, setRememberNotice] = useState("");
+  const [rememberCooldown, setRememberCooldown] = useState(0);
+  const [rememberSending, setRememberSending] = useState(false);
+  const rememberRefs = useRef<Array<HTMLInputElement | null>>([]);
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
@@ -403,6 +412,12 @@ export function SignIn() {
     });
     return () => window.cancelAnimationFrame(frame);
   }, []);
+
+  useEffect(() => {
+    if (!rememberCooldown) return;
+    const timer = window.setInterval(() => setRememberCooldown((value) => Math.max(0, value - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [rememberCooldown]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -422,10 +437,20 @@ export function SignIn() {
     setIsLoading(true);
     try {
       const result = await authApi.login({ email, password });
-      storeTokens(result);
+      storeTokens(result, "session");
       flow.setEmail(email);
       flow.setRole(result.user.role);
       flow.setCompletion("signin");
+      const remember = data.get("remember") === "on";
+      if (remember && result.user.email_verified) {
+        setRememberUser(result.user);
+        setRememberEmail(email);
+        setRememberDigits(Array(6).fill(""));
+        const sent = await authApi.requestRememberDevice();
+        setRememberCooldown(sent.resend_in || 60);
+        setRememberNotice(`We sent a six-digit code to ${email}.`);
+        return;
+      }
       await routeAfterAuth(router, result.user);
     } catch (err) {
       if (err instanceof ApiError) {
@@ -441,6 +466,131 @@ export function SignIn() {
       setIsLoading(false);
     }
   };
+
+  const updateRememberDigit = (index: number, value: string) => {
+    const digit = value.replace(/\D/g, "").slice(-1);
+    setRememberDigits((current) => current.map((item, position) => position === index ? digit : item));
+    setRememberError("");
+    if (digit && index < 5) rememberRefs.current[index + 1]?.focus();
+  };
+
+  const rememberKeyDown = (index: number, event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Backspace" && !rememberDigits[index] && index > 0) {
+      rememberRefs.current[index - 1]?.focus();
+    }
+  };
+
+  const pasteRememberCode = (event: ClipboardEvent<HTMLDivElement>) => {
+    const incoming = event.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6).split("");
+    if (!incoming.length) return;
+    event.preventDefault();
+    setRememberDigits(Array.from({ length: 6 }, (_, index) => incoming[index] ?? ""));
+    rememberRefs.current[Math.min(incoming.length, 6) - 1]?.focus();
+  };
+
+  const confirmRememberDevice = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!rememberUser) return;
+    const code = rememberDigits.join("");
+    if (code.length !== 6) return setRememberError("Enter all six digits.");
+    setRememberError("");
+    setApiError("");
+    setIsLoading(true);
+    try {
+      await authApi.verifyRememberDevice(code);
+      if (!rememberCurrentDevice()) throw new Error("The signed-in session could not be saved.");
+      await routeAfterAuth(router, rememberUser);
+    } catch (err) {
+      if (err instanceof ApiError) setRememberError(err.detail);
+      else setApiError(err instanceof Error ? err.message : "We couldn't confirm this device.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const resendRememberCode = async () => {
+    if (rememberCooldown || rememberSending) return;
+    setRememberSending(true);
+    setRememberError("");
+    setApiError("");
+    try {
+      const sent = await authApi.requestRememberDevice();
+      setRememberCooldown(sent.resend_in || 60);
+      setRememberNotice(`We sent a new code to ${rememberEmail}.`);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 429) {
+        const wait = Number(/(\d+)\s*s/.exec(err.detail)?.[1] ?? 60);
+        setRememberCooldown(wait);
+        setRememberNotice(`Use the code already sent, or try again in ${wait}s.`);
+      } else {
+        setApiError(err instanceof ApiError ? err.detail : "We couldn't send another code.");
+      }
+    } finally {
+      setRememberSending(false);
+    }
+  };
+
+  const cancelRememberDevice = async () => {
+    try { await authApi.logout(); } catch { /* clear the local session regardless */ }
+    clearTokens();
+    setRememberUser(null);
+    setRememberDigits(Array(6).fill(""));
+    setRememberNotice("");
+    setApiError("");
+  };
+
+  const continueForSession = async () => {
+    if (rememberUser) await routeAfterAuth(router, rememberUser);
+  };
+
+  if (rememberUser) {
+    return (
+      <section className="auth-screen auth-remember-device" aria-label="Confirm this device">
+        <button className="back-link" type="button" onClick={cancelRememberDevice}>
+          <Icon name="back" />Use another account
+        </button>
+        <div className="mail-stamp" aria-hidden="true"><Icon name="mail" /><span>✳</span></div>
+        <Header
+          kicker="Confirm this device"
+          title={<>Check your<br />inbox.</>}
+          intro={<>Enter the code sent to <strong>{rememberEmail}</strong>. After this, this browser stays signed in until you sign out.</>}
+        />
+        <form className="auth-form" onSubmit={confirmRememberDevice}>
+          <fieldset className={`otp-group${rememberError ? " is-invalid" : ""}`}>
+            <legend>Enter your device confirmation code</legend>
+            <div className="otp-inputs" data-otp onPaste={pasteRememberCode}>
+              {rememberDigits.map((digit, index) => (
+                <input
+                  key={index}
+                  ref={(node) => { rememberRefs.current[index] = node; }}
+                  aria-label={`Digit ${index + 1}`}
+                  inputMode="numeric"
+                  autoComplete={index === 0 ? "one-time-code" : "off"}
+                  maxLength={1}
+                  value={digit}
+                  onChange={(event) => updateRememberDigit(index, event.target.value)}
+                  onKeyDown={(event) => rememberKeyDown(index, event)}
+                  required
+                />
+              ))}
+            </div>
+            <small className="otp-error" role="alert">{rememberError}</small>
+          </fieldset>
+          <ApiErrorMessage message={apiError} />
+          <AuthButton loading={isLoading} loadingLabel="Confirming this device">Keep me signed in</AuthButton>
+        </form>
+        {rememberNotice && <p role="status" className="auth-notice auth-notice--quiet">{rememberNotice}</p>}
+        <p className="resend-line">
+          Code not there?{" "}
+          <button type="button" onClick={resendRememberCode} disabled={Boolean(rememberCooldown) || rememberSending}>
+            {rememberSending ? "Sending…" : "Send another"}
+          </button>
+          {rememberCooldown ? <span>{Math.floor(rememberCooldown / 60)}:{String(rememberCooldown % 60).padStart(2, "0")}</span> : null}
+        </p>
+        <button className="remember-session-only" type="button" onClick={continueForSession}>Continue without remembering this device</button>
+      </section>
+    );
+  }
 
   return (
     <section className="auth-screen" aria-labelledby="signin-title">

@@ -133,6 +133,15 @@ class CodeSentResponse(BaseModel):
     resend_in: int
 
 
+class RememberDeviceVerifyRequest(BaseModel):
+    code: str = Field(pattern=r"^\d{6}$")
+
+
+class RememberDeviceOut(BaseModel):
+    remembered: bool = True
+    expires_in_days: int
+
+
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
 
@@ -168,6 +177,7 @@ class SessionOut(BaseModel):
     ip_address: str | None
     created_at: datetime
     last_seen_at: datetime
+    remembered: bool = False
     current: bool
 
 

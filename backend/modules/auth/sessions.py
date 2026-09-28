@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from fastapi import Request
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession as DBSession
 
 from core.security import (
@@ -28,6 +28,7 @@ from core.security import (
 from . import models
 
 REFRESH_TOKEN_DAYS = 30
+REMEMBERED_REFRESH_TOKEN_DAYS = 365
 
 
 def _device_label(request: Request | None) -> str | None:
@@ -62,16 +63,17 @@ async def start_session(db: DBSession, user: models.User, request: Request | Non
     db.add(session)
     await db.flush()
     access_token = create_access_token(user.id, user.role.value, session_id=session.id)
-    refresh_token = await _issue_refresh_token(db, session.id)
+    refresh_token = await _issue_refresh_token(db, session)
     return IssuedTokens(access_token=access_token, refresh_token=refresh_token, session=session)
 
 
-async def _issue_refresh_token(db: DBSession, session_id: uuid.UUID) -> str:
+async def _issue_refresh_token(db: DBSession, session: models.Session) -> str:
     secret = new_refresh_secret()
+    lifetime = REMEMBERED_REFRESH_TOKEN_DAYS if session.remembered_at is not None else REFRESH_TOKEN_DAYS
     row = models.RefreshToken(
-        session_id=session_id,
+        session_id=session.id,
         secret_hash=hash_refresh_secret(secret),
-        expires_at=datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_DAYS),
+        expires_at=datetime.now(timezone.utc) + timedelta(days=lifetime),
     )
     db.add(row)
     await db.flush()
@@ -115,11 +117,37 @@ async def rotate(db: DBSession, refresh_token: str) -> IssuedTokens:
 
     row.used_at = now
     session.last_seen_at = now
-    new_token = await _issue_refresh_token(db, session.id)
+    new_token = await _issue_refresh_token(db, session)
     new_id = uuid.UUID(new_token.split(".", 1)[0])
     row.replaced_by_id = new_id
     access_token = create_access_token(user.id, user.role.value, session_id=session.id)
     return IssuedTokens(access_token=access_token, refresh_token=new_token, session=session)
+
+
+async def remember_session(
+    db: DBSession, user_id: uuid.UUID, session_id: uuid.UUID
+) -> models.Session | None:
+    """Marks one verified browser session as persistent.
+
+    Existing, unused refresh credentials for the session are extended too,
+    so the token issued by the login that started the verification flow can
+    be promoted by the client without being replaced or exposed again.
+    """
+    session = await db.get(models.Session, session_id)
+    if session is None or session.user_id != user_id or session.revoked_at is not None:
+        return None
+
+    now = datetime.now(timezone.utc)
+    session.remembered_at = now
+    await db.execute(
+        update(models.RefreshToken)
+        .where(
+            models.RefreshToken.session_id == session.id,
+            models.RefreshToken.used_at.is_(None),
+        )
+        .values(expires_at=now + timedelta(days=REMEMBERED_REFRESH_TOKEN_DAYS))
+    )
+    return session
 
 
 async def list_sessions(db: DBSession, user_id: uuid.UUID) -> list[models.Session]:

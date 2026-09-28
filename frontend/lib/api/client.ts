@@ -1,4 +1,5 @@
 import { AUTH_PROTECTION_ENABLED } from "@/lib/auth-protection";
+import { clearStoredTokens, getAccessToken, getRefreshToken, updateTokenPair } from "./tokenStorage";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://api.clippit.click";
 
@@ -21,10 +22,7 @@ export function errorMessage(err: unknown, fallback = "Something went wrong. Ple
 
 
 async function request<T>(path: string, init: RequestInit = {}, isRetry = false): Promise<T> {
-  const token =
-    typeof window !== "undefined"
-      ? localStorage.getItem("clippit:access-token")
-      : null;
+  const token = getAccessToken();
 
   const headers: Record<string, string> = {
     ...(init.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
@@ -41,10 +39,7 @@ async function request<T>(path: string, init: RequestInit = {}, isRetry = false)
       path !== "/auth/refresh" &&
       path !== "/auth/login"
     ) {
-      const refreshToken =
-        typeof window !== "undefined"
-          ? localStorage.getItem("clippit:refresh-token")
-          : null;
+      const refreshToken = getRefreshToken();
       if (refreshToken) {
         try {
           const refreshRes = await fetch(`${API_URL}/auth/refresh`, {
@@ -54,9 +49,7 @@ async function request<T>(path: string, init: RequestInit = {}, isRetry = false)
           });
           if (refreshRes.ok) {
             const data = await refreshRes.json();
-            localStorage.setItem("clippit:access-token", data.access_token);
-            if (data.refresh_token)
-              localStorage.setItem("clippit:refresh-token", data.refresh_token);
+            updateTokenPair(data);
             return request<T>(path, init, true);
           }
         } catch {
@@ -64,8 +57,7 @@ async function request<T>(path: string, init: RequestInit = {}, isRetry = false)
         }
       }
       if (typeof window !== "undefined") {
-        localStorage.removeItem("clippit:access-token");
-        localStorage.removeItem("clippit:refresh-token");
+        clearStoredTokens();
         if (AUTH_PROTECTION_ENABLED) window.location.href = "/auth/sign-in";
       }
       throw new ApiError(401, "Session expired");
@@ -92,9 +84,7 @@ async function request<T>(path: string, init: RequestInit = {}, isRetry = false)
 const inFlightGets = new Map<string, Promise<unknown>>();
 
 function get<T>(path: string): Promise<T> {
-  const token = typeof window !== "undefined"
-    ? localStorage.getItem("clippit:access-token")
-    : null;
+  const token = getAccessToken();
   const key = `${token ?? "anonymous"}:${path}`;
   const existing = inFlightGets.get(key) as Promise<T> | undefined;
   if (existing) return existing;

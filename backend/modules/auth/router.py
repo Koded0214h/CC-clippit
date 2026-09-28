@@ -138,6 +138,7 @@ def _session_out(session: models.Session, current_id: uuid.UUID | None) -> schem
         ip_address=session.ip_address,
         created_at=session.created_at,
         last_seen_at=session.last_seen_at,
+        remembered=session.remembered_at is not None,
         current=session.id == current_id,
     )
 
@@ -182,6 +183,68 @@ async def revoke_one_session(
 @router.get("/me", response_model=schemas.UserOut)
 async def me(user: models.User = Depends(get_current_user)):
     return schemas.UserOut.model_validate(user)
+
+
+# --- remembered devices -----------------------------------------------------
+
+
+def _session_id_from_token(token: str | None) -> uuid.UUID | None:
+    payload = decode_access_token(token) if token else None
+    sid = payload.get("sid") if payload else None
+    try:
+        return uuid.UUID(sid) if sid else None
+    except (TypeError, ValueError):
+        return None
+
+
+@router.post("/remember-device/request", response_model=schemas.CodeSentResponse)
+@limiter.limit("6/minute")
+async def request_remember_device(
+    request: Request,
+    user: models.User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    sender: EmailSender = Depends(get_email_sender),
+):
+    if not user.email_verified:
+        raise HTTPException(status.HTTP_409_CONFLICT, "Confirm your email before remembering this device.")
+
+    cooldown = get_settings().otp_resend_cooldown_seconds
+    try:
+        code = await codes.issue_code(db, user, models.AuthCodePurpose.remember_device)
+    except codes.CooldownActive as exc:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            exc.message,
+            headers={"Retry-After": str(exc.retry_after)},
+        ) from exc
+    await db.commit()
+    await _deliver(sender, emails.remember_device_email(user.email, code))
+    return schemas.CodeSentResponse(resend_in=cooldown)
+
+
+@router.post("/remember-device/verify", response_model=schemas.RememberDeviceOut)
+@limiter.limit("10/minute")
+async def verify_remember_device(
+    request: Request,
+    payload: schemas.RememberDeviceVerifyRequest,
+    user: models.User = Depends(get_current_user),
+    token: str | None = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db),
+):
+    session_id = _session_id_from_token(token)
+    if session_id is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "This session cannot be remembered. Sign in again.")
+
+    try:
+        await codes.check_code(db, user, models.AuthCodePurpose.remember_device, payload.code)
+    except codes.CodeError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, exc.message) from exc
+
+    session = await sessions.remember_session(db, user.id, session_id)
+    if session is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "This session is no longer active. Sign in again.")
+    await db.commit()
+    return schemas.RememberDeviceOut(expires_in_days=sessions.REMEMBERED_REFRESH_TOKEN_DAYS)
 
 
 # --- Email verification -----------------------------------------------------
