@@ -1,6 +1,6 @@
 import { AUTH_PROTECTION_ENABLED } from "@/lib/auth-protection";
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://clippit-5b5j.onrender.com";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "https://api.clippit.click";
 
 export class ApiError extends Error {
   constructor(

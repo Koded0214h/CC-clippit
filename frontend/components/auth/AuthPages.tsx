@@ -20,7 +20,7 @@ import {
 import { useAuthFlow } from "./AuthFlowProvider";
 import { Icon } from "@/components/ui/Icon";
 import { isEmail, isStrongPassword, type AccountRole } from "@/lib/auth";
-import { ApiError } from "@/lib/api/client";
+import { ApiError, API_URL } from "@/lib/api/client";
 import { authApi, storeTokens } from "@/lib/api/auth";
 import { homeFor, onboardingApi, onboardingFor } from "@/lib/api/onboarding";
 import { saveStoredProfile } from "@/components/ui/ProfilePhotoPicker";
@@ -318,7 +318,7 @@ export function SignUpDetails({ role }: { role: AccountRole }) {
         <GoogleAuthButton
           intent="signup"
           onClick={() => {
-            window.location.href = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/auth/google/login?role=${role}`;
+            window.location.href = `${API_URL}/auth/google/login?role=${role}`;
           }}
         />
         <AuthDivider />
@@ -463,7 +463,7 @@ export function SignIn() {
         <GoogleAuthButton
           intent="signin"
           onClick={() => {
-            window.location.href = `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}/auth/google/login`;
+            window.location.href = `${API_URL}/auth/google/login`;
           }}
         />
         <AuthDivider />
