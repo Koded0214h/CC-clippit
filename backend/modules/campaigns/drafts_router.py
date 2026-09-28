@@ -95,7 +95,10 @@ async def patch_draft(
 
     changes = payload.model_dump(mode="json", exclude_unset=True, exclude={"revision", "step"})
     answers = dict(draft.draft_answers or {})
-    answers.update({k: v for k, v in changes.items() if v is not None})
+    # `exclude_unset` already separates an omitted answer from one the brand
+    # explicitly cleared. Keep explicit nulls so optional values such as a
+    # duration, conversion setup or source link can actually be removed.
+    answers.update(changes)
     draft.draft_answers = answers
     if payload.step is not None:
         draft.current_step = payload.step

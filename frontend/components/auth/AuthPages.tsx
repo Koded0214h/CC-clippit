@@ -167,8 +167,8 @@ export function SignUpChoice() {
         <AuthButton>Continue</AuthButton>
       </form>
       <p className="auth-legal">
-        By continuing, you agree to Clippit's <Link href="/terms">Terms</Link>{" "}
-        and <Link href="/privacy">Privacy Policy</Link>.
+        By continuing, you agree to Clippit's <Link href="/legal/terms">Terms</Link>{" "}
+        and <Link href="/legal/privacy">Privacy Policy</Link>.
       </p>
     </section>
   );

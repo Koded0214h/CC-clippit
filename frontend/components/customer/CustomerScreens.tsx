@@ -233,23 +233,13 @@ export function BrandNotificationsScreen() {
   </div>;
 }
 
-const FALLBACK_BANKS: BankOut[] = [
-  { code: "058", name: "GTBank" },
-  { code: "044", name: "Access Bank" },
-  { code: "011", name: "First Bank" },
-  { code: "090267", name: "Kuda" },
-  { code: "100004", name: "OPay" },
-  { code: "033", name: "UBA" },
-  { code: "057", name: "Zenith Bank" },
-];
-
 export function PayoutAccountScreen() {
   const [step, setStep] = useState(0);
   const [existing, setExisting] = useState<BankAccountOut | null | undefined>(undefined);
   const [editing, setEditing] = useState(false);
-  const [bankList, setBankList] = useState<BankOut[]>(FALLBACK_BANKS);
+  const [bankList, setBankList] = useState<BankOut[]>([]);
   const [banksNote, setBanksNote] = useState("");
-  const [selectedBank, setSelectedBank] = useState<BankOut>(FALLBACK_BANKS[0]);
+  const [selectedBank, setSelectedBank] = useState<BankOut | null>(null);
   const [account, setAccount] = useState("");
   const [resolution, setResolution] = useState<{ key: string; name: string | null; error: string } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -263,25 +253,27 @@ export function PayoutAccountScreen() {
         const sorted = [...data].sort((a, b) => a.name.localeCompare(b.name));
         setBankList(sorted);
         setSelectedBank(sorted[0]);
+      } else {
+        setBanksNote("No banks are currently available. Try again shortly.");
       }
-    }).catch(() => setBanksNote("Showing popular banks while the full list loads."));
+    }).catch((err) => setBanksNote(err instanceof ApiError ? err.detail : "We couldn't load the bank list."));
   }, []);
 
-  const resolveKey = `${selectedBank.code}:${account}`;
+  const resolveKey = `${selectedBank?.code ?? ""}:${account}`;
   const current = account.length === 10 && resolution?.key === resolveKey ? resolution : null;
   const resolving = account.length === 10 && !current;
   const resolvedName = current?.name ?? null;
   const resolveError = current?.error ?? "";
 
   useEffect(() => {
-    if (account.length !== 10) return;
+    if (account.length !== 10 || !selectedBank) return;
     let cancelled = false;
     const key = `${selectedBank.code}:${account}`;
     bankDetailsApi.resolve(selectedBank.code, account)
       .then((data) => { if (!cancelled) setResolution({ key, name: data.account_name, error: "" }); })
       .catch((err) => { if (!cancelled) setResolution({ key, name: null, error: err instanceof ApiError ? err.detail : "We couldn't check that account. Try again." }); });
     return () => { cancelled = true; };
-  }, [account, selectedBank.code]);
+  }, [account, selectedBank]);
 
   const toConfirm = (event: FormEvent) => {
     event.preventDefault();
@@ -290,6 +282,7 @@ export function PayoutAccountScreen() {
 
   const saveAndVerify = async (event: FormEvent) => {
     event.preventDefault();
+    if (!selectedBank) return;
     setSaving(true);
     setError("");
     try {
@@ -354,15 +347,15 @@ export function PayoutAccountScreen() {
   }
 
   const maskedAccount = account.length >= 4 ? `•••• ••${account.slice(-4)}` : account;
-  const canSubmit = account.length === 10 && !resolving && resolvedName !== null;
+  const canSubmit = !!selectedBank && account.length === 10 && !resolving && resolvedName !== null;
   const displayName = resolvedName ?? (resolving ? "Checking account" : resolveError || "Enter all 10 digits to resolve the name");
 
   return <div className="dashboard-page customer-page payout-account-page">
     <ScreenHead title={step === 2 ? "Bank account verified" : "Payout account"} copy={step === 2 ? "Payable earnings can now move to this account." : "Add the Nigerian bank account where your withdrawals should land."} back="/dashboard/settings" />
     <div className="bank-setup-layout">
       <aside className="bank-setup-rail"><div>{["Account", "Confirm", "Verified"].map((item, index) => <span className={index <= step ? "is-done" : ""} key={item}><i>{index < step ? <ProductIcon name="check" /> : index + 1}</i><b>{item}</b></span>)}</div><Image src="/assets/illustrations/clippit-icons/withdraw-bank.webp" alt="" width={520} height={520} /></aside>
-      {step === 0 && <form className="bank-setup-sheet" onSubmit={toConfirm}><header><span><ProductIcon name="bank" /></span><div><h2>Where should your money land?</h2><p>Use an account in your own name.</p></div></header><label><span>Bank</span><select value={selectedBank.code} onChange={(event) => { const found = bankList.find((b) => b.code === event.target.value); if (found) setSelectedBank(found); }}>{bankList.map((b) => <option key={b.code} value={b.code}>{b.name}</option>)}</select>{banksNote && <small>{banksNote}</small>}</label><label><span>Account number</span><input value={account} onChange={(event) => setAccount(event.target.value.replace(/\D/g, "").slice(0, 10))} inputMode="numeric" placeholder="10-digit account number" /><small>{account.length}/10</small></label><div className={`account-resolution${resolvedName ? " is-resolved" : ""}${resolving ? " is-loading" : ""}${resolveError ? " is-error" : ""}`}><span>{resolvedName ? <ProductIcon name="check" /> : resolving ? <ClippitMarkMotion compact /> : <ProductIcon name="person" />}</span><p><small>Account holder</small><strong>{displayName}</strong></p></div><button className="lime-button" type="submit" disabled={!canSubmit}>Confirm this account<ProductIcon name="arrow" /></button>{existing && <button className="customer-text-button" type="button" onClick={() => setEditing(false)}>Keep my current account</button>}</form>}
-      {step === 1 && <form className="bank-setup-sheet bank-confirm-sheet" onSubmit={saveAndVerify}><header><span><ProductIcon name="shield" /></span><div><h2>Is this your account?</h2><p>We&apos;ll save it and confirm the details with your bank. {existing ? "This replaces your current payout account." : ""}</p></div></header><div className="bank-confirm-card"><small>New payout account</small><strong>{selectedBank.name}</strong><b>{maskedAccount}</b><span>{resolvedName}</span></div>{error && <p className="auth-error" role="alert">{error}</p>}<button className="lime-button" type="submit" disabled={saving} aria-busy={saving}>{saving ? <ButtonLoader label="Verifying with your bank" /> : <>Save and verify<ProductIcon name="arrow" /></>}</button><button className="customer-text-button" type="button" onClick={() => setStep(0)}>Use a different account</button></form>}
+      {step === 0 && <form className="bank-setup-sheet" onSubmit={toConfirm}><header><span><ProductIcon name="bank" /></span><div><h2>Where should your money land?</h2><p>Use an account in your own name.</p></div></header><label><span>Bank</span><select value={selectedBank?.code ?? ""} disabled={!bankList.length} onChange={(event) => { const found = bankList.find((b) => b.code === event.target.value); if (found) setSelectedBank(found); }}><option value="" disabled>{bankList.length ? "Choose a bank" : "Loading banks..."}</option>{bankList.map((b) => <option key={b.code} value={b.code}>{b.name}</option>)}</select>{banksNote && <small>{banksNote}</small>}</label><label><span>Account number</span><input value={account} disabled={!selectedBank} onChange={(event) => setAccount(event.target.value.replace(/\D/g, "").slice(0, 10))} inputMode="numeric" placeholder="10-digit account number" /><small>{account.length}/10</small></label><div className={`account-resolution${resolvedName ? " is-resolved" : ""}${resolving ? " is-loading" : ""}${resolveError ? " is-error" : ""}`}><span>{resolvedName ? <ProductIcon name="check" /> : resolving ? <ClippitMarkMotion compact /> : <ProductIcon name="person" />}</span><p><small>Account holder</small><strong>{displayName}</strong></p></div><button className="lime-button" type="submit" disabled={!canSubmit}>Confirm this account<ProductIcon name="arrow" /></button>{existing && <button className="customer-text-button" type="button" onClick={() => setEditing(false)}>Keep my current account</button>}</form>}
+      {step === 1 && selectedBank && <form className="bank-setup-sheet bank-confirm-sheet" onSubmit={saveAndVerify}><header><span><ProductIcon name="shield" /></span><div><h2>Is this your account?</h2><p>We&apos;ll save it and confirm the details with your bank. {existing ? "This replaces your current payout account." : ""}</p></div></header><div className="bank-confirm-card"><small>New payout account</small><strong>{selectedBank.name}</strong><b>{maskedAccount}</b><span>{resolvedName}</span></div>{error && <p className="auth-error" role="alert">{error}</p>}<button className="lime-button" type="submit" disabled={saving} aria-busy={saving}>{saving ? <ButtonLoader label="Verifying with your bank" /> : <>Save and verify<ProductIcon name="arrow" /></>}</button><button className="customer-text-button" type="button" onClick={() => setStep(0)}>Use a different account</button></form>}
       {step === 2 && verified && <section className="bank-verified-sheet"><div className="bank-verified-seal"><ProductIcon name="check" /><i /><i /></div><small>{verified.verified ? "Verified payout destination" : "Saved — verification pending"}</small><h2>{verified.bank_name}</h2><strong>{verified.account_number_masked}</strong><p>{verified.account_name ?? resolvedName}</p><dl><div><dt>Currency</dt><dd>Nigerian naira</dd></div><div><dt>Transfer time</dt><dd>Within 24 hours</dd></div><div><dt>Security</dt><dd>{verified.verified ? "Confirmed with your bank" : "Awaiting bank confirmation"}</dd></div></dl><Link className="lime-button" href="/dashboard/withdraw">Withdraw money<ProductIcon name="arrow" /></Link></section>}
     </div>
   </div>;

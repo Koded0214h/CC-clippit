@@ -92,7 +92,9 @@ async def test_a_brand_funds_a_campaign_a_creator_earns_and_is_paid(api, intel):
     await api.put("/creators/me/bank-details", headers=auth(creator), json={"bank_code": "058", "bank_name": "Guaranty Trust Bank", "account_number": "0123456789"})
     assert (await api.post("/creators/me/bank-details/verify", headers=auth(creator))).json()["verified"] is True
     payout = (await api.post("/payouts", headers=auth(creator), json={"amount": 6000, "idempotency_key": "confirm-screen-e2e"})).json()
-    assert payout["status"] == "succeeded" and payout["net"] == 5580 and payout["provenance"]["billable_views"] == 12_400
+    # Views are paid in complete 1,000-view blocks. The 400-view remainder
+    # stays visible in analytics but is not part of this payout's provenance.
+    assert payout["status"] == "succeeded" and payout["net"] == 5580 and payout["provenance"]["billable_views"] == 12_000
 
     money = (await api.get("/earnings/summary", headers=auth(creator))).json()
     assert money["payable"] == 0 and money["paid_all_time"] == 6000 and money["completed_payouts"] == 1

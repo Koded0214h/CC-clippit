@@ -46,6 +46,7 @@ from core.money import ZERO, to_decimal, whole_thousands
 from modules.audit import service as audit
 from modules.campaigns import models as campaign_models
 from modules.campaigns import service as campaign_service
+from modules.performance import service as performance_service
 from modules.submissions.models import Submission, SubmissionStatus, VerificationStatus
 
 from . import models
@@ -69,7 +70,7 @@ def _skip(reason: str) -> Settlement:
     return Settlement(status="skipped", reason=reason)
 
 
-async def _performance(client: httpx.AsyncClient, submission_id: uuid.UUID) -> tuple[int, uuid.UUID | None] | None:
+async def _performance(client: httpx.AsyncClient, submission_id: uuid.UUID) -> tuple[dict, uuid.UUID | None] | None:
     try:
         resp = await client.get(f"/internal/submissions/{submission_id}/performance")
     except httpx.HTTPError as exc:
@@ -79,11 +80,11 @@ async def _performance(client: httpx.AsyncClient, submission_id: uuid.UUID) -> t
     if resp.status_code >= 400:
         raise IntelligenceUnavailable(f"performance returned {resp.status_code}")
     data = resp.json()
-    views = (data.get("metrics") or {}).get("views")
-    if views is None:
+    metrics = data.get("metrics") or {}
+    if not any(metrics.get(name) is not None for name in ("views", "comments", "shares")):
         return None
     snapshot = (data.get("provenance") or {}).get("snapshot_id")
-    return int(views), (uuid.UUID(snapshot) if snapshot else None)
+    return metrics, (uuid.UUID(snapshot) if snapshot else None)
 
 
 async def _trust_status(client: httpx.AsyncClient, submission_id: uuid.UUID) -> str:
@@ -116,7 +117,10 @@ async def settle_submission(
     # the pot check below cannot race another submission's.
     campaign = await db.scalar(
         select(campaign_models.Campaign)
-        .options(selectinload(campaign_models.Campaign.payout_rule))
+        .options(
+            selectinload(campaign_models.Campaign.payout_rule),
+            selectinload(campaign_models.Campaign.performance_metrics),
+        )
         .where(campaign_models.Campaign.id == submission.campaign_id)
         .with_for_update()
     )
@@ -127,8 +131,13 @@ async def settle_submission(
 
     observed = await _performance(client, submission_id)
     if observed is None:
-        return _skip("no_observations")
-    views, snapshot_id = observed
+        if any(metric.metric_type in ("visit", "signup", "lead", "purchase") for metric in campaign.performance_metrics):
+            observed_metrics, snapshot_id = {}, None
+        else:
+            return _skip("no_observations")
+    else:
+        observed_metrics, snapshot_id = observed
+    views = int(observed_metrics.get("views") or 0)
 
     account = await db.scalar(select(models.EarningAccount).where(models.EarningAccount.submission_id == submission_id))
     if account is None:
@@ -161,6 +170,27 @@ async def settle_submission(
     if account.blocked_reason == "trust_flagged":
         account.blocked_reason = None
         audit.record(db, "earnings.unblocked", submission_id=submission_id, campaign_id=campaign.id)
+
+    if campaign.performance_metrics:
+        await performance_service.record_social_snapshot(
+            db,
+            campaign_id=campaign.id,
+            creator_id=submission.creator_id,
+            submission_id=submission.id,
+            snapshot_id=snapshot_id,
+            metrics=observed_metrics,
+            occurred_at=at,
+        )
+        await db.flush()
+        return await _settle_configured_metrics(
+            db,
+            campaign=campaign,
+            submission=submission,
+            legacy_account=account,
+            snapshot_id=snapshot_id,
+            at=at,
+            client=client,
+        )
 
     previous_views = int(account.cumulative_views)
     effective = max(views, previous_views)  # a downward revision never claws money back
@@ -257,6 +287,165 @@ async def settle_submission(
         # Not even one more thousand is affordable: the campaign is done.
         await campaign_service.close_campaign(db, campaign, campaign_models.CloseReason.pot_empty, actor_id=None, client=client)
     return Settlement(status="accrued", amount=amount, thousands=new_thousands)
+
+
+async def _settle_configured_metrics(
+    db: AsyncSession,
+    *,
+    campaign: campaign_models.Campaign,
+    submission: Submission,
+    legacy_account: models.EarningAccount,
+    snapshot_id: uuid.UUID | None,
+    at: datetime,
+    client: httpx.AsyncClient,
+) -> Settlement:
+    """Settle every outcome selected by the brand from one event ledger."""
+    rows = await db.execute(
+        select(
+            campaign_models.PerformanceEvent.event_type,
+            func.coalesce(func.sum(campaign_models.PerformanceEvent.quantity), 0),
+        )
+        .where(
+            campaign_models.PerformanceEvent.campaign_id == campaign.id,
+            campaign_models.PerformanceEvent.creator_id == submission.creator_id,
+            campaign_models.PerformanceEvent.submission_id == submission.id,
+            campaign_models.PerformanceEvent.verification_status.in_(("verified", "confirmed")),
+            campaign_models.PerformanceEvent.fraud_status == "clear",
+        )
+        .group_by(campaign_models.PerformanceEvent.event_type)
+    )
+    totals = {event_type: int(total) for event_type, total in rows}
+    spent = to_decimal(
+        await db.scalar(
+            select(func.coalesce(func.sum(models.EarningEntry.amount), 0)).where(
+                models.EarningEntry.campaign_id == campaign.id
+            )
+        )
+    )
+    total_amount = ZERO
+    total_batches = 0
+
+    for metric in campaign.performance_metrics:
+        observed_total = totals.get(metric.metric_type, 0)
+        cursor = await db.scalar(
+            select(models.MetricEarningAccount)
+            .where(
+                models.MetricEarningAccount.campaign_id == campaign.id,
+                models.MetricEarningAccount.creator_id == submission.creator_id,
+                models.MetricEarningAccount.submission_id == submission.id,
+                models.MetricEarningAccount.metric_type == metric.metric_type,
+            )
+            .with_for_update()
+        )
+        if cursor is None:
+            cursor = models.MetricEarningAccount(
+                campaign_id=campaign.id,
+                creator_id=submission.creator_id,
+                submission_id=submission.id,
+                metric_type=metric.metric_type,
+            )
+            db.add(cursor)
+            await db.flush()
+        cursor.observed_total = max(cursor.observed_total, observed_total)
+        cursor.last_settled_at = at
+        if observed_total < metric.min_threshold:
+            continue
+        available_batches = observed_total // metric.unit_size - cursor.billed_batches
+        if available_batches <= 0:
+            continue
+
+        rate = to_decimal(metric.rate_amount)
+        if rate <= 0:
+            continue
+        if campaign.payout_rule.cap_amount is not None:
+            creator_earned = to_decimal(
+                await db.scalar(
+                    select(func.coalesce(func.sum(models.EarningEntry.amount), 0)).where(
+                        models.EarningEntry.campaign_id == campaign.id,
+                        models.EarningEntry.creator_id == submission.creator_id,
+                    )
+                )
+            )
+            room = to_decimal(campaign.payout_rule.cap_amount) - creator_earned
+            available_batches = min(
+                available_batches,
+                max(int((room / rate).to_integral_value(rounding=ROUND_FLOOR)), 0),
+            )
+        if metric.metric_type in ("view", "comment", "share") and campaign.payout_rule.video_cap_amount is not None:
+            video_earned = to_decimal(
+                await db.scalar(
+                    select(func.coalesce(func.sum(models.EarningEntry.amount), 0)).where(
+                        models.EarningEntry.submission_id == submission.id
+                    )
+                )
+            )
+            room = to_decimal(campaign.payout_rule.video_cap_amount) - video_earned
+            available_batches = min(
+                available_batches,
+                max(int((room / rate).to_integral_value(rounding=ROUND_FLOOR)), 0),
+            )
+        pot_room = to_decimal(campaign.pot_amount) - spent
+        available_batches = min(
+            available_batches,
+            max(int((pot_room / rate).to_integral_value(rounding=ROUND_FLOOR)), 0),
+        )
+        if available_batches <= 0:
+            continue
+
+        amount = rate * available_batches
+        billed_units = available_batches * metric.unit_size
+        next_cursor = cursor.billed_batches + available_batches
+        entry = models.EarningEntry(
+            submission_id=submission.id,
+            campaign_id=campaign.id,
+            creator_id=submission.creator_id,
+            amount=amount,
+            metric_type=metric.metric_type,
+            billable_units=billed_units,
+            unit_size=metric.unit_size,
+            billable_views=billed_units if metric.metric_type == "view" else 0,
+            views_total=observed_total if metric.metric_type == "view" else 0,
+            thousands=available_batches,
+            snapshot_id=snapshot_id if metric.metric_type in ("view", "comment", "share") else None,
+            reference=(
+                f"{campaign.id.hex[:10]}:{submission.id.hex[:10]}:"
+                f"{metric.metric_type}:{next_cursor}"
+            ),
+            accrued_at=at,
+            payable_at=at + timedelta(days=get_settings().earnings_hold_days),
+        )
+        db.add(entry)
+        cursor.billed_batches = next_cursor
+        cursor.accrued_amount = to_decimal(cursor.accrued_amount) + amount
+        spent += amount
+        total_amount += amount
+        total_batches += available_batches
+        if metric.metric_type == "view":
+            legacy_account.cumulative_views = max(legacy_account.cumulative_views, observed_total)
+            legacy_account.billed_thousands = observed_total // 1000
+            legacy_account.last_snapshot_id = snapshot_id
+        legacy_account.accrued_amount = to_decimal(legacy_account.accrued_amount) + amount
+        audit.record(
+            db,
+            "earnings.accrued",
+            submission_id=submission.id,
+            campaign_id=campaign.id,
+            subject_id=submission.creator_id,
+            amount=amount,
+            metric=metric.metric_type,
+            units=billed_units,
+        )
+        await db.flush()
+
+    legacy_account.last_settled_at = at
+    if spent >= to_decimal(campaign.pot_amount):
+        legacy_account.blocked_reason = "pot_exhausted"
+        await campaign_service.close_campaign(
+            db, campaign, campaign_models.CloseReason.pot_empty, actor_id=None, client=client
+        )
+    if total_amount > ZERO:
+        return Settlement(status="accrued", amount=total_amount, thousands=total_batches)
+    return _skip("no_new_metric_units")
 
 
 async def settle_campaign(db: AsyncSession, campaign_id: uuid.UUID, client: httpx.AsyncClient) -> int:

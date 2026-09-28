@@ -39,6 +39,9 @@ class EarningRow(BaseModel):
     campaign_title: str
     brand: str | None
     billable_views: int
+    metric_type: str = "view"
+    billable_units: int = 0
+    unit_size: int = 1000
     amount: Money
     #: Accrued | Payable | Processing | Paid
     state: str
@@ -69,6 +72,10 @@ class EarningEntryDetail(BaseModel):
     views_total: int
     thousands: int
     rate_per_1000_views: float
+    metric_type: str = "view"
+    billable_units: int = 0
+    unit_size: int = 1000
+    rate_amount: float = 0
     cap_amount: float | None
     amount: Money
     #: Payable | Accrued | Processing | Paid — see EarningRow's state.

@@ -21,7 +21,7 @@ from modules.auth.deps import get_current_user, get_verified_user
 from modules.auth.models import Platform as AuthPlatform
 from modules.auth.models import Role, SocialAccount, User
 from modules.campaigns import service as campaign_service
-from modules.campaigns.models import Campaign, CampaignStatus
+from modules.campaigns.models import AttributionLink, Campaign, CampaignStatus, PerformanceEvent
 from modules.earnings.models import EarningAccount, EarningEntry
 from modules.intelligence.contracts import PerformanceResult, SubmissionRef
 from modules.uploads.router import owned_upload
@@ -125,6 +125,24 @@ async def _register(
     )
     db.add(submission)
     await db.flush()  # assigns submission.id (client-side default) before we reference it below
+    unbound_links = await db.scalars(
+        select(AttributionLink).where(
+            AttributionLink.campaign_id == campaign.id,
+            AttributionLink.creator_id == user.id,
+            AttributionLink.submission_id.is_(None),
+            AttributionLink.active.is_(True),
+        )
+    )
+    for attribution_link in unbound_links:
+        attribution_link.submission_id = submission.id
+        unbound_events = await db.scalars(
+            select(PerformanceEvent).where(
+                PerformanceEvent.attribution_link_id == attribution_link.id,
+                PerformanceEvent.submission_id.is_(None),
+            )
+        )
+        for performance_event in unbound_events:
+            performance_event.submission_id = submission.id
 
     ref = SubmissionRef(
         submission_id=submission.id, campaign_id=campaign.id, creator_id=user.id, platform=platform, url=url

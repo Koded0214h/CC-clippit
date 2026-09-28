@@ -236,7 +236,109 @@
 .builder-progress > div { display: flex; align-items: center; justify-content: space-between; padding-right: 20px; border-right: 1px solid var(--brand-line); }
 .builder-progress > div span { font-family: var(--marker); font-size: 12px; }
 .builder-progress > div strong { font-size: 11px; }
-.builder-progress nav { display: grid; grid-template-columns: repeat(6, 1fr); }
+.builder-progress nav { display: grid; grid-template-columns: repeat(7, 1fr); }
+
+/* Multi-outcome campaign studio --------------------------------------- */
+.metric-studio { display: grid; gap: 24px; margin-top: 40px; }
+.metric-studio__rail { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.metric-studio__rail article { overflow: hidden; background: #fff; border: 1px solid var(--brand-line); border-radius: 16px; transition: border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease; }
+.metric-studio__rail article.is-selected { border-color: var(--brand-ink); box-shadow: 5px 6px 0 var(--brand-gold); transform: translate(-2px, -2px); }
+.metric-studio__rail article > button { display: grid; grid-template-columns: 46px minmax(0, 1fr) 24px; align-items: center; gap: 12px; width: 100%; min-height: 92px; padding: 14px; text-align: left; background: transparent; border: 0; }
+.metric-studio__rail article > button > span { display: grid; place-items: center; width: 46px; height: 46px; color: #fff; background: var(--brand-ink); border-radius: 14px; transform: rotate(-2deg); }
+.metric-studio__rail article:nth-child(3n+2) > button > span { color: var(--brand-ink); background: var(--brand-gold); transform: rotate(2deg); }
+.metric-studio__rail article:nth-child(3n) > button > span { color: var(--brand-ink); background: var(--brand-lime); }
+.metric-studio__rail article > button svg { width: 21px; }
+.metric-studio__rail article > button p { display: grid; gap: 4px; margin: 0; }
+.metric-studio__rail article > button strong { font-size: 14px; line-height: 1.1; }
+.metric-studio__rail article > button small { color: #687063; font-size: 9px; line-height: 1.4; }
+.metric-studio__rail article > button > i { display: grid; place-items: center; width: 23px; height: 23px; background: var(--brand-lime); border: 1px solid var(--brand-ink); border-radius: 50%; }
+.metric-studio__rail article > button > i svg { width: 13px; }
+.metric-studio__rail article > label { display: grid; gap: 7px; margin: 0 14px 14px; padding: 12px; background: var(--brand-paper); border: 1px dashed #a7ad9f; border-radius: 11px; }
+.metric-studio__rail article > label > span { font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+.metric-studio__rail article > label > div { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 7px; }
+.metric-studio__rail article input { min-width: 0; height: 38px; padding: 0 8px; background: #fff; border: 1px solid var(--brand-line); border-radius: 8px; font: 800 18px/1 inherit; }
+.metric-studio__rail article em { color: #687063; font-size: 8px; font-style: normal; }
+.metric-side-note { display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: center; gap: 12px; padding: 14px; background: var(--brand-ink); border-radius: 14px; color: #fff; }
+.metric-side-note > span { display: grid; place-items: center; height: 60px; color: var(--brand-ink); background: var(--brand-lime); border-radius: 50%; font-size: 24px; font-weight: 900; box-shadow: 3px 3px 0 var(--brand-gold); }
+.metric-side-note p { display: grid; gap: 4px; margin: 0; }
+.metric-side-note strong { font-size: 11px; }
+.metric-side-note small { color: #c9cec3; font-size: 8px; line-height: 1.4; }
+
+.conversion-route { position: relative; display: grid; gap: 18px; padding: 22px; background: var(--brand-ink); border: 1px solid var(--brand-ink); border-radius: 18px; color: #fff; box-shadow: 7px 8px 0 var(--brand-lime); }
+.conversion-route::after { position: absolute; top: -8px; right: 34px; width: 58px; height: 16px; background: var(--brand-gold); border: 1px solid var(--brand-ink); content: ""; transform: rotate(3deg); }
+.conversion-route > header { display: flex; align-items: center; gap: 12px; }
+.conversion-route > header > span { display: grid; place-items: center; width: 44px; height: 44px; color: var(--brand-ink); background: var(--brand-lime); border-radius: 50%; }
+.conversion-route > header svg { width: 20px; }
+.conversion-route > header div { display: grid; gap: 3px; }
+.conversion-route > header small { color: var(--brand-gold); font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .1em; }
+.conversion-route > header h2 { margin: 0; font-size: 20px; letter-spacing: -.04em; }
+.conversion-route__choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.conversion-route__choices button { display: grid; grid-template-columns: 30px minmax(0, 1fr) 22px; align-items: center; gap: 10px; min-height: 82px; padding: 12px; color: #fff; text-align: left; background: #242720; border: 1px solid #3d4238; border-radius: 12px; }
+.conversion-route__choices button.is-selected { color: var(--brand-ink); background: var(--brand-gold); border-color: var(--brand-gold); }
+.conversion-route__choices button > svg { width: 21px; }
+.conversion-route__choices button span { display: grid; gap: 4px; }
+.conversion-route__choices button strong { font-size: 11px; }
+.conversion-route__choices button small { color: inherit; opacity: .68; font-size: 8px; line-height: 1.35; }
+.conversion-route__choices button i { display: grid; place-items: center; width: 21px; height: 21px; background: var(--brand-lime); border: 1px solid var(--brand-ink); border-radius: 50%; }
+.conversion-route__choices button i svg { width: 12px; }
+.conversion-route > label, .conversion-route__settings label { display: grid; gap: 7px; }
+.conversion-route label > span { color: #d9ded4; font-size: 9px; font-weight: 750; }
+.conversion-route input, .conversion-route select { width: 100%; min-height: 48px; color: var(--brand-ink); background: #fff; border: 1px solid #fff; border-radius: 10px; font-family: inherit; font-size: 12px; }
+.conversion-route .brand-input-with-icon svg { color: var(--brand-ink); }
+.conversion-route label > small { color: #adb5a6; font-size: 8px; }
+.conversion-route__settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.conversion-route__proof { display: flex; align-items: center; gap: 8px; margin: 0; padding-top: 14px; color: #cbd1c5; border-top: 1px solid #3d4238; font-size: 9px; line-height: 1.45; }
+.conversion-route__proof svg { flex: 0 0 auto; width: 18px; color: var(--brand-lime); }
+.metric-rate-recap { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: hidden; border: 1px solid var(--brand-ink); border-radius: 14px; }
+.metric-rate-recap header { grid-column: 1 / -1; display: flex; justify-content: space-between; padding: 13px 15px; color: #fff; background: var(--brand-ink); }
+.metric-rate-recap header small, .metric-rate-recap header strong { font-size: 9px; }
+.metric-rate-recap > div { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; padding: 14px; border-right: 1px solid var(--brand-line); border-bottom: 1px solid var(--brand-line); }
+.metric-rate-recap > div span { font-size: 11px; font-weight: 800; }
+.metric-rate-recap > div strong { font-size: 14px; }
+.metric-rate-recap > div small { grid-column: 1 / -1; color: #687063; font-size: 8px; }
+.brand-button.is-disabled { pointer-events: none; opacity: .42; box-shadow: none; }
+.campaign-publish-error { margin: 0; padding: 12px 14px; color: #7d1f1f; background: #ffe4df; border: 1px solid #c93e32; border-radius: 10px; font-size: 11px; font-weight: 700; }
+.live-performance-strip { display: grid; gap: 14px; margin-top: 20px; padding: 18px; background: #fff; border: 1px solid var(--brand-ink); border-radius: 16px; box-shadow: 6px 7px 0 var(--brand-gold); }
+.live-performance-strip > header { display: flex; align-items: end; justify-content: space-between; gap: 14px; }
+.live-performance-strip > header div { display: grid; gap: 3px; }
+.live-performance-strip > header small { color: #6a7164; font-size: 8px; font-weight: 800; text-transform: uppercase; letter-spacing: .09em; }
+.live-performance-strip > header h2 { margin: 0; font-size: 22px; letter-spacing: -.04em; }
+.live-performance-strip > header > span { display: flex; align-items: center; gap: 6px; padding: 7px 10px; background: var(--brand-lime); border: 1px solid var(--brand-ink); border-radius: 999px; font-size: 8px; font-weight: 850; }
+.live-performance-strip > header svg { width: 14px; }
+.live-performance-strip > div { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); overflow: hidden; border: 1px solid var(--brand-ink); border-radius: 12px; }
+.live-performance-strip article { display: grid; grid-template-columns: 25px minmax(0, 1fr) auto; align-items: center; gap: 9px; min-height: 94px; padding: 12px; background: var(--brand-paper); border-right: 1px solid var(--brand-line); }
+.live-performance-strip article:nth-child(even) { background: #effbd9; }
+.live-performance-strip article > i { align-self: start; font-family: var(--marker); font-size: 9px; font-style: normal; }
+.live-performance-strip article p { display: grid; gap: 2px; margin: 0; }
+.live-performance-strip article p small { font-size: 8px; font-weight: 850; text-transform: uppercase; }
+.live-performance-strip article p strong { font-size: 22px; letter-spacing: -.04em; }
+.live-performance-strip article p span { color: #6a7164; font-size: 8px; }
+.live-performance-strip article > b { display: grid; gap: 2px; text-align: right; font-size: 11px; }
+.live-performance-strip article > b small { color: #6a7164; font-size: 7px; font-weight: 650; }
+
+@media (max-width: 760px) {
+  .metric-studio { margin-top: 24px; }
+  .metric-studio__rail { grid-template-columns: 1fr; }
+  .metric-studio__rail article > button { min-height: 78px; }
+  .conversion-route { padding: 17px; box-shadow: 5px 6px 0 var(--brand-lime); }
+  .conversion-route__choices, .conversion-route__settings { grid-template-columns: 1fr; }
+  .metric-rate-recap { grid-template-columns: 1fr; }
+  .live-performance-strip { padding: 14px; box-shadow: 4px 5px 0 var(--brand-gold); }
+  .live-performance-strip > div { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .live-performance-strip article { grid-template-columns: 20px minmax(0, 1fr); min-height: 86px; padding: 10px; }
+  .live-performance-strip article > b { grid-column: 2; text-align: left; }
+}
+
+@media (max-width: 430px) {
+  .metric-studio__rail article > button { grid-template-columns: 42px minmax(0, 1fr) 22px; gap: 9px; padding: 11px; }
+  .metric-studio__rail article > button > span { width: 42px; height: 42px; }
+  .metric-studio__rail article > button strong { font-size: 13px; }
+  .metric-studio__rail article > button small { font-size: 8px; }
+  .conversion-route > header h2 { font-size: 18px; }
+  .live-performance-strip > header { align-items: start; }
+  .live-performance-strip > header > span { flex: 0 0 auto; }
+  .live-performance-strip > div { grid-template-columns: 1fr; }
+}
 .builder-progress nav a { position: relative; display: grid; justify-items: center; gap: 7px; color: #858b80; font-size: 7px; font-weight: 760; }
 .builder-progress nav a::before { position: absolute; top: 13px; right: 50%; left: -50%; z-index: 0; height: 1px; background: var(--brand-line); content: ""; }
 .builder-progress nav a:first-child::before { display: none; }
@@ -1397,4 +1499,120 @@
 
 @media (max-width: 620px) {
   .brand-mobile-more nav a > p small { white-space: normal; }
+}
+
+/* Campaign conversion connection -------------------------------------- */
+.campaign-integration-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(17rem, .7fr);
+  gap: clamp(1rem, 2vw, 2rem);
+  align-items: center;
+  margin-top: 1.25rem;
+  padding: clamp(1.15rem, 2.4vw, 2rem);
+  border: 1.5px solid var(--brand-ink);
+  border-radius: 1.5rem;
+  background: var(--brand-paper);
+  box-shadow: 7px 7px 0 var(--brand-ink);
+}
+
+.campaign-integration-card__mark {
+  display: grid;
+  width: clamp(3.25rem, 6vw, 4.5rem);
+  aspect-ratio: 1;
+  place-items: center;
+  border: 1.5px solid var(--brand-ink);
+  border-radius: 1.1rem;
+  background: var(--brand-lime);
+  transform: rotate(-4deg);
+}
+
+.campaign-integration-card__mark svg {
+  width: 45%;
+  height: 45%;
+}
+
+.campaign-integration-card__copy small,
+.campaign-integration-card__secret > span {
+  color: #687063;
+  font-size: .75rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.campaign-integration-card__copy h2 {
+  margin: .25rem 0 .4rem;
+  font-size: clamp(1.2rem, 2vw, 1.75rem);
+}
+
+.campaign-integration-card__copy p {
+  max-width: 48rem;
+  margin: 0;
+  color: #687063;
+  font-size: .95rem;
+  line-height: 1.55;
+}
+
+.campaign-integration-card__error {
+  display: block;
+  margin-top: .65rem;
+  color: #a32a18;
+  font-weight: 800;
+}
+
+.campaign-integration-card__action { min-width: 0; }
+
+.campaign-integration-card__secret {
+  display: grid;
+  gap: .55rem;
+  min-width: 0;
+  padding: .85rem;
+  border-radius: 1rem;
+  background: var(--brand-ink);
+  color: white;
+}
+
+.campaign-integration-card__secret code {
+  overflow: hidden;
+  padding: .7rem;
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: .7rem;
+  color: var(--brand-lime);
+  font-size: .82rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.campaign-integration-card__secret button {
+  min-height: 2.75rem;
+  border: 0;
+  border-radius: .75rem;
+  background: var(--brand-lime);
+  color: var(--brand-ink);
+  font-weight: 900;
+}
+
+.campaign-integration-card__secret button svg {
+  width: 1rem;
+  margin-right: .4rem;
+  vertical-align: middle;
+}
+
+@media (max-width: 900px) {
+  .campaign-integration-card { grid-template-columns: auto minmax(0, 1fr); }
+  .campaign-integration-card__action { grid-column: 1 / -1; }
+}
+
+@media (max-width: 540px) {
+  .campaign-integration-card {
+    grid-template-columns: 2.8rem minmax(0, 1fr);
+    gap: .8rem;
+    padding: 1rem;
+    border-radius: 1.15rem;
+    box-shadow: 4px 4px 0 var(--brand-ink);
+  }
+  .campaign-integration-card__mark { width: 2.8rem; border-radius: .85rem; }
+  .campaign-integration-card__copy h2 { font-size: 1.05rem; line-height: 1.08; }
+  .campaign-integration-card__copy p { font-size: .84rem; line-height: 1.45; }
+  .campaign-integration-card__action .brand-button { width: 100%; justify-content: center; }
 }

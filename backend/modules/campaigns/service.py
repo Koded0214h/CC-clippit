@@ -80,6 +80,14 @@ async def create_campaign(db: AsyncSession, owner: User, payload: schemas.Campai
     invite_code = None
     if payload.access_mode == models.AccessMode.invite:
         invite_code = await unique_invite_code(db)
+    conversion = payload.conversion_setup
+    destination_url = None
+    if conversion is not None:
+        destination_url = (
+            conversion.destination_url
+            if conversion.destination_type == "website"
+            else f"https://wa.me/{conversion.whatsapp_number}"
+        )
     campaign = models.Campaign(
         event_manager_id=owner.id,
         slug=await unique_slug(db, payload.title),
@@ -97,10 +105,36 @@ async def create_campaign(db: AsyncSession, owner: User, payload: schemas.Campai
         invite_code=invite_code,
         assets=[a.model_dump() for a in payload.assets] if payload.assets else None,
         end_condition=payload.end_condition or (models.EndCondition.duration if payload.duration_days else models.EndCondition.budget),
+        conversion_destination_type=conversion.destination_type if conversion else None,
+        conversion_destination_url=destination_url,
+        conversion_whatsapp_number=conversion.whatsapp_number if conversion else None,
+        attribution_window_days=conversion.attribution_window_days if conversion else 30,
+        attribution_model=conversion.attribution_model if conversion else "last_touch",
     )
     db.add(campaign)
     await db.flush()
     db.add(models.CampaignPayoutRule(campaign_id=campaign.id, **payload.payout_rule.model_dump()))
+    verification = {
+        models.PerformanceMetricType.view.value: "platform",
+        models.PerformanceMetricType.comment.value: "platform",
+        models.PerformanceMetricType.share.value: "platform",
+        models.PerformanceMetricType.visit.value: "tracked_link",
+        models.PerformanceMetricType.signup.value: "server_event",
+        models.PerformanceMetricType.lead.value: "server_event",
+        models.PerformanceMetricType.purchase.value: "server_event",
+    }
+    for position, metric in enumerate(payload.performance_metrics):
+        db.add(
+            models.CampaignMetric(
+                campaign_id=campaign.id,
+                metric_type=metric.metric_type.value,
+                rate_amount=metric.rate_amount,
+                unit_size=metric.unit_size,
+                min_threshold=metric.min_threshold,
+                verification_method=verification[metric.metric_type.value],
+                position=position,
+            )
+        )
     for position, rule in enumerate(payload.rules):
         db.add(models.CampaignRule(campaign_id=campaign.id, kind=rule.kind, text=rule.text, position=position))
     audit.record(db, "campaign.created", actor_id=owner.id, campaign_id=campaign.id, amount=pot)
@@ -118,7 +152,11 @@ async def resolve(db: AsyncSession, ref: str) -> models.Campaign | None:
 
     return await db.scalar(
         select(models.Campaign)
-        .options(selectinload(models.Campaign.payout_rule), selectinload(models.Campaign.rules))
+        .options(
+            selectinload(models.Campaign.payout_rule),
+            selectinload(models.Campaign.rules),
+            selectinload(models.Campaign.performance_metrics),
+        )
         .where(key)
     )
 
@@ -198,6 +236,28 @@ async def views_by_campaign(db: AsyncSession, ids: list[uuid.UUID]) -> dict[uuid
         .group_by(EarningAccount.campaign_id)
     )
     return {cid: int(total) for cid, total in rows}
+
+
+async def performance_by_campaign(db: AsyncSession, ids: list[uuid.UUID]) -> dict[uuid.UUID, dict[str, int]]:
+    if not ids:
+        return {}
+    rows = await db.execute(
+        select(
+            models.PerformanceEvent.campaign_id,
+            models.PerformanceEvent.event_type,
+            func.coalesce(func.sum(models.PerformanceEvent.quantity), 0),
+        )
+        .where(
+            models.PerformanceEvent.campaign_id.in_(ids),
+            models.PerformanceEvent.verification_status.in_(("verified", "confirmed")),
+            models.PerformanceEvent.fraud_status == "clear",
+        )
+        .group_by(models.PerformanceEvent.campaign_id, models.PerformanceEvent.event_type)
+    )
+    out: dict[uuid.UUID, dict[str, int]] = defaultdict(dict)
+    for campaign_id, event_type, total in rows:
+        out[campaign_id][event_type] = int(total)
+    return dict(out)
 
 
 async def brands(db: AsyncSession, org_ids: set[uuid.UUID]) -> dict[uuid.UUID, schemas.BrandOut]:
@@ -373,6 +433,7 @@ async def build_outs(
     owned = [c.id for c in campaigns if viewer.role == Role.admin or c.event_manager_id == viewer.id]
     counts = await counts_by_campaign(db, owned)
     views = await views_by_campaign(db, owned)
+    performance = await performance_by_campaign(db, owned)
 
     at = now()
     outs: list[schemas.CampaignOut] = []
@@ -408,6 +469,18 @@ async def build_outs(
             spent=spent_c,
             remaining=max(c.pot_amount - spent_c, ZERO),
             payout_rule=c.payout_rule,
+            performance_metrics=list(c.performance_metrics),
+            conversion_setup=(
+                schemas.ConversionSetup(
+                    destination_type=c.conversion_destination_type,
+                    destination_url=c.conversion_destination_url if c.conversion_destination_type == "website" else None,
+                    whatsapp_number=c.conversion_whatsapp_number,
+                    attribution_window_days=c.attribution_window_days,
+                    attribution_model=c.attribution_model,
+                )
+                if c.conversion_destination_type
+                else None
+            ),
             rules=list(c.rules),
             created_at=c.created_at,
             updated_at=c.updated_at,
@@ -425,6 +498,7 @@ async def build_outs(
                 checking=n.checking,
                 rejected=n.rejected,
                 earned=spent_c,
+                performance=performance.get(c.id, {}),
             )
         outs.append(out)
     return outs
@@ -513,7 +587,11 @@ def draft_blockers(answers: dict) -> dict[str, str]:
         blockers["platforms"] = "Choose at least one platform."
     payout_rule = answers.get("payout_rule") or {}
     if not payout_rule.get("rate_per_1000_views"):
-        blockers["payout_rule"] = "Set a rate per 1,000 views."
+        blockers["payout_rule"] = "Set the campaign payout limits."
+    metrics = answers.get("performance_metrics") or []
+    conversion_types = {"visit", "signup", "lead", "purchase"}
+    if any(metric.get("metric_type") in conversion_types for metric in metrics) and not answers.get("conversion_setup"):
+        blockers["conversion_setup"] = "Set the conversion destination."
     if not answers.get("pot") and not answers.get("expected_views"):
         blockers["budget"] = "Set a pot or an expected-views target."
     return blockers

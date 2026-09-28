@@ -25,6 +25,9 @@ export interface EarningRow {
   campaign_title: string;
   brand: string | null;
   billable_views: number;
+  metric_type: string;
+  billable_units: number;
+  unit_size: number;
   amount: number;
   state: string;
   payable_at: string;
@@ -68,6 +71,10 @@ export interface EarningEntryDetail {
   views_total?: number;
   thousands?: number;
   rate_per_1000_views?: number;
+  metric_type?: string;
+  billable_units?: number;
+  unit_size?: number;
+  rate_amount?: number;
   cap_amount?: number | null;
   reference?: string | null;
   payout_id?: string | null;
@@ -76,7 +83,8 @@ export interface EarningEntryDetail {
 function qs(params: Record<string, string | number | undefined | null>) {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined && value !== null && value !== "") query.set(key, String(value));
+    if (value !== undefined && value !== null && value !== "")
+      query.set(key, String(value));
   }
   const text = query.toString();
   return text ? `?${text}` : "";
@@ -88,8 +96,13 @@ export const earningsApi = {
   history: (params?: { limit?: number; offset?: number }) =>
     api.get<EarningsHistory>(`/earnings/history${qs({ ...params })}`),
 
-  entry: (entryId: string) => api.get<EarningEntryDetail>(`/earnings/entries/${entryId}`),
+  entry: (entryId: string) =>
+    api.get<EarningEntryDetail>(`/earnings/entries/${entryId}`),
 
-  leaderboard: (params?: { period?: "week" | "all"; scope?: "global" | "country"; campaign_id?: string; limit?: number }) =>
-    api.get<Leaderboard>(`/leaderboard${qs({ ...params })}`),
+  leaderboard: (params?: {
+    period?: "week" | "all";
+    scope?: "global" | "country";
+    campaign_id?: string;
+    limit?: number;
+  }) => api.get<Leaderboard>(`/leaderboard${qs({ ...params })}`),
 };

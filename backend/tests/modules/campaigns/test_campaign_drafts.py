@@ -3,7 +3,7 @@
 
 import pytest
 
-from tests.http_app import api, auth, signup
+from tests.http_app import api, auth, fund_campaign, signup
 
 
 async def _draft(api, org):
@@ -72,6 +72,44 @@ async def test_finalize_needs_every_blocker_cleared_and_then_creates_a_real_camp
 
     campaign = await api.get(f"/campaigns/{body['campaign_id']}", headers=auth(org))
     assert campaign.status_code == 200 and campaign.json()["title"] == "Sprint Launch" and campaign.json()["status"] == "draft"
+
+
+async def test_a_finalized_and_funded_draft_appears_in_the_creator_feed(api):
+    _, org = await signup(api, "organisation")
+    _, creator = await signup(api, "creator")
+    draft = await _draft(api, org)
+
+    saved = await api.patch(
+        f"/campaign-drafts/{draft['id']}",
+        headers=auth(org),
+        json={
+            "revision": 0,
+            "title": "Creator Feed Launch",
+            "description": "A complete campaign created through the resumable studio.",
+            "category": "Comedy",
+            "platforms": ["tiktok"],
+            "payout_rule": {"rate_per_1000_views": 500},
+            "pot": 50000,
+        },
+    )
+    assert saved.status_code == 200, saved.text
+
+    finalized = await api.post(f"/campaign-drafts/{draft['id']}/finalize", headers=auth(org))
+    assert finalized.status_code == 200, finalized.text
+    campaign = finalized.json()
+
+    before_funding = (await api.get("/campaigns", headers=auth(creator))).json()
+    assert campaign["campaign_slug"] not in {row["slug"] for row in before_funding}
+
+    funded = await fund_campaign(api, org, campaign["campaign_id"])
+    assert funded["campaign_status"] == "active"
+
+    creator_feed = await api.get("/campaigns", headers=auth(creator), params={"feed": "all"})
+    assert creator_feed.status_code == 200, creator_feed.text
+    visible = {row["slug"]: row for row in creator_feed.json()}
+    assert campaign["campaign_slug"] in visible
+    assert visible[campaign["campaign_slug"]]["status"] == "active"
+    assert visible[campaign["campaign_slug"]]["feed_status"] == "Open"
 
 
 async def test_finalize_is_idempotent(api):

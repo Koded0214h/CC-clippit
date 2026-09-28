@@ -95,7 +95,11 @@ async def list_campaigns(
     query = (
         select(models.Campaign)
         .outerjoin(OrganisationProfile, OrganisationProfile.user_id == models.Campaign.event_manager_id)
-        .options(selectinload(models.Campaign.payout_rule), selectinload(models.Campaign.rules))
+        .options(
+            selectinload(models.Campaign.payout_rule),
+            selectinload(models.Campaign.rules),
+            selectinload(models.Campaign.performance_metrics),
+        )
     )
 
     if user.role == Role.organisation:
@@ -446,6 +450,19 @@ async def campaign_stats(campaign_ref: str, user: User = Depends(get_current_use
     last_reading = await db.scalar(
         select(func.max(EarningAccount.last_settled_at)).where(EarningAccount.campaign_id == campaign.id)
     )
+    if any(metric.metric_type != "view" for metric in campaign.performance_metrics):
+        spent = float((await service.spent_by_campaign(db, [campaign.id])).get(campaign.id, ZERO))
+        summary = pool.summarize(size, [spent])
+        return schemas.PoolOut(
+            campaign_id=campaign.id,
+            pot=summary.pot,
+            allocated=summary.allocated,
+            remaining=summary.remaining,
+            percent_given=summary.percent_given,
+            percent_remaining=summary.percent_remaining,
+            submissions_counted=len(submission_ids),
+        )
+    performance = (await service.performance_by_campaign(db, [campaign.id])).get(campaign.id, {})
     remaining = max(campaign.pot_amount - spent, ZERO)
     percent_remaining = float(remaining / campaign.pot_amount * 100) if campaign.pot_amount > 0 else 0.0
     return schemas.CampaignStats(
@@ -465,6 +482,7 @@ async def campaign_stats(campaign_ref: str, user: User = Depends(get_current_use
         rejected=counts.rejected,
         time_left=service.time_left(campaign.ends_at) if campaign.status == models.CampaignStatus.active else None,
         last_reading_at=last_reading,
+        performance=performance,
     )
 
 
@@ -498,6 +516,23 @@ async def _submission_rows(db: AsyncSession, campaign_id: uuid.UUID, limit: int 
             handles[(acct.user_id, acct.platform.value)] = acct.handle
 
     out = []
+    event_rows = await db.execute(
+        select(
+            models.PerformanceEvent.submission_id,
+            models.PerformanceEvent.event_type,
+            func.coalesce(func.sum(models.PerformanceEvent.quantity), 0),
+        )
+        .where(
+            models.PerformanceEvent.campaign_id == campaign_id,
+            models.PerformanceEvent.submission_id.is_not(None),
+            models.PerformanceEvent.verification_status.in_(("verified", "confirmed")),
+            models.PerformanceEvent.fraud_status == "clear",
+        )
+        .group_by(models.PerformanceEvent.submission_id, models.PerformanceEvent.event_type)
+    )
+    performance: dict[uuid.UUID, dict[str, int]] = {}
+    for submission_id, event_type, total in event_rows:
+        performance.setdefault(submission_id, {})[event_type] = int(total)
     for sub, creator, account in rows:
         if sub.status == SubmissionStatus.withdrawn:
             state = "Withdrawn"
@@ -521,6 +556,7 @@ async def _submission_rows(db: AsyncSession, campaign_id: uuid.UUID, limit: int 
                 url=sub.url,
                 verified_views=int(account.cumulative_views) if account else 0,
                 earned=account.accrued_amount if account else ZERO,
+                performance=performance.get(sub.id, {}),
                 state=state,
                 submitted_at=sub.created_at,
             )
@@ -551,10 +587,12 @@ async def campaign_report(campaign_ref: str, user: User = Depends(get_current_us
 
     buffer = io.StringIO()
     writer = csv.writer(buffer)
-    writer.writerow(["submission_id", "creator", "handle", "platform", "url", "state", "verified_views", "earned", "submitted_at"])
+    metric_columns = ["views", "comments", "shares", "visits", "signups", "leads", "purchases"]
+    metric_keys = ["view", "comment", "share", "visit", "signup", "lead", "purchase"]
+    writer.writerow(["submission_id", "creator", "handle", "platform", "url", "state", *metric_columns, "earned", "submitted_at"])
     for r in rows:
         writer.writerow(
-            [_csv_safe(v) for v in (r.id, r.creator_name, r.creator_handle, r.platform, r.url, r.state, r.verified_views, f"{r.earned:.2f}", r.submitted_at.isoformat())]
+            [_csv_safe(v) for v in (r.id, r.creator_name, r.creator_handle, r.platform, r.url, r.state, *[r.performance.get(key, 0) for key in metric_keys], f"{r.earned:.2f}", r.submitted_at.isoformat())]
         )
     return Response(
         content=buffer.getvalue(),

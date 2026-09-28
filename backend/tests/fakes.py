@@ -21,6 +21,8 @@ def _response(status: int, body: dict) -> httpx.Response:
 class FakeIntelligence:
     def __init__(self) -> None:
         self.views: dict[str, int] = {}
+        self.comments: dict[str, int] = {}
+        self.shares: dict[str, int] = {}
         self.snapshot: dict[str, str] = {}
         self.platform: dict[str, str] = {}
         self.url: dict[str, str] = {}
@@ -38,6 +40,20 @@ class FakeIntelligence:
     def set_views(self, submission_id, views: int) -> None:
         key = str(submission_id)
         self.views[key] = views
+        self.snapshot[key] = str(uuid.uuid4())
+
+    def set_performance(
+        self,
+        submission_id,
+        *,
+        views: int,
+        comments: int = 0,
+        shares: int = 0,
+    ) -> None:
+        key = str(submission_id)
+        self.views[key] = views
+        self.comments[key] = comments
+        self.shares[key] = shares
         self.snapshot[key] = str(uuid.uuid4())
 
     # -- the client interface core uses -----------------------------------
@@ -96,7 +112,12 @@ class FakeIntelligence:
                 "platform_content_id": f"vid-{submission_id[:8]}",
                 "url": self.url.get(submission_id) or f"https://example.com/{submission_id}",
             },
-            "metrics": {"views": self.views[submission_id], "likes": 10, "comments": 2},
+            "metrics": {
+                "views": self.views[submission_id],
+                "likes": 10,
+                "comments": self.comments.get(submission_id, 2),
+                "shares": self.shares.get(submission_id, 0),
+            },
             "features": {"observation_count": 1},
             "provenance": {
                 "platform": platform,

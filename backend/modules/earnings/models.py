@@ -16,7 +16,7 @@ import uuid
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, func
+from sqlalchemy import BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -62,6 +62,36 @@ class EarningAccount(Base):
     hold_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class MetricEarningAccount(Base):
+    """Idempotent payout cursor for one submitted clip and outcome."""
+
+    __tablename__ = "metric_earning_accounts"
+    __table_args__ = (
+        UniqueConstraint(
+            "campaign_id",
+            "creator_id",
+            "submission_id",
+            "metric_type",
+            name="uq_metric_earning_account",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    campaign_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("campaigns.id", ondelete="CASCADE"), nullable=False, index=True)
+    creator_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    submission_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("submissions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    metric_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    observed_total: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0")
+    billed_batches: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0")
+    accrued_amount: Mapped[Decimal] = mapped_column(MoneyColumn, nullable=False, server_default="0")
+    last_settled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class EarningEntry(Base):
     __tablename__ = "earning_entries"
     __table_args__ = (
@@ -74,6 +104,9 @@ class EarningEntry(Base):
     campaign_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("campaigns.id"), nullable=False, index=True)
     creator_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
     amount: Mapped[Decimal] = mapped_column(MoneyColumn, nullable=False)
+    metric_type: Mapped[str] = mapped_column(String(24), nullable=False, server_default="view")
+    billable_units: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0")
+    unit_size: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1000")
     #: Views gained since the previous entry — what the history table shows.
     billable_views: Mapped[int] = mapped_column(BigInteger, nullable=False)
     #: Cumulative views at the reading this entry settled against.

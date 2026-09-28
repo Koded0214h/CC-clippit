@@ -19,6 +19,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -29,6 +30,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     func,
     text,
 )
@@ -68,6 +70,21 @@ class EndCondition(str, enum.Enum):
 
     duration = "duration"
     budget = "budget"
+
+
+class PerformanceMetricType(str, enum.Enum):
+    view = "view"
+    comment = "comment"
+    share = "share"
+    visit = "visit"
+    signup = "signup"
+    lead = "lead"
+    purchase = "purchase"
+
+
+class ConversionDestinationType(str, enum.Enum):
+    website = "website"
+    whatsapp = "whatsapp"
 
 
 class Campaign(Base):
@@ -121,6 +138,11 @@ class Campaign(Base):
     end_condition: Mapped[EndCondition | None] = mapped_column(
         Enum(EndCondition, name="campaign_end_condition"), nullable=True
     )
+    conversion_destination_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    conversion_destination_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    conversion_whatsapp_number: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    attribution_window_days: Mapped[int] = mapped_column(Integer, nullable=False, server_default="30")
+    attribution_model: Mapped[str] = mapped_column(String(20), nullable=False, server_default="last_touch")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -132,6 +154,39 @@ class Campaign(Base):
     rules: Mapped[list["CampaignRule"]] = relationship(
         back_populates="campaign", cascade="all, delete-orphan", order_by="CampaignRule.position"
     )
+    performance_metrics: Mapped[list["CampaignMetric"]] = relationship(
+        back_populates="campaign", cascade="all, delete-orphan", order_by="CampaignMetric.position"
+    )
+
+
+class CampaignMetric(Base):
+    """One outcome a brand has chosen to fund.
+
+    ``unit_size`` keeps rates unambiguous. Views normally use 1,000 while
+    comments, shares and conversion events normally use one action.
+    """
+
+    __tablename__ = "campaign_metrics"
+    __table_args__ = (
+        UniqueConstraint("campaign_id", "metric_type", name="uq_campaign_metric_type"),
+        CheckConstraint("rate_amount > 0", name="ck_campaign_metric_rate_positive"),
+        CheckConstraint("unit_size > 0", name="ck_campaign_metric_unit_positive"),
+        CheckConstraint("min_threshold >= 0", name="ck_campaign_metric_threshold_nonnegative"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    campaign_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("campaigns.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    metric_type: Mapped[str] = mapped_column(String(24), nullable=False)
+    rate_amount: Mapped[Decimal] = mapped_column(MoneyColumn, nullable=False)
+    unit_size: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
+    min_threshold: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="0")
+    verification_method: Mapped[str] = mapped_column(String(24), nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    campaign: Mapped["Campaign"] = relationship(back_populates="performance_metrics")
 
 
 class CampaignPayoutRule(Base):
@@ -250,3 +305,73 @@ class CampaignDraft(Base):
     #: Stale, never-finalized drafts are cheap to expire; nothing sweeps
     #: this yet (no job wired), so it's a policy field, not enforced today.
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class AttributionLink(Base):
+    """A revocable creator-specific route to a campaign destination."""
+
+    __tablename__ = "attribution_links"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    campaign_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("campaigns.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    creator_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    submission_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("submissions.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    short_code: Mapped[str] = mapped_column(String(16), nullable=False, unique=True, index=True)
+    destination_url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_visited_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class CampaignIntegration(Base):
+    """A one-way-hashed secret used by a brand server to confirm outcomes."""
+
+    __tablename__ = "campaign_integrations"
+
+    campaign_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("campaigns.id", ondelete="CASCADE"), primary_key=True
+    )
+    secret_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    secret_last_four: Mapped[str] = mapped_column(String(4), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    rotated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class PerformanceEvent(Base):
+    """Append-only evidence for social and conversion outcomes."""
+
+    __tablename__ = "performance_events"
+    __table_args__ = (
+        UniqueConstraint("campaign_id", "source", "source_event_id", name="uq_performance_source_event"),
+        CheckConstraint("quantity > 0", name="ck_performance_event_quantity_positive"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    campaign_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("campaigns.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    creator_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    submission_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("submissions.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    attribution_link_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("attribution_links.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    event_type: Mapped[str] = mapped_column(String(24), nullable=False, index=True)
+    quantity: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default="1")
+    cumulative_total: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    value_amount: Mapped[Decimal | None] = mapped_column(MoneyColumn, nullable=True)
+    currency: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    source_event_id: Mapped[str] = mapped_column(String(160), nullable=False)
+    verification_status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="observed")
+    fraud_status: Mapped[str] = mapped_column(String(20), nullable=False, server_default="clear")
+    metadata_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)

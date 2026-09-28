@@ -1,6 +1,7 @@
 export type BrandCampaignState = "Live" | "Paused" | "Draft" | "Completed" | "Cancelled" | "Funding";
 
 export type BrandCampaign = {
+  brandName?: string;
   slug: string;
   title: string;
   line: string;
