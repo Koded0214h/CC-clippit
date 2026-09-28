@@ -1,0 +1,5 @@
+# API domain — DNS A record must point at the VPS.
+# Caddy provisions and renews the HTTPS certificate automatically.
+api.clippit.click {
+	reverse_proxy 127.0.0.1:8000
+}

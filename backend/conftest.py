@@ -20,3 +20,7 @@ os.environ.setdefault("BCRYPT_ROUNDS", "4")
 os.environ.setdefault("EMAIL_BACKEND", "console")
 os.environ.setdefault("STORAGE_BACKEND", "local")
 os.environ.setdefault("PAYMENT_PROVIDER", "sandbox")
+# Tests exercise the "default secret" checks (core/startup.py), so a real
+# .env's generated secrets must not replace the dev defaults here.
+for _name in ("JWT_SECRET", "INTERNAL_SERVICE_SECRET", "PAYMENT_WEBHOOK_SECRET"):
+    os.environ.setdefault(_name, "dev-only-not-secret")

@@ -3,7 +3,7 @@
 Last updated 26 Sep 2026, after the backend redeploy.
 
 **All the code is done.** Every creator screen uses the live API, and the last live test found no code bugs.
-**Configuration is what's left:** Render env vars, platform developer portals, and one real run with money.
+**Configuration is what's left:** VPS env vars, platform developer portals, and one real run with money.
 
 **Legend:** 🔴 blocks the creator flow · 🟠 needed before real users/money · 🟡 product decision or polish
 
@@ -52,7 +52,7 @@ Last updated 26 Sep 2026, after the backend redeploy.
 
 **Why:** clippit.click still runs the old build with demo data.
 
-**Do:** The frontend developer redeploys `main`, with `NEXT_PUBLIC_API_URL=https://clippit-5b5j.onrender.com` set in the hosting env.
+**Do:** The frontend developer redeploys `main`, with `NEXT_PUBLIC_API_URL=https://api.clippit.click` set in the hosting env.
 
 **Confirm:** Sign in as a creator on clippit.click. You see your own name and real numbers, with no "Tobi On Cam".
 
@@ -102,20 +102,20 @@ Without these, **creators never earn**.
 
 ### 4. 🔴 Make "Connect account" work (OAuth)
 
-**Why:** Creators must connect the platform they post on before they can join or submit. Every redirect URI on Render still points to `http://localhost:8000`.
+**Why:** Creators must connect the platform they post on before they can join or submit. Every redirect URI on the VPS must be `https://api.clippit.click/...`, not localhost or Render.
 
-**Code (done):** the Connect button now only appears for a platform whose OAuth app credentials are set on Render. Threads is hidden because it isn't in PRD V1. Platforms without credentials show "Soon", so creators never land on a broken consent screen.
+**Code (done):** the Connect button now only appears for a platform whose OAuth app credentials are set on the VPS. Threads is hidden because it isn't in PRD V1. Platforms without credentials show "Soon", so creators never land on a broken consent screen.
 
-**Do:** Set these on Render, and add the **same URL, character for character** (https, no trailing slash) in each developer portal:
+**Do:** Set these on the VPS, and add the **same URL, character for character** (https, no trailing slash) in each developer portal:
 
-| Platform | Render env | Value | Credentials set? |
+| Platform | VPS env | Value | Credentials set? |
 |---|---|---|---|
-| TikTok | `TIKTOK_REDIRECT_URI` | `https://clippit-5b5j.onrender.com/social/tiktok/callback` | ✅ yes |
-| X | `X_REDIRECT_URI` | `https://clippit-5b5j.onrender.com/social/x/callback` | ✅ yes (also needs `TWITTERAPI_IO_KEY` for views, ❌ empty) |
-| Instagram | `INSTAGRAM_REDIRECT_URI` | `https://clippit-5b5j.onrender.com/social/instagram/callback` | ❌ `INSTAGRAM_APP_ID` / `_SECRET` empty |
-| Facebook | `FACEBOOK_REDIRECT_URI` | `https://clippit-5b5j.onrender.com/social/facebook/callback` | ❌ `FACEBOOK_APP_ID` / `_SECRET` empty |
-| YouTube | `YOUTUBE_REDIRECT_URI` | `https://clippit-5b5j.onrender.com/social/youtube/callback` | ❌ `YOUTUBE_CLIENT_ID` / `_SECRET` / `YOUTUBE_API_KEY` empty |
-| Google sign-in | `GOOGLE_REDIRECT_URI` | `https://clippit-5b5j.onrender.com/auth/google/callback` | check |
+| TikTok | `TIKTOK_REDIRECT_URI` | `https://api.clippit.click/social/tiktok/callback` | ✅ yes |
+| X | `X_REDIRECT_URI` | `https://api.clippit.click/social/x/callback` | ✅ yes (also needs `TWITTERAPI_IO_KEY` for views, ❌ empty) |
+| Instagram | `INSTAGRAM_REDIRECT_URI` | `https://api.clippit.click/social/instagram/callback` | ❌ `INSTAGRAM_APP_ID` / `_SECRET` empty |
+| Facebook | `FACEBOOK_REDIRECT_URI` | `https://api.clippit.click/social/facebook/callback` | ❌ `FACEBOOK_APP_ID` / `_SECRET` empty |
+| YouTube | `YOUTUBE_REDIRECT_URI` | `https://api.clippit.click/social/youtube/callback` | ❌ `YOUTUBE_CLIENT_ID` / `_SECRET` / `YOUTUBE_API_KEY` empty |
+| Google sign-in | `GOOGLE_REDIRECT_URI` | `https://api.clippit.click/auth/google/callback` | check |
 
 Also check `FRONTEND_URL=https://clippit.click` (or leave it unset, since that's the default). After OAuth, the backend sends creators back to `FRONTEND_URL/dashboard/settings`.
 
@@ -124,10 +124,10 @@ Where each URL goes:
 - **X Developer Portal** → your app → User authentication settings → Callback URI / Redirect URL. App type: Web App (confidential client). Scopes: `tweet.read`, `users.read` and `offline.access`.
 - **Meta for Developers (Facebook)** → Facebook Login → Settings → Valid OAuth Redirect URIs. Permissions: `pages_show_list`, `pages_read_engagement`, `pages_read_user_content`.
 - **Meta for Developers (Instagram)** → Instagram → API setup with Instagram login → Business login settings → OAuth redirect URIs. Permissions: `instagram_business_basic`, `instagram_business_manage_insights`. Use the **Instagram** app ID and secret here, which are different from the Facebook app ones.
-- **Meta, both apps:** set Deauthorize callback `https://clippit-5b5j.onrender.com/webhooks/social/{facebook|instagram}/deauthorize` and Data deletion request URL `https://clippit-5b5j.onrender.com/webhooks/social/{facebook|instagram}/data-deletion`. Set Privacy Policy URL `https://www.clippit.click/legal/privacy`.
+- **Meta, both apps:** set Deauthorize callback `https://api.clippit.click/webhooks/social/{facebook|instagram}/deauthorize` and Data deletion request URL `https://api.clippit.click/webhooks/social/{facebook|instagram}/data-deletion`. Set Privacy Policy URL `https://www.clippit.click/legal/privacy`.
 - **Google Cloud Console** → APIs & Services → Credentials → the OAuth client (Web application) → Authorized redirect URIs. Add both the YouTube and the Google sign-in URLs. Enable YouTube Data API v3. Scope: `youtube.readonly`. This is a sensitive scope, so the consent screen must be verified, or creators must be added as test users while it's in Testing.
 
-- [ ] Set the redirect URIs on Render
+- [ ] Set the redirect URIs on the VPS
 - [ ] Register them in TikTok for Developers, X Developer Portal, Meta for Developers and Google Cloud Console
 - [ ] Add the missing credentials (Instagram, Facebook, YouTube). Their Connect buttons appear automatically once the credentials are set.
 - [ ] TikTok: submit the app for review, or add test creators as sandbox users
@@ -177,8 +177,8 @@ Generate: `python -c "import secrets; print(secrets.token_urlsafe(64))"`. Changi
 
 ### 7. 🟠 Payments setup
 
-- [ ] Paystack → Settings → API Keys & Webhooks → webhook URL `https://clippit-5b5j.onrender.com/webhooks/payments`. Without it, funded campaigns never go live.
-- [ ] `PUBLIC_BASE_URL=https://clippit-5b5j.onrender.com` on Render
+- [ ] Paystack → Settings → API Keys & Webhooks → webhook URL `https://api.clippit.click/webhooks/payments`. Without it, funded campaigns never go live.
+- [ ] `PUBLIC_BASE_URL=https://api.clippit.click` on the VPS
 - [ ] Before real money: `PAYSTACK_SECRET_KEY` from `sk_test_…` to `sk_live_…`
 
 ---

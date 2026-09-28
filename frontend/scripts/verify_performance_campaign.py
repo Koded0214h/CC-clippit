@@ -216,7 +216,7 @@ def handle_api(route: Route):
                 "id": "44444444-4444-4444-8444-444444444444",
                 "campaign_id": CAMPAIGN["id"],
                 "short_code": "A1B2C3D4",
-                "tracking_url": "https://clippit-5b5j.onrender.com/t/clp_browser_test",
+                "tracking_url": "https://api.clippit.click/t/clp_browser_test",
                 "destination_url": "https://shop.example/new-record?clippit_ref=A1B2C3D4",
                 "expires_at": "2026-10-28T10:00:00Z",
             },
@@ -301,7 +301,7 @@ with sync_playwright() as playwright:
     page.get_by_text("Create your creator-specific link", exact=True).wait_for()
     page.get_by_role("button", name="Create and copy").click()
     page.get_by_text(
-        "https://clippit-5b5j.onrender.com/t/clp_browser_test", exact=True
+        "https://api.clippit.click/t/clp_browser_test", exact=True
     ).wait_for()
     assert page.get_by_role("button", name="Copy again").is_visible()
     no_horizontal_overflow(page)

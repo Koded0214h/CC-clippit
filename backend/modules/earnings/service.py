@@ -324,6 +324,8 @@ async def _settle_configured_metrics(
     )
     total_amount = ZERO
     total_batches = 0
+    blocked: str | None = None
+    below_minimum = 0
 
     for metric in campaign.performance_metrics:
         observed_total = totals.get(metric.metric_type, 0)
@@ -349,6 +351,7 @@ async def _settle_configured_metrics(
         cursor.observed_total = max(cursor.observed_total, observed_total)
         cursor.last_settled_at = at
         if observed_total < metric.min_threshold:
+            below_minimum += 1
             continue
         available_batches = observed_total // metric.unit_size - cursor.billed_batches
         if available_batches <= 0:
@@ -371,6 +374,9 @@ async def _settle_configured_metrics(
                 available_batches,
                 max(int((room / rate).to_integral_value(rounding=ROUND_FLOOR)), 0),
             )
+            if available_batches <= 0:
+                blocked = "creator_cap_reached"
+                continue
         if metric.metric_type in ("view", "comment", "share") and campaign.payout_rule.video_cap_amount is not None:
             video_earned = to_decimal(
                 await db.scalar(
@@ -384,6 +390,9 @@ async def _settle_configured_metrics(
                 available_batches,
                 max(int((room / rate).to_integral_value(rounding=ROUND_FLOOR)), 0),
             )
+            if available_batches <= 0:
+                blocked = "video_cap_reached"
+                continue
         pot_room = to_decimal(campaign.pot_amount) - spent
         available_batches = min(
             available_batches,
@@ -434,17 +443,28 @@ async def _settle_configured_metrics(
             amount=amount,
             metric=metric.metric_type,
             units=billed_units,
+            views=observed_total if metric.metric_type == "view" else None,
+            snapshot=str(snapshot_id) if snapshot_id else None,
         )
         await db.flush()
 
     legacy_account.last_settled_at = at
-    if spent >= to_decimal(campaign.pot_amount):
+    rates = [to_decimal(m.rate_amount) for m in campaign.performance_metrics if to_decimal(m.rate_amount) > 0]
+    cheapest_unit = min(rates) if rates else ZERO
+    # Same rule the per-view path always had: a pot that can't buy even one
+    # more unit is empty, so the campaign closes and the remainder is refundable.
+    if to_decimal(campaign.pot_amount) - spent < max(cheapest_unit, Decimal("0.01")):
         legacy_account.blocked_reason = "pot_exhausted"
         await campaign_service.close_campaign(
             db, campaign, campaign_models.CloseReason.pot_empty, actor_id=None, client=client
         )
     if total_amount > ZERO:
         return Settlement(status="accrued", amount=total_amount, thousands=total_batches)
+    if blocked:
+        legacy_account.blocked_reason = blocked
+        return _skip(blocked)
+    if below_minimum and below_minimum == len(campaign.performance_metrics):
+        return _skip("below_minimum")
     return _skip("no_new_metric_units")
 
 

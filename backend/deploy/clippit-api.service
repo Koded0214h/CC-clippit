@@ -1,0 +1,18 @@
+[Unit]
+Description=Clippit API
+After=network.target
+
+[Service]
+User=deploy
+WorkingDirectory=/opt/clippit/backend
+# One worker on purpose: rate limiting is in-memory and the background jobs
+# (settlement, payout/wallet reconcile, Intelligence poll) run inside the API
+# process, so more workers would run every job N times.
+ExecStart=/opt/clippit/backend/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000 --workers 1 --proxy-headers --forwarded-allow-ips=127.0.0.1
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

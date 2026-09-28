@@ -19,13 +19,36 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    op.add_column("campaigns", sa.Column("conversion_destination_type", sa.String(20), nullable=True))
-    op.add_column("campaigns", sa.Column("conversion_destination_url", sa.String(2048), nullable=True))
-    op.add_column("campaigns", sa.Column("conversion_whatsapp_number", sa.String(24), nullable=True))
-    op.add_column("campaigns", sa.Column("attribution_window_days", sa.Integer(), server_default="30", nullable=False))
-    op.add_column("campaigns", sa.Column("attribution_model", sa.String(20), server_default="last_touch", nullable=False))
+    # Idempotent on purpose: production received these five tables (empty,
+    # from the same models) via a test's metadata.create_all before this
+    # migration ran. Skip whatever already exists instead of failing.
+    inspector = sa.inspect(op.get_bind())
+    existing_tables = set(inspector.get_table_names())
 
-    op.create_table(
+    def has_column(table: str, column: str) -> bool:
+        return column in {c["name"] for c in inspector.get_columns(table)}
+
+    def add_column(table: str, column: sa.Column) -> None:
+        if not has_column(table, column.name):
+            op.add_column(table, column)
+
+    def create_table(name: str, *elements) -> bool:
+        if name in existing_tables:
+            return False
+        op.create_table(name, *elements)
+        return True
+
+    def create_index(name: str, table: str, columns: list[str]) -> None:
+        if name not in {i["name"] for i in sa.inspect(op.get_bind()).get_indexes(table)}:
+            op.create_index(name, table, columns)
+
+    add_column("campaigns", sa.Column("conversion_destination_type", sa.String(20), nullable=True))
+    add_column("campaigns", sa.Column("conversion_destination_url", sa.String(2048), nullable=True))
+    add_column("campaigns", sa.Column("conversion_whatsapp_number", sa.String(24), nullable=True))
+    add_column("campaigns", sa.Column("attribution_window_days", sa.Integer(), server_default="30", nullable=False))
+    add_column("campaigns", sa.Column("attribution_model", sa.String(20), server_default="last_touch", nullable=False))
+
+    create_table(
         "campaign_metrics",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("campaign_id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -43,7 +66,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("campaign_id", "metric_type", name="uq_campaign_metric_type"),
     )
-    op.create_index("ix_campaign_metrics_campaign_id", "campaign_metrics", ["campaign_id"])
+    create_index("ix_campaign_metrics_campaign_id", "campaign_metrics", ["campaign_id"])
     op.execute(
         """
         INSERT INTO campaign_metrics
@@ -52,10 +75,11 @@ def upgrade() -> None:
                rate_per_1000_views, 1000,
                min_views_threshold, 'platform', 0
         FROM campaign_payout_rules
+        ON CONFLICT DO NOTHING
         """
     )
 
-    op.create_table(
+    create_table(
         "attribution_links",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("campaign_id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -75,12 +99,12 @@ def upgrade() -> None:
         sa.UniqueConstraint("token_hash"),
         sa.UniqueConstraint("short_code"),
     )
-    op.create_index("ix_attribution_links_campaign_id", "attribution_links", ["campaign_id"])
-    op.create_index("ix_attribution_links_creator_id", "attribution_links", ["creator_id"])
-    op.create_index("ix_attribution_links_submission_id", "attribution_links", ["submission_id"])
-    op.create_index("ix_attribution_links_short_code", "attribution_links", ["short_code"])
+    create_index("ix_attribution_links_campaign_id", "attribution_links", ["campaign_id"])
+    create_index("ix_attribution_links_creator_id", "attribution_links", ["creator_id"])
+    create_index("ix_attribution_links_submission_id", "attribution_links", ["submission_id"])
+    create_index("ix_attribution_links_short_code", "attribution_links", ["short_code"])
 
-    op.create_table(
+    create_table(
         "campaign_integrations",
         sa.Column("campaign_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("secret_hash", sa.String(64), nullable=False),
@@ -91,7 +115,7 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("campaign_id"),
     )
 
-    op.create_table(
+    create_table(
         "performance_events",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("campaign_id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -118,14 +142,14 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("campaign_id", "source", "source_event_id", name="uq_performance_source_event"),
     )
-    op.create_index("ix_performance_events_campaign_id", "performance_events", ["campaign_id"])
-    op.create_index("ix_performance_events_creator_id", "performance_events", ["creator_id"])
-    op.create_index("ix_performance_events_submission_id", "performance_events", ["submission_id"])
-    op.create_index("ix_performance_events_attribution_link_id", "performance_events", ["attribution_link_id"])
-    op.create_index("ix_performance_events_event_type", "performance_events", ["event_type"])
-    op.create_index("ix_performance_events_created_at", "performance_events", ["created_at"])
+    create_index("ix_performance_events_campaign_id", "performance_events", ["campaign_id"])
+    create_index("ix_performance_events_creator_id", "performance_events", ["creator_id"])
+    create_index("ix_performance_events_submission_id", "performance_events", ["submission_id"])
+    create_index("ix_performance_events_attribution_link_id", "performance_events", ["attribution_link_id"])
+    create_index("ix_performance_events_event_type", "performance_events", ["event_type"])
+    create_index("ix_performance_events_created_at", "performance_events", ["created_at"])
 
-    op.create_table(
+    create_table(
         "metric_earning_accounts",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("campaign_id", postgresql.UUID(as_uuid=True), nullable=False),
@@ -145,13 +169,13 @@ def upgrade() -> None:
             "campaign_id", "creator_id", "submission_id", "metric_type", name="uq_metric_earning_account"
         ),
     )
-    op.create_index("ix_metric_earning_accounts_campaign_id", "metric_earning_accounts", ["campaign_id"])
-    op.create_index("ix_metric_earning_accounts_creator_id", "metric_earning_accounts", ["creator_id"])
-    op.create_index("ix_metric_earning_accounts_submission_id", "metric_earning_accounts", ["submission_id"])
+    create_index("ix_metric_earning_accounts_campaign_id", "metric_earning_accounts", ["campaign_id"])
+    create_index("ix_metric_earning_accounts_creator_id", "metric_earning_accounts", ["creator_id"])
+    create_index("ix_metric_earning_accounts_submission_id", "metric_earning_accounts", ["submission_id"])
 
-    op.add_column("earning_entries", sa.Column("metric_type", sa.String(24), server_default="view", nullable=False))
-    op.add_column("earning_entries", sa.Column("billable_units", sa.BigInteger(), server_default="0", nullable=False))
-    op.add_column("earning_entries", sa.Column("unit_size", sa.Integer(), server_default="1000", nullable=False))
+    add_column("earning_entries", sa.Column("metric_type", sa.String(24), server_default="view", nullable=False))
+    add_column("earning_entries", sa.Column("billable_units", sa.BigInteger(), server_default="0", nullable=False))
+    add_column("earning_entries", sa.Column("unit_size", sa.Integer(), server_default="1000", nullable=False))
     op.execute("UPDATE earning_entries SET billable_units = billable_views WHERE metric_type = 'view'")
 
 

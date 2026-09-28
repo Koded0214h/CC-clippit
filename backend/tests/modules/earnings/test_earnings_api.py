@@ -94,12 +94,12 @@ async def test_the_brand_sees_spend_verified_views_and_the_pot_drawn_down(api, i
     assert c["metrics"]["verified_views"] == 12_400 and c["metrics"]["approved"] == 1 and c["metrics"]["earned"] == 6000
 
     stats = (await api.get(f"/campaigns/{campaign['id']}/stats", headers=auth(org))).json()
-    assert stats["spent"] == 6000 and stats["views_last_24h"] == 12_400 and stats["last_reading_at"]
+    assert stats["spent"] == 6000 and stats["views_last_24h"] == 12_000 and stats["last_reading_at"]
     rows = (await api.get(f"/campaigns/{campaign['id']}/submissions", headers=auth(org))).json()
     assert rows[0]["verified_views"] == 12_400 and rows[0]["earned"] == 6000 and rows[0]["state"] == "Earning"
 
     o = (await api.get("/brand/overview", headers=auth(org))).json()
-    assert o["total_spent"] == 6000 and o["views_last_24h"] == 12_400 and o["earnings_last_24h"] == 6000
+    assert o["total_spent"] == 6000 and o["views_last_24h"] == 12_000 and o["earnings_last_24h"] == 6000
 
 
 async def test_the_submission_earnings_card(api, intel):
