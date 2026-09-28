@@ -168,6 +168,7 @@ class Session(Base):
     ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    remembered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
@@ -220,6 +221,7 @@ class OperatorInvitation(Base):
 class AuthCodePurpose(str, enum.Enum):
     email_verify = "email_verify"
     password_reset = "password_reset"
+    remember_device = "remember_device"
 
 
 class AuthCode(Base):

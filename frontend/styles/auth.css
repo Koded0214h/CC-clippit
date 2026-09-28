@@ -598,6 +598,7 @@ fieldset {
   background: var(--white);
   border: 1.5px solid var(--ink);
   border-radius: 4px;
+  pointer-events: none;
 }
 
 .check-field .icon {
@@ -803,6 +804,26 @@ fieldset {
   color: var(--muted);
   cursor: wait;
 }
+
+.remember-session-only {
+  display: block;
+  width: fit-content;
+  margin: 11px auto 0;
+  padding: 4px;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  font-size: 10px;
+  font-weight: 680;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.remember-session-only:hover { color: var(--ink); }
+.remember-session-only:focus-visible { outline: 3px solid #4f7d15; outline-offset: 3px; }
+
+.auth-remember-device .auth-intro strong { color: var(--ink); overflow-wrap: anywhere; }
+.auth-remember-device .auth-notice--quiet { margin-top: 12px; }
 
 .mail-stamp {
   position: absolute;

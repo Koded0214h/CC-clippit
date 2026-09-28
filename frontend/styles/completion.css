@@ -372,10 +372,10 @@
 .legal-hero { display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; min-height: 370px; padding: 60px max(24px, calc((100vw - var(--completion-max)) / 2)); color: #fff; background: var(--ink); }
 .legal-hero h1 { margin: 20px 0 8px; font-size: clamp(4rem, 10vw, 9rem); line-height: .78; letter-spacing: -.09em; }
 .legal-hero p { color: #c1c5bd; font-size: 1.05rem; }
-.legal-stamp { display: grid; width: 190px; aspect-ratio: 1; padding: 20px; place-items: center; align-content: center; border: 2px solid var(--lime); border-radius: 50%; text-align: center; transform: rotate(5deg); }
+.legal-stamp { display: grid; flex: 0 0 190px; width: 190px; min-width: 190px; height: 190px; aspect-ratio: 1; padding: 20px; place-items: center; align-content: center; gap: 4px; border: 2px solid var(--lime); border-radius: 50%; text-align: center; transform: rotate(5deg); }
 .legal-stamp svg { width: 27px; }
-.legal-stamp strong { color: var(--lime); font-size: 2.5rem; }
-.legal-stamp span { max-width: 12ch; font-size: .8rem; }
+.legal-stamp strong { color: var(--lime); font-size: 2.5rem; line-height: .9; }
+.legal-stamp span { max-width: 12ch; font-size: .8rem; line-height: 1.2; }
 .legal-list { padding: 50px 0 100px; }
 .legal-list > a { display: grid; grid-template-columns: 70px minmax(0, 1fr) auto 26px; align-items: center; gap: 20px; min-height: 118px; padding: 20px 24px; border-bottom: 1.5px solid var(--ink); }
 .legal-list > a:first-child { border-top: 1.5px solid var(--ink); }
@@ -1168,7 +1168,7 @@
 .delete-layout > aside .completion-art { width: 100px; }
 .legal-hero { min-height: 290px; padding-block: 44px; }
 .legal-hero h1 { margin-top: 14px; font-size: clamp(3.3rem, 7vw, 6.5rem); }
-.legal-stamp { width: 145px; padding: 16px; }
+.legal-stamp { flex-basis: 145px; width: 145px; min-width: 145px; height: 145px; padding: 16px; }
 .legal-stamp strong { font-size: 2rem; }
 .legal-list { padding: 34px 0 72px; }
 .legal-list > a { grid-template-columns: 54px minmax(0, 1fr) auto 22px; min-height: 92px; padding: 16px 19px; }
@@ -1381,7 +1381,7 @@
   .delete-layout > aside { padding: 17px; }
   .legal-hero { min-height: 230px; padding: 28px 16px; }
   .legal-hero h1 { font-size: 2.75rem; }
-  .legal-stamp { width: 72px; }
+  .legal-stamp { flex-basis: 84px; width: 84px; min-width: 84px; height: 84px; padding: 9px; }
   .legal-list { padding-top: 24px; }
   .legal-list > a { min-height: 78px; padding: 13px 4px; }
   .consent-screen { padding: 24px 12px; }
@@ -1599,8 +1599,10 @@
 .legal-toc nav a:hover { color: var(--ink); background: rgba(184, 255, 56, .26); }
 .legal-toc nav a span {
   display: grid;
+  flex: 0 0 22px;
   width: 22px;
   height: 22px;
+  aspect-ratio: 1;
   place-items: center;
   color: var(--ink);
   border: 1px solid #aeb5a7;
@@ -1629,6 +1631,7 @@
   display: grid;
   width: 44px;
   height: 44px;
+  aspect-ratio: 1;
   flex: 0 0 auto;
   place-items: center;
   border: 1px solid var(--ink);

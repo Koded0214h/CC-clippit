@@ -92,6 +92,29 @@ def recovery_email(to: str, code: str) -> EmailMessage:
     )
 
 
+def remember_device_email(to: str, code: str) -> EmailMessage:
+    minutes = get_settings().otp_ttl_minutes
+    return EmailMessage(
+        to=to,
+        subject="Confirm this device for Clippit",
+        text=(
+            f"Use {code} to keep this device signed in to Clippit.\n\n"
+            f"It expires in {minutes} minutes. If this wasn't you, do not share the code."
+        ),
+        html=email_layout.render(
+            tag="Device confirmation",
+            eyebrow="Keep this device signed in",
+            title="Confirm this device.",
+            intro="Enter this code in Clippit to keep this browser signed in until you sign out or remove it.",
+            code=code,
+            expires=f"Expires in {minutes} minutes",
+            note="If this wasn't you, do not share this code. You can remove signed-in devices from Security settings.",
+            preheader=f"{code} confirms this device for Clippit.",
+            reason="You're receiving this because Keep me signed in was selected during sign-in.",
+        ),
+    )
+
+
 def notification_email(to: str, title: str, body: str = "", link: str | None = None) -> EmailMessage:
     """In-app notifications mirrored to email (notifications.service.notify)."""
     url = email_layout.absolute_link(link) if link else None

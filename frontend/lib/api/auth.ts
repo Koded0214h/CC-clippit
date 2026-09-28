@@ -1,5 +1,12 @@
 import { api } from "./client";
 import type { AccountRole } from "@/lib/auth";
+import {
+  clearStoredTokens,
+  getAccessToken as readAccessToken,
+  promoteSessionTokens,
+  storeTokenPair,
+  type TokenPersistence,
+} from "./tokenStorage";
 
 export interface UserOut {
   id: string;
@@ -33,6 +40,7 @@ export interface SessionOut {
   ip_address: string | null;
   created_at: string;
   last_seen_at: string;
+  remembered: boolean;
   current: boolean;
 }
 
@@ -48,23 +56,28 @@ export interface StepUpTokenOut {
   step_up_token: string;
 }
 
+export interface RememberDeviceOut {
+  remembered: boolean;
+  expires_in_days: number;
+}
+
 export function storeTokens(
   data: Pick<TokenResponse, "access_token" | "refresh_token">,
+  persistence: TokenPersistence = "persistent",
 ) {
-  localStorage.setItem("clippit:access-token", data.access_token);
-  if (data.refresh_token) {
-    localStorage.setItem("clippit:refresh-token", data.refresh_token);
-  }
+  storeTokenPair(data, persistence);
 }
 
 export function clearTokens() {
-  localStorage.removeItem("clippit:access-token");
-  localStorage.removeItem("clippit:refresh-token");
+  clearStoredTokens();
 }
 
 export function getAccessToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("clippit:access-token");
+  return readAccessToken();
+}
+
+export function rememberCurrentDevice() {
+  return promoteSessionTokens();
 }
 
 export const authApi = {
@@ -87,6 +100,12 @@ export const authApi = {
 
   resendVerification: (payload?: { email?: string }) =>
     api.post<CodeSentResponse>("/auth/verify-email/resend", payload ?? {}),
+
+  requestRememberDevice: () =>
+    api.post<CodeSentResponse>("/auth/remember-device/request", {}),
+
+  verifyRememberDevice: (code: string) =>
+    api.post<RememberDeviceOut>("/auth/remember-device/verify", { code }),
 
   forgotPassword: (payload: { email: string }) =>
     api.post<CodeSentResponse>("/auth/forgot-password", payload),

@@ -3,13 +3,14 @@ Google sign-in (production-api-inventory.md §B). Google's own network
 calls are monkeypatched — the fake just swaps in a deterministic identity."""
 
 import uuid
+from datetime import datetime, timezone
 
 import pytest
 
 from core.config import get_settings
-from modules.auth import google_router
+from modules.auth import google_router, models
 from modules.auth.google import GoogleIdentity
-from tests.http_app import api, auth, campaign_body, earn, fund_campaign, intel, make_creator, signup, submit_clip
+from tests.http_app import api, auth, campaign_body, db_session, earn, fund_campaign, intel, latest_code, make_creator, signup, submit_clip
 
 
 async def test_signup_and_login_both_return_a_refresh_token(api):
@@ -17,6 +18,58 @@ async def test_signup_and_login_both_return_a_refresh_token(api):
     assert creator["refresh_token"]
     login = (await api.post("/auth/login", json={"email": creator["user"]["email"], "password": "DemoPassword123!"})).json()
     assert login["refresh_token"] and login["refresh_token"] != creator["refresh_token"]
+
+
+async def test_remember_device_requires_email_code_and_extends_only_that_session(api):
+    email, creator = await signup(api, "creator", verify=True)
+    login = (await api.post(
+        "/auth/login",
+        headers={"User-Agent": "Clippit remembered-device test"},
+        json={"email": email, "password": "DemoPassword123!"},
+    )).json()
+
+    sent = await api.post("/auth/remember-device/request", headers=auth(login), json={})
+    assert sent.status_code == 200 and sent.json()["resend_in"] > 0
+
+    wrong = await api.post(
+        "/auth/remember-device/verify", headers=auth(login), json={"code": "000000"}
+    )
+    assert wrong.status_code == 400
+
+    confirmed = await api.post(
+        "/auth/remember-device/verify",
+        headers=auth(login),
+        json={"code": latest_code(email)},
+    )
+    assert confirmed.status_code == 200
+    assert confirmed.json() == {"remembered": True, "expires_in_days": 365}
+
+    listed = (await api.get("/auth/sessions", headers=auth(login))).json()
+    current = next(row for row in listed if row["current"])
+    assert current["remembered"] is True
+
+    token_id = uuid.UUID(login["refresh_token"].split(".", 1)[0])
+    async with db_session() as db:
+        refresh = await db.get(models.RefreshToken, token_id)
+        remaining = refresh.expires_at - datetime.now(timezone.utc)
+        assert remaining.days >= 364
+
+    rotated = await api.post("/auth/refresh", json={"refresh_token": login["refresh_token"]})
+    assert rotated.status_code == 200
+    rotated_id = uuid.UUID(rotated.json()["refresh_token"].split(".", 1)[0])
+    async with db_session() as db:
+        refresh = await db.get(models.RefreshToken, rotated_id)
+        remaining = refresh.expires_at - datetime.now(timezone.utc)
+        assert remaining.days >= 364
+
+
+async def test_remember_device_requires_an_authenticated_verified_account(api):
+    anonymous = await api.post("/auth/remember-device/request", json={})
+    assert anonymous.status_code == 401
+
+    _, unverified = await signup(api, "creator", verify=False)
+    blocked = await api.post("/auth/remember-device/request", headers=auth(unverified), json={})
+    assert blocked.status_code == 409
 
 
 async def test_refresh_rotates_the_token_and_the_old_one_stops_working(api):

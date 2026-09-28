@@ -361,7 +361,7 @@ export function PayoutAccountScreen() {
   </div>;
 }
 
-type Session = { id: string; device: string; place: string; seen: string; current?: boolean };
+type Session = { id: string; device: string; place: string; seen: string; current?: boolean; remembered?: boolean };
 
 function relativeTime(dateStr: string): string {
   const date = new Date(dateStr);
@@ -392,6 +392,7 @@ export function SecurityScreen() {
         place: s.ip_address || "Unknown network",
         seen: s.current ? "Active now" : relativeTime(s.last_seen_at),
         current: s.current,
+        remembered: s.remembered,
       })));
       setSessionError("");
     })
@@ -441,7 +442,7 @@ export function SecurityScreen() {
     <div className="security-layout">
       <section className="security-sheet security-score"><div className="security-orbit"><strong><ProductIcon name="shield" /></strong><span>Account protection</span><i /><i /><i /></div><div><h2>Keep your account yours</h2><p>Use a strong password and remove devices you don&apos;t recognise. Removing your payout account asks for your password again.</p><label className="security-toggle is-disabled"><span><ProductIcon name="shield" /><b>Two-step verification</b><small>Coming soon — we&apos;ll let you know when it&apos;s ready.</small></span><input type="checkbox" checked={false} disabled readOnly /><i /></label></div></section>
       <form className="security-sheet password-sheet" onSubmit={changePassword}><header><span><ProductIcon name="settings" /></span><div><h2>Change password</h2><p>Use at least eight characters including a number.</p></div></header><label><span>Current password</span><input type="password" value={passwords.current} onChange={(event) => update("current", event.target.value)} /></label><label><span>New password</span><input type="password" value={passwords.next} onChange={(event) => update("next", event.target.value)} /></label><label><span>Confirm new password</span><input type="password" value={passwords.confirm} onChange={(event) => update("confirm", event.target.value)} /></label>{passwordError && <p className="auth-error" role="alert">{passwordError}</p>}<button className="lime-button" type="submit" disabled={!valid || passwordLoading} aria-busy={passwordLoading}>{passwordLoading ? <ButtonLoader label="Securing your password" /> : <>{saved ? "Password changed" : "Change password"}<ProductIcon name={saved ? "check" : "arrow"} /></>}</button></form>
-      <section className="security-sheet sessions-sheet"><header><div><h2>Signed-in devices</h2><p>Remove any session you do not recognise.</p></div><button className="customer-text-button" type="button" onClick={signOutOthers} disabled={!sessions || sessions.length <= 1}>Sign out other devices</button></header>{sessionError && <p className="auth-error" role="alert">{sessionError}</p>}{!sessions && !sessionError && <p>Loading your devices…</p>}{(sessions ?? []).map((session) => <article key={session.id}><span><ProductIcon name={session.device.includes("Android") || session.device.includes("iPhone") ? "phone" : "tech"} /></span><p><strong>{session.device}{session.current && <i>Current</i>}</strong><small>{session.place} · {session.seen}</small></p>{!session.current && <button type="button" onClick={() => removeSession(session.id)}>Remove</button>}</article>)}</section>
+      <section className="security-sheet sessions-sheet"><header><div><h2>Signed-in devices</h2><p>Remove any session you do not recognise.</p></div><button className="customer-text-button" type="button" onClick={signOutOthers} disabled={!sessions || sessions.length <= 1}>Sign out other devices</button></header>{sessionError && <p className="auth-error" role="alert">{sessionError}</p>}{!sessions && !sessionError && <p>Loading your devices…</p>}{(sessions ?? []).map((session) => <article key={session.id}><span><ProductIcon name={session.device.includes("Android") || session.device.includes("iPhone") ? "phone" : "tech"} /></span><p><strong>{session.device}{(session.current || session.remembered) && <i>{session.current ? (session.remembered ? "Current · remembered" : "Current") : "Remembered"}</i>}</strong><small>{session.place} · {session.seen}</small></p>{!session.current && <button type="button" onClick={() => removeSession(session.id)}>Remove</button>}</article>)}</section>
     </div>
   </div>;
 }

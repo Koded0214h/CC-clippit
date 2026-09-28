@@ -4,7 +4,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
 import { ButtonLoader, ClippitLoader } from "@/components/ui/ClippitLoader";
@@ -35,10 +35,14 @@ function Mark() {
   return <Image src="/assets/clippit-mark-light.png" width={38} height={38} alt="" priority />;
 }
 
+const subscribeToSessionPresence = () => () => undefined;
+
 function useSessionPresence() {
-  const [hasSession, setHasSession] = useState(false);
-  useEffect(() => setHasSession(Boolean(getAccessToken())), []);
-  return hasSession;
+  return useSyncExternalStore(
+    subscribeToSessionPresence,
+    () => Boolean(getAccessToken()),
+    () => false,
+  );
 }
 
 function ServiceFrame({ children, active = "Help" }: { children: ReactNode; active?: "Help" | "Support" | "Legal" | "Account" }) {
@@ -833,7 +837,7 @@ function useLegalVersions() {
 export function ProductionLegalCentreScreen() {
   const versions = useLegalVersions();
   const hasSession = useSessionPresence();
-  return <ServiceFrame active="Legal"><section className="legal-hero"><div><Status tone="gold">Current product documents</Status><h1>Legal centre</h1><p>Clippit's account, privacy, community and campaign-funding rules.</p></div><div className="legal-stamp"><ProductIcon name="shield" /><strong>{productionLegalDocs.length}</strong><span>current documents</span></div></section><section className="service-content legal-list">{productionLegalDocs.map((doc, index) => { const live = versions[doc.slug]; return <Link href={`/legal/${doc.slug}`} key={doc.slug}><span>{String(index + 1).padStart(2, "0")}</span><p><strong>{live?.title ?? doc.title}</strong><small>{doc.summary}</small></p><time>{live ? `Version ${live.version} · effective ${formatDate(live.effective_date)}` : doc.date}</time><ProductIcon name="arrow" /></Link>; })}<aside className="legal-account-links"><Link href={hasSession ? "/account/data" : "/auth"}><ProductIcon name="person" />Account data<ProductIcon name="arrow" /></Link><Link href={hasSession ? "/consent/update" : "/auth"}><ProductIcon name="check" />Accepted documents<ProductIcon name="arrow" /></Link><Link href={hasSession ? "/support/tickets/new" : "/auth"}><ProductIcon name="brief" />Ask a legal question<ProductIcon name="arrow" /></Link></aside></section></ServiceFrame>;
+  return <ServiceFrame active="Legal"><section className="legal-hero"><div><Status tone="gold">Current product documents</Status><h1>Legal centre</h1><p>Clippit's account, privacy, community and campaign-funding rules.</p></div><div className="legal-stamp"><ProductIcon name="shield" /><strong>{productionLegalDocs.length}</strong><span>documents</span></div></section><section className="service-content legal-list">{productionLegalDocs.map((doc, index) => { const live = versions[doc.slug]; return <Link href={`/legal/${doc.slug}`} key={doc.slug}><span>{String(index + 1).padStart(2, "0")}</span><p><strong>{live?.title ?? doc.title}</strong><small>{doc.summary}</small></p><time>{live ? `Version ${live.version} · effective ${formatDate(live.effective_date)}` : doc.date}</time><ProductIcon name="arrow" /></Link>; })}<aside className="legal-account-links"><Link href={hasSession ? "/account/data" : "/auth"}><ProductIcon name="person" />Account data<ProductIcon name="arrow" /></Link><Link href={hasSession ? "/consent/update" : "/auth"}><ProductIcon name="check" />Accepted documents<ProductIcon name="arrow" /></Link><Link href={hasSession ? "/support/tickets/new" : "/auth"}><ProductIcon name="brief" />Ask a legal question<ProductIcon name="arrow" /></Link></aside></section></ServiceFrame>;
 }
 
 export function ProductionLegalDocumentScreen({ slug }: { slug: string }) {
