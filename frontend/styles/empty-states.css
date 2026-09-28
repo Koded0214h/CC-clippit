@@ -180,6 +180,46 @@
 .clippit-empty__actions > a,
 .clippit-empty__actions > button { margin: 0; }
 
+/* Some empty states provide a plain link instead of one of the product's
+   button components. Give that fallback the same deliberate, bounded shape
+   so an icon can never expand to the width of the panel. */
+.clippit-empty__actions > :is(a, button):not([class]) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: max-content;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 0 15px;
+  color: var(--empty-paper);
+  background: var(--empty-ink);
+  border: 1px solid var(--empty-ink);
+  border-radius: 10px;
+  font-size: .8rem;
+  font-weight: 820;
+  line-height: 1.1;
+  text-decoration: none;
+  transition: color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.clippit-empty__actions > :is(a, button):not([class]) svg {
+  flex: 0 0 16px;
+  width: 16px;
+  height: 16px;
+}
+
+.clippit-empty__actions > :is(a, button):not([class]):hover {
+  color: var(--empty-ink);
+  background: var(--empty-accent);
+  transform: translateY(-1px);
+}
+
+.clippit-empty__actions > :is(a, button):not([class]):focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--empty-accent) 76%, white);
+  outline-offset: 3px;
+}
+
 .clippit-empty--compact {
   grid-template-columns: 144px minmax(0, 1fr);
   min-height: 190px;
@@ -215,6 +255,8 @@
 .clippit-empty--inline .clippit-empty__body h2 { font-size: 1.18rem; line-height: 1.05; letter-spacing: -.035em; }
 .clippit-empty--inline .clippit-empty__body p { margin-top: 5px; font-size: .78rem; line-height: 1.4; }
 .clippit-empty--inline .clippit-empty__actions { margin-top: 10px; }
+.clippit-empty--inline .clippit-empty__actions > :is(a, button):not([class]) { gap: 9px; min-height: 36px; padding: 0 11px; border-radius: 8px; font-size: .72rem; }
+.clippit-empty--inline .clippit-empty__actions > :is(a, button):not([class]) svg { flex-basis: 14px; width: 14px; height: 14px; }
 
 @media (max-width: 700px) {
   .clippit-empty,
