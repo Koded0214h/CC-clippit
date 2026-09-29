@@ -3,6 +3,8 @@ name: Sync qcoderx fork
 on:
   push:
     branches: [main]
+  schedule:
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -14,7 +16,9 @@ concurrency:
 
 jobs:
   sync:
-    if: github.repository == 'Automo-ASK/Clippit'
+    if: >-
+      github.repository == 'Automo-ASK/Clippit' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -68,3 +72,36 @@ jobs:
 
             echo "Fork changed during attempt ${attempt}; fetching and retrying."
           done
+
+  reconcile-from-fork:
+    if: >-
+      github.repository == 'qcoderx/Clippit' &&
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Check out the complete fork history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Merge upstream main into this fork
+        run: |
+          set -euo pipefail
+
+          git config user.name "Clippit fork sync"
+          git config user.email "fork-sync@users.noreply.github.com"
+          git remote add upstream https://github.com/Automo-ASK/Clippit.git
+          git fetch upstream main
+
+          if git merge-base --is-ancestor upstream/main HEAD; then
+            echo "Fork already contains upstream main."
+            exit 0
+          fi
+
+          git merge --no-ff --no-edit \
+            -m "Reconcile upstream main at $(git rev-parse --short=12 upstream/main)" \
+            upstream/main
+          git push origin HEAD:main
