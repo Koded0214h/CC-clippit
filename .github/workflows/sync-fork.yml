@@ -1,0 +1,70 @@
+name: Sync qcoderx fork
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-qcoderx-fork-main
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    if: github.repository == 'Automo-ASK/Clippit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out the complete upstream history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check fork credential
+        env:
+          FORK_SYNC_TOKEN: ${{ secrets.FORK_SYNC_TOKEN }}
+        run: |
+          if [ -z "${FORK_SYNC_TOKEN:-}" ]; then
+            echo "::error::Add the FORK_SYNC_TOKEN Actions secret before automatic fork sync can run."
+            exit 1
+          fi
+
+      - name: Merge upstream main into the fork
+        env:
+          FORK_SYNC_TOKEN: ${{ secrets.FORK_SYNC_TOKEN }}
+          FORK_REPOSITORY: qcoderx/Clippit
+        run: |
+          set -euo pipefail
+
+          git config user.name "Clippit fork sync"
+          git config user.email "fork-sync@users.noreply.github.com"
+          git remote add fork "https://x-access-token:${FORK_SYNC_TOKEN}@github.com/${FORK_REPOSITORY}.git"
+
+          for attempt in 1 2 3; do
+            git fetch fork main
+
+            if git merge-base --is-ancestor "$GITHUB_SHA" fork/main; then
+              echo "Fork already contains ${GITHUB_SHA}."
+              exit 0
+            fi
+
+            git switch --force-create fork-sync fork/main
+            git merge --no-ff --no-edit \
+              -m "Sync upstream main at ${GITHUB_SHA:0:12}" \
+              "$GITHUB_SHA"
+
+            if git push fork HEAD:main; then
+              echo "Fork updated to include ${GITHUB_SHA}."
+              exit 0
+            fi
+
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::Fork changed during all three sync attempts."
+              exit 1
+            fi
+
+            echo "Fork changed during attempt ${attempt}; fetching and retrying."
+          done
