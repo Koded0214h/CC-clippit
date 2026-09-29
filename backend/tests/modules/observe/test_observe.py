@@ -105,3 +105,31 @@ def test_summary_shape(client):
 def test_login_is_rate_limited(client):
     codes = [_login(client, pw="nope").status_code for _ in range(7)]
     assert codes[:5] == [401] * 5 and 429 in codes[5:]
+
+
+def test_a_crash_keeps_the_exception_traceback_and_context(client, monkeypatch):
+    app = client.app
+
+    @app.get("/boom/{item}")
+    def boom(item: str):
+        raise ValueError("kaboom")
+
+    _login(client)
+    crashing = TestClient(app, raise_server_exceptions=False)
+    crashing.cookies = client.cookies
+    r = crashing.get("/boom/abc?token=SECRET&page=2", headers={"authorization": "Bearer SECRET", "user-agent": "pytest"})
+    assert r.status_code == 500
+    rows = crashing.get("/observe/api/logs").json()["logs"]
+    line = next(x for x in rows if x["source"] == "http" and x["status"] == 500)
+    d = line["detail"]
+    assert d["exception"]["type"] == "ValueError" and "kaboom" in d["exception"]["message"]
+    assert "test_observe.py" in d["exception"]["traceback"]
+    assert d["raw_path"] == "/boom/abc" and d["query_params"] == ["page", "token"]
+    assert d["headers"]["user-agent"] == "pytest" and "authorization" not in d["headers"]
+    assert "SECRET" not in str(line)
+
+
+def test_healthy_requests_carry_no_detail(client):
+    client.get("/ping/x")
+    line = next(x for x in client.get("/observe/api/logs").json()["logs"] if x["source"] == "http") if _login(client) else None
+    assert "detail" not in line

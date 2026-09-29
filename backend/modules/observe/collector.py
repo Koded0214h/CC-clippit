@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import itertools
 import logging
+import traceback
 import threading
 import time
 from collections import deque
@@ -22,6 +23,7 @@ MAX_LOGS = 5000
 WINDOW_MINUTES = 60
 MAX_LATENCY_SAMPLES_PER_MINUTE = 400
 DB_HISTORY = 240
+MAX_TRACEBACK_CHARS = 8000
 
 # Upper bounds (ms) of the latency bands shown in the pie chart.
 LATENCY_BANDS = (100, 300, 1000)
@@ -83,8 +85,10 @@ def _append(entry: dict) -> None:
         _logs.append(entry)
 
 
-def record_request(method: str, path: str, status: int, duration_ms: float, client: str | None) -> None:
-    """Called by the ASGI middleware once per finished request."""
+def record_request(method: str, path: str, status: int, duration_ms: float, client: str | None, detail: dict | None = None) -> None:
+    """Called by the ASGI middleware once per finished request. `detail` (raw path,
+    exception, response excerpt…) rides along for the overlay and is only kept
+    for 4xx/5xx so healthy traffic stays cheap."""
     now = time.time()
     minute = int(now // 60)
     with _lock:
@@ -134,6 +138,7 @@ def record_request(method: str, path: str, status: int, duration_ms: float, clie
         "status": status,
         "duration_ms": round(duration_ms, 1),
         "client": client,
+        **({"detail": detail} if detail and status >= 400 else {}),
     })
 
 
@@ -149,16 +154,27 @@ class LogHandler(logging.Handler):
         try:
             level = {"CRITICAL": "error", "ERROR": "error", "WARNING": "warn"}.get(record.levelname, "info")
             message = record.getMessage()
-            if record.exc_info and record.exc_info[1] is not None:
-                message += f"\n{type(record.exc_info[1]).__name__}: {record.exc_info[1]}"
-            _append({
+            entry = {
                 "ts": int(record.created * 1000),
                 "level": level,
                 "source": record.name,
                 "message": message[:4000],
-            })
+            }
+            if record.exc_info and record.exc_info[1] is not None:
+                exc = record.exc_info[1]
+                entry["message"] = f"{message}\n{type(exc).__name__}: {exc}"[:4000]
+                entry["detail"] = {"exception": describe_exception(exc)}
+            _append(entry)
         except Exception:  # noqa: BLE001 — logging must never raise
             pass
+
+
+def describe_exception(exc: BaseException) -> dict:
+    """Type, message and a capped traceback (walks __cause__/__context__ like Python does)."""
+    tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+    if len(tb) > MAX_TRACEBACK_CHARS:  # keep the tail: the raising frame is what matters
+        tb = "… (truncated)\n" + tb[-MAX_TRACEBACK_CHARS:]
+    return {"type": type(exc).__name__, "message": str(exc)[:1000], "traceback": tb}
 
 
 _installed = False
