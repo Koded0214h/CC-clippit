@@ -135,7 +135,10 @@ async def google_callback(
 
     issued = await sessions.start_session(db, user, request)
     await db.commit()
-    dest = "/onboarding" if not user.onboarding_completed else ("/brand" if user.role == models.Role.organisation else "/dashboard")
+    if not user.onboarding_completed:
+        dest = "/brand" if user.role == models.Role.organisation else "/onboarding/creator"
+    else:
+        dest = "/brand" if user.role == models.Role.organisation else "/dashboard"
     return RedirectResponse(
         f"{origin}/auth/success?access_token={issued.access_token}&refresh_token={issued.refresh_token}&next={dest}"
     )

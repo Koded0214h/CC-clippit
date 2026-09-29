@@ -109,10 +109,22 @@ function BackLink({
 function ApiErrorMessage({ message }: { message: string }) {
   if (!message) return null;
   return (
-    <p role="alert" className="field__error" style={{ marginBottom: "0.5rem" }}>
+    <p role="alert" className="auth-error-message">
       {message}
     </p>
   );
+}
+
+function googleAuthErrorMessage(code: string) {
+  const messages: Record<string, string> = {
+    invalid_state: "Google sign-in expired or could not be verified. Please try again.",
+    email_not_verified_by_google: "Google could not verify this email address. Try another Google account or use email sign-in.",
+    email_already_registered: "This email is already linked to another Google account. Sign in with your existing method.",
+    google_account_already_linked: "That Google account is already linked to a different Clippit account.",
+    cannot_sign_up_as_admin: "Admin accounts cannot be created through public sign-up.",
+    account_deleted: "This account is no longer available. Contact support if you think this is a mistake.",
+  };
+  return messages[code] ?? "Google sign-in could not be completed. Please try again.";
 }
 
 export function SignUpChoice() {
@@ -407,8 +419,11 @@ export function SignIn() {
 
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {
-      const email = new URLSearchParams(window.location.search).get("email");
+      const params = new URLSearchParams(window.location.search);
+      const email = params.get("email");
       if (email) setPrefill(email);
+      const googleError = params.get("google_error");
+      if (googleError) setApiError(googleAuthErrorMessage(googleError));
     });
     return () => window.cancelAnimationFrame(frame);
   }, []);
@@ -1106,7 +1121,7 @@ export function Success() {
           recovery
             ? "/auth/sign-in"
             : role === "organisation"
-              ? "/onboarding/brand"
+              ? "/brand"
               : "/onboarding/creator"
         }
       >
