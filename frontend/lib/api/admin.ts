@@ -228,6 +228,30 @@ export interface ProviderHealth {
   detail: string | null;
 }
 
+// --- system health / delivery (live telemetry from the API process) ---------------------
+
+export interface SystemService { name: string; status: "operational" | "degraded" | "down" | "sandbox" | "disabled"; metric: string; detail: string }
+export interface SeriesPoint { t: number; ok: number; client_err: number; server_err: number; p50: number | null; p95: number | null }
+export interface SystemHealth {
+  environment: string; uptime_seconds: number; started_at: number; services: SystemService[];
+  requests: number; error_rate: number; throughput_rpm: number;
+  latency: { p50: number | null; p95: number | null; p99: number | null };
+  series: SeriesPoint[]; db_history: Array<{ ts: number; ok: boolean; ms: number | null }>;
+  log_counts: { info: number; warn: number; error: number };
+}
+export interface WebhookGroup { name: string; note: string; events: number; rejected: number; failed: number; success_rate: number | null; p95_ms: number | null; last_ts: number | null }
+export interface WebhookDelivery {
+  since: number; groups: WebhookGroup[];
+  recent: Array<{ ts: number; path: string; method: string; status: number; duration_ms: number }>;
+  buckets: Array<{ t: number; ok: number; err: number }>;
+}
+export interface SocialDelivery { platforms: Array<{ name: string; configured: boolean; connected: number; expired: number; last_update: string | null; status: "healthy" | "attention" | "unconfigured" }> }
+export interface NotificationDelivery {
+  email: { backend: string; status: "healthy" | "attention"; problems: Array<{ ts: number; message: string }> };
+  in_app: { created_24h: number; unread_24h: number; by_kind: Array<{ kind: string; count: number }> };
+  push: { subscriptions: number };
+}
+
 // --- support tickets ---------------------------------------------------------------------
 
 export interface SupportMessageOut {
@@ -429,6 +453,12 @@ export const adminApi = {
   // trust rules / provider health
   trustRules: () => api.get<unknown>("/admin/trust/rules"),
   providerHealth: () => api.get<ProviderHealth[]>("/admin/providers"),
+
+  // system health / trust & delivery
+  systemHealth: () => api.get<SystemHealth>("/admin/system/health"),
+  webhookDelivery: () => api.get<WebhookDelivery>("/admin/delivery/webhooks"),
+  socialDelivery: () => api.get<SocialDelivery>("/admin/delivery/social"),
+  notificationDelivery: () => api.get<NotificationDelivery>("/admin/delivery/notifications"),
 
   // support tickets
   supportQueue: (params?: { status?: string; category?: string; assignee_id?: string; priority?: string; limit?: number; offset?: number }) =>

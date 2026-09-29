@@ -34,6 +34,7 @@ from modules.intelligence.internal_router import router as intelligence_internal
 from modules.legal.router import router as legal_router
 from modules.observe.middleware import ObserveMiddleware
 from modules.observe import collector as observe_collector
+from modules.observe.admin_router import router as observe_admin_router
 from modules.observe.router import router as observe_router
 from modules.notifications.router import push_router, router as notifications_router
 from modules.organisations.router import router as organisations_router
@@ -126,6 +127,7 @@ app.include_router(reports_admin_router)
 
 # --- Ops dashboard (password-gated, in-memory telemetry) ---
 app.include_router(observe_router)
+app.include_router(observe_admin_router)
 
 
 @app.get("/health")

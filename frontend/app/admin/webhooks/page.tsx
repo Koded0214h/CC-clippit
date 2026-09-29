@@ -1,2 +1,2 @@
-import { AdminDeliveryScreen } from "@/components/admin/AdminScreens";
+import { AdminDeliveryScreen } from "@/components/admin/AdminOps";
 export default function Page() { return <AdminDeliveryScreen kind="webhooks" />; }

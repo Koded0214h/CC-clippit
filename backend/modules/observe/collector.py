@@ -48,6 +48,24 @@ class _Minute:
 
 
 _minutes: dict[int, _Minute] = {}
+MAX_ROUTES = 300
+
+
+@dataclass
+class _Route:
+    """Lifetime totals for one "METHOD /route/{template}" (since process start)."""
+
+    count: int = 0
+    client_err: int = 0
+    server_err: int = 0
+    total_ms: float = 0.0
+    max_ms: float = 0.0
+    last_ts: int = 0
+    last_status: int = 0
+    samples: list[float] = field(default_factory=list)
+
+
+_routes: dict[str, _Route] = {}
 db_history: deque[dict] = deque(maxlen=DB_HISTORY)
 
 
@@ -91,6 +109,21 @@ def record_request(method: str, path: str, status: int, duration_ms: float, clie
             slot = int(now * 1000003) % bucket.seen
             if slot < MAX_LATENCY_SAMPLES_PER_MINUTE:
                 bucket.samples[slot] = duration_ms
+    with _lock:
+        key = f"{method} {path}"
+        route = _routes.get(key)
+        if route is None and len(_routes) < MAX_ROUTES:  # bounded: unknown paths (scanners) can't grow this
+            route = _routes[key] = _Route()
+        if route is not None:
+            route.count += 1
+            route.client_err += 400 <= status < 500
+            route.server_err += status >= 500
+            route.total_ms += duration_ms
+            route.max_ms = max(route.max_ms, duration_ms)
+            route.last_ts, route.last_status = int(now * 1000), status
+            route.samples.append(duration_ms)
+            if len(route.samples) > 200:
+                del route.samples[:100]
     _append({
         "ts": int(now * 1000),
         "level": _level_for_status(status),
@@ -197,4 +230,45 @@ def snapshot(window_minutes: int = 30) -> dict:
         "latency_bands": {"labels": list(LATENCY_BAND_LABELS), "counts": totals.bands},
         "series": series,
         "db_history": db,
+        "top_routes": top_routes(8, "count"),
+        "slow_routes": top_routes(6, "slow"),
+        "log_counts": log_counts(),
     }
+
+
+def _route_row(key: str, r: _Route) -> dict:
+    method, path = key.split(" ", 1)
+    s = sorted(r.samples)
+    return {
+        "method": method, "path": path, "count": r.count,
+        "client_err": r.client_err, "server_err": r.server_err,
+        "avg_ms": round(r.total_ms / r.count, 1), "p95_ms": _percentile(s, 0.95), "max_ms": round(r.max_ms, 1),
+        "last_ts": r.last_ts, "last_status": r.last_status,
+    }
+
+
+def top_routes(limit: int = 8, by: str = "count") -> list[dict]:
+    with _lock:
+        rows = [_route_row(k, r) for k, r in _routes.items()]
+    key = {"count": "count", "slow": "p95_ms", "errors": "server_err"}.get(by, "count")
+    rows.sort(key=lambda row: row[key] or 0, reverse=True)
+    return rows[:limit]
+
+
+def routes_with_prefix(prefix: str) -> list[dict]:
+    with _lock:
+        return [_route_row(k, r) for k, r in _routes.items() if k.split(" ", 1)[1].startswith(prefix)]
+
+
+def recent_requests(prefix: str, limit: int = 30) -> list[dict]:
+    with _lock:
+        rows = [e for e in _logs if e.get("source") == "http" and e["path"].startswith(prefix)]
+    return rows[-limit:][::-1]
+
+
+def log_counts() -> dict:
+    with _lock:
+        counts = {"info": 0, "warn": 0, "error": 0}
+        for e in _logs:
+            counts[e["level"]] += 1
+    return counts
