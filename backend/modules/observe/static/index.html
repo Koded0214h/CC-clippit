@@ -49,21 +49,21 @@ button, input, select { font: inherit; color: inherit; }
 .login .err { color: #b3261e; min-height: 20px; margin-top: 12px; font-size: 13px; font-weight: 600; }
 
 /* ---------- navbar ---------- */
-nav { position: sticky; top: 0; z-index: 20; display: grid; grid-template-columns: auto minmax(120px, 1fr) auto; gap: 18px; align-items: center; padding: 11px clamp(14px, 2.4vw, 36px); background: #151713; color: #fff; border-bottom: 1px solid #000; }
-nav .mark { color: #fff; }
-nav .mark small { font: 700 15px var(--hand); color: var(--gold); letter-spacing: 0; margin-left: 2px; }
+nav { position: sticky; top: 0; z-index: 20; display: grid; grid-template-columns: auto minmax(120px, 1fr) auto; gap: 18px; align-items: center; padding: 11px clamp(14px, 2.4vw, 36px); background: color-mix(in srgb, var(--paper) 93%, transparent); backdrop-filter: blur(14px); color: var(--ink); border-bottom: 1px solid var(--line); }
+nav .mark { color: var(--ink); }
+nav .mark small { font: 700 16px var(--hand); color: var(--ink); background: linear-gradient(transparent 55%, var(--gold) 55%); padding: 0 4px; letter-spacing: 0; margin-left: 2px; }
 .search { position: relative; max-width: 620px; width: 100%; justify-self: center; }
-.search svg { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); width: 16px; opacity: .55; }
-.search input { width: 100%; padding: 10px 44px 10px 38px; background: rgba(255,255,255,.08); color: #fff; border: 1px solid rgba(255,255,255,.18); border-radius: 999px; }
-.search input::placeholder { color: rgba(255,255,255,.5); }
-.search input:focus { background: rgba(255,255,255,.14); outline: 2px solid var(--lime); border-color: var(--lime); }
-.search kbd { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font: 600 11px var(--mono); color: rgba(255,255,255,.6); border: 1px solid rgba(255,255,255,.25); border-radius: 5px; padding: 1px 6px; }
-.details { display: flex; gap: 10px; align-items: center; font-size: 12px; color: rgba(255,255,255,.62); white-space: nowrap; }
-.details b { color: #fff; font-weight: 600; }
-.chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; border: 1px solid rgba(255,255,255,.2); background: rgba(255,255,255,.06); font-weight: 600; }
+.search svg { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); width: 16px; opacity: .5; }
+.search input { width: 100%; padding: 10px 44px 10px 38px; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 999px; }
+.search input::placeholder { color: var(--muted); }
+.search input:focus { outline: 2px solid var(--ink); outline-offset: 1px; border-color: var(--ink); }
+.search kbd { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font: 600 11px var(--mono); color: var(--muted); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; }
+.details { display: flex; gap: 10px; align-items: center; font-size: 12px; color: var(--muted); white-space: nowrap; }
+.details b { color: var(--ink); font-weight: 600; }
+.chip { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); font-weight: 600; }
 .chip.env { color: #151713; background: var(--gold); border-color: var(--gold); text-transform: capitalize; }
-.iconbtn { background: none; border: 1px solid rgba(255,255,255,.22); color: #fff; border-radius: 999px; padding: 5px 12px; cursor: pointer; font-weight: 600; }
-.iconbtn:hover { background: var(--lime); color: #151713; border-color: var(--lime); }
+.iconbtn { background: var(--panel); border: 1px solid var(--ink); color: var(--ink); border-radius: 999px; padding: 5px 12px; cursor: pointer; font-weight: 600; }
+.iconbtn:hover { background: var(--lime); color: #151713; transform: translate(-1px,-1px); box-shadow: 2px 2px 0 #151713; }
 
 /* ---------- layout ---------- */
 main { max-width: 1440px; margin: 0 auto; padding: clamp(14px, 2.2vw, 30px); display: grid; gap: 22px; }
@@ -129,22 +129,22 @@ main { max-width: 1440px; margin: 0 auto; padding: clamp(14px, 2.2vw, 30px); dis
 
 /* ---------- logs ---------- */
 .logs { background: var(--panel); border: 1px solid var(--ink); border-radius: 16px; overflow: hidden; box-shadow: 6px 6px 0 var(--shadow); }
-.toolbar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--ink); background: #151713; color: #fff; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--ink); background: var(--paper); color: var(--ink); }
 .toolbar h3 { margin: 0; font-size: 16px; letter-spacing: -.03em; margin-right: auto; display: flex; align-items: baseline; gap: 10px; }
-.toolbar .count { color: rgba(255,255,255,.55); font: 500 12px var(--mono); }
-.seg { display: inline-flex; border: 1px solid rgba(255,255,255,.25); border-radius: 999px; overflow: hidden; }
-.seg button { background: none; border: 0; padding: 5px 12px; cursor: pointer; color: rgba(255,255,255,.65); font-weight: 600; font-size: 12.5px; }
+.toolbar .count { color: var(--muted); font: 500 12px var(--mono); }
+.seg { display: inline-flex; background: var(--panel); border: 1px solid var(--ink); border-radius: 999px; overflow: hidden; }
+.seg button { background: none; border: 0; padding: 5px 12px; cursor: pointer; color: var(--muted); font-weight: 600; font-size: 12.5px; }
 .seg button.on { background: var(--lime); color: #151713; }
-.toolbar label.sel { font-size: 12.5px; color: rgba(255,255,255,.65); display: flex; align-items: center; gap: 7px; }
-select { background: rgba(255,255,255,.08); color: #fff; border: 1px solid rgba(255,255,255,.25); border-radius: 999px; padding: 5px 10px; }
-select option { color: #151713; }
+.toolbar label.sel { font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 7px; }
+select { background: var(--panel); color: var(--ink); border: 1px solid var(--ink); border-radius: 999px; padding: 5px 10px; }
+select option { color: #151713; background: #fff; }
 .live { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; user-select: none; font-weight: 700; font-size: 12.5px; }
 .live input { display: none; }
-.live .sw { width: 38px; height: 22px; border-radius: 999px; background: rgba(255,255,255,.2); border: 1px solid rgba(255,255,255,.35); position: relative; transition: background .15s; }
-.live .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
-.live input:checked + .sw { background: var(--lime); border-color: var(--lime); }
-.live input:checked + .sw::after { transform: translateX(16px); background: #151713; }
-.live .dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,.4); }
+.live .sw { width: 38px; height: 22px; border-radius: 999px; background: var(--line); border: 1px solid var(--ink); position: relative; transition: background .15s; }
+.live .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #151713; transition: transform .15s; }
+.live input:checked + .sw { background: var(--lime); }
+.live input:checked + .sw::after { transform: translateX(16px); }
+.live .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--line); border: 1px solid var(--ink); }
 .live.on .dot { background: var(--lime); animation: blink 1.2s infinite; }
 @keyframes blink { 50% { opacity: .25; } }
 .tablewrap { max-height: 560px; overflow: auto; }
@@ -305,7 +305,7 @@ mark { background: var(--lime); color: #151713; border-radius: 3px; padding: 0 1
 
   // ---------- theme ----------
   function applyTheme(t) { document.documentElement.dataset.theme = t; store.set("observe.theme", t); if (bar) rebuildCharts(); }
-  document.documentElement.dataset.theme = store.get("observe.theme", matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  document.documentElement.dataset.theme = store.get("observe.theme", "light");
   $("theme").addEventListener("click", () => applyTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
 
   // ---------- auth ----------
