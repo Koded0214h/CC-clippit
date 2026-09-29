@@ -22,10 +22,20 @@ def client(monkeypatch):
     def ping(item: str):
         return {"item": item}
 
-    # slowapi's decorator needs the limiter wired to the app
+    # slowapi's decorator needs the limiter wired to the app. It's the same
+    # process-wide singleton every other test uses (core.rate_limit.limiter),
+    # and tests/http_app.py's `api` fixture disables it globally for the rest
+    # of the session the first time anything signs up or logs in — so it must
+    # be explicitly re-enabled here, not just reset, or this suite passes in
+    # isolation and fails the moment any other test runs before it.
     from core.rate_limit import limiter
     app.state.limiter = limiter
+    limiter.enabled = True
     limiter.reset()
+    # The log ring buffer is the same kind of process-wide global (installed
+    # once via main.py's install_log_capture()) — clear it so an earlier,
+    # unrelated test's request isn't still the most recent "http" log line.
+    collector._logs.clear()
     return TestClient(app)
 
 
