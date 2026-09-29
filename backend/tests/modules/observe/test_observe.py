@@ -100,6 +100,8 @@ def test_summary_shape(client):
     assert d["health"]["liveness"]["ok"] is True
     assert "database" in d["health"] and len(d["series"]) == 30
     assert d["requests"] >= 1
+    r = d["resources"]["now"]
+    assert r["proc_rss_mb"] > 0 and 0 <= r["sys_mem_pct"] <= 100 and r["cores"] >= 1
 
 
 def test_login_is_rate_limited(client):

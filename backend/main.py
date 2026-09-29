@@ -34,6 +34,7 @@ from modules.intelligence.internal_router import router as intelligence_internal
 from modules.legal.router import router as legal_router
 from modules.observe.middleware import ObserveMiddleware
 from modules.observe import collector as observe_collector
+from modules.observe.resources import with_sampler
 from modules.observe.admin_router import router as observe_admin_router
 from modules.observe.router import router as observe_router
 from modules.notifications.router import push_router, router as notifications_router
@@ -56,7 +57,7 @@ import modules.scheduled  # noqa: F401  (registers the periodic jobs)
 
 settings = get_settings()
 
-app = FastAPI(title="Clippit API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Clippit API", version="0.1.0", lifespan=with_sampler(lifespan))
 
 app.state.limiter = limiter
 observe_collector.install_log_capture()

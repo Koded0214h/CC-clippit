@@ -104,6 +104,9 @@ main { max-width: 1440px; margin: 0 auto; padding: clamp(14px, 2.2vw, 30px); dis
 .chartbox .canvas { position: relative; height: 220px; }
 .empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font: 700 17px var(--hand); pointer-events: none; }
 .row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+.cards6 { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
+.row2eq { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 14px; }
+.card .ring { right: 12px; top: 12px; }
 .row2 { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 18px; }
 
 /* heat strip */
@@ -205,10 +208,12 @@ mark { background: var(--lime); color: #151713; border-radius: 3px; padding: 0 1
 .foot { text-align: center; font: 700 17px var(--hand); color: var(--muted); padding: 6px 0 18px; }
 
 @media (max-width: 1100px) {
+  .cards6 { grid-template-columns: repeat(3, minmax(0, 1fr)); } .row2eq { grid-template-columns: 1fr; }
   .groups, .row3, .row2, .hero { grid-template-columns: 1fr; }
   nav { grid-template-columns: auto 1fr; } .details { grid-column: 1 / -1; flex-wrap: wrap; white-space: normal; }
 }
 @media (max-width: 560px) {
+  .cards6 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .col-src, td.src { display: none; } .hero { padding: 16px; }
   .toolbar { padding: 10px 12px; }
@@ -293,6 +298,22 @@ mark { background: var(--lime); color: #151713; border-radius: 3px; padding: 0 1
       <div class="chartbox"><h3>Latency over time</h3><div class="sub">p50 · p95 · database ping (ms)</div><div class="canvas"><canvas id="chLine" role="img" aria-label="Latency percentiles and database ping over time"></canvas><div class="empty" id="eLine">collecting…</div></div></div>
       <div class="chartbox"><h3>Latency distribution</h3><div class="sub">Share of requests by speed</div><div class="canvas"><canvas id="chPie" role="img" aria-label="Share of requests by latency band"></canvas><div class="empty" id="ePie">quiet out here…</div></div></div>
     </div>
+
+    <section class="group">
+      <h2>Resources</h2>
+      <div class="cards6">
+        <div class="card"><div class="k">API CPU</div><div class="v" id="rCpu">—</div><div class="s">of one core</div><svg class="spark" id="spCpu" viewBox="0 0 100 26" preserveAspectRatio="none"></svg></div>
+        <div class="card"><div class="k">API memory</div><div class="v" id="rMem">—</div><div class="s" id="rMemS">&nbsp;</div><svg class="spark" id="spMem" viewBox="0 0 100 26" preserveAspectRatio="none"></svg></div>
+        <div class="card"><div class="k">Host CPU</div><div class="v" id="rSysCpu">—</div><div class="s" id="rCores">&nbsp;</div><svg class="ring" viewBox="0 0 40 40"><circle class="track" cx="20" cy="20" r="15"/><circle class="val" id="ringCpu" cx="20" cy="20" r="15" stroke-dasharray="94.25" stroke-dashoffset="94.25"/></svg></div>
+        <div class="card"><div class="k">Host memory</div><div class="v" id="rSysMem">—</div><div class="s" id="rSysMemS">&nbsp;</div><svg class="ring" viewBox="0 0 40 40"><circle class="track" cx="20" cy="20" r="15"/><circle class="val" id="ringMem" cx="20" cy="20" r="15" stroke-dasharray="94.25" stroke-dashoffset="94.25"/></svg></div>
+        <div class="card"><div class="k">Load (1 min)</div><div class="v" id="rLoad">—</div><div class="s" id="rLoadS">&nbsp;</div></div>
+        <div class="card"><div class="k">Event loop lag</div><div class="v" id="rLag">—</div><div class="s" id="rDisk">&nbsp;</div></div>
+      </div>
+      <div class="row2eq">
+        <div class="chartbox"><h3>CPU</h3><div class="sub">API process (of one core) · whole host</div><div class="canvas"><canvas id="chCpu" role="img" aria-label="CPU usage over time"></canvas><div class="empty" id="eCpu">sampling…</div></div></div>
+        <div class="chartbox"><h3>Memory</h3><div class="sub">API resident MB · host used %</div><div class="canvas"><canvas id="chMem" role="img" aria-label="Memory usage over time"></canvas><div class="empty" id="eMem">sampling…</div></div></div>
+      </div>
+    </section>
 
     <div class="row2">
       <div class="panel"><h3>Error heat</h3><div class="sub">One cell per minute, oldest → newest</div>
@@ -381,10 +402,13 @@ mark { background: var(--lime); color: #151713; border-radius: 3px; padding: 0 1
     requestAnimationFrame(step);
   }
 
-  function sparkline(svg, values) {
+  function sparkline(svg, values, zoom) {
     if (values.length < 2) { svg.innerHTML = ""; return; }
-    const max = Math.max(...values, 1), n = values.length - 1;
-    const pts = values.map((v, i) => [i / n * 100, 24 - (v / max) * 21]);
+    const n = values.length - 1;
+    let lo = 0, hi = Math.max(...values, 1);
+    if (zoom) { lo = Math.min(...values); hi = Math.max(...values); }   // resource gauges: show movement, not magnitude
+    const flat = hi - lo < Math.max(hi, 1) * 0.02;
+    const pts = values.map((v, i) => [i / n * 100, flat ? 14 : 24 - ((v - lo) / (hi - lo)) * 21]);
     const d = pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
     svg.innerHTML = `<path class="fill" d="${d} L100 26 L0 26 Z"/><path class="line" d="${d}"/>`;
   }
@@ -403,13 +427,13 @@ mark { background: var(--lime); color: #151713; border-radius: 3px; padding: 0 1
   }
 
   // ---------- charts ----------
-  let bar, line, pie, lastSummary;
+  let bar, line, pie, cpuC, memC, lastSummary;
   function chartDefaults() {
     Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
     Chart.defaults.color = cssv("--muted");
     Chart.defaults.borderColor = cssv("--line");
   }
-  function rebuildCharts() { [bar, line, pie].forEach((c) => c && c.destroy()); bar = line = pie = null; if (lastSummary) draw(lastSummary); }
+  function rebuildCharts() { [bar, line, pie, cpuC, memC].forEach((c) => c && c.destroy()); bar = line = pie = cpuC = memC = null; if (lastSummary) draw(lastSummary); }
   function draw(d) {
     if (!window.Chart) return;
     if (!bar) {
@@ -449,7 +473,47 @@ mark { background: var(--lime); color: #151713; border-radius: 3px; padding: 0 1
 
     pie.data.datasets[0].data = d.latency_bands.counts;
     pie.update();
+    drawResources(d.resources);
     $("ePie").classList.toggle("hidden", d.requests > 0);
+  }
+
+  // ---------- resources ----------
+  const setRing = (id, pct) => { $(id).style.strokeDashoffset = 94.25 * (1 - Math.min(100, Math.max(0, pct)) / 100); $(id).style.stroke = pct >= 90 ? "#d8341f" : pct >= 75 ? "#e0a83a" : cssv("--ink"); };
+  const mb = (v) => v >= 1024 ? (v / 1024).toFixed(2) + "<small> GB</small>" : Math.round(v) + "<small> MB</small>";
+  function drawResources(r) {
+    if (!r) return;
+    const n = r.now, h = r.history;
+    countTo("rCpu", n.proc_cpu, (v) => v.toFixed(1) + "<small>%</small>");
+    countTo("rMem", n.proc_rss_mb, mb);
+    setText("rMemS", `${n.proc_threads} threads` + (n.proc_fds != null ? ` · ${n.proc_fds} fds` : ""));
+    countTo("rSysCpu", n.sys_cpu, (v) => Math.round(v) + "<small>%</small>");
+    setText("rCores", `${n.cores} core${n.cores > 1 ? "s" : ""}`);
+    countTo("rSysMem", n.sys_mem_pct, (v) => Math.round(v) + "<small>%</small>");
+    setText("rSysMemS", `${(n.sys_mem_used_mb / 1024).toFixed(1)} / ${(n.sys_mem_total_mb / 1024).toFixed(1)} GB`);
+    setRing("ringCpu", n.sys_cpu); setRing("ringMem", n.sys_mem_pct);
+    $("rLoad").textContent = n.load1 == null ? "—" : n.load1.toFixed(2);
+    setText("rLoadS", n.load1 == null ? "" : n.load1 / n.cores >= 1 ? "saturated for this many cores" : `${Math.round(n.load1 / n.cores * 100)}% of ${n.cores} core${n.cores > 1 ? "s" : ""}`);
+    $("rLag").innerHTML = n.loop_lag_ms.toFixed(1) + "<small>ms</small>";
+    setText("rDisk", r.disk_pct == null ? "" : `disk ${r.disk_pct}% full`);
+    sparkline($("spCpu"), h.map((x) => x.proc_cpu), true); sparkline($("spMem"), h.map((x) => x.proc_rss_mb), true);
+
+    if (!window.Chart) return;
+    const labels = h.map((x) => new Date(x.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }));
+    if (!cpuC) {
+      const ink = cssv("--ink");
+      const common = { responsive: true, maintainAspectRatio: false, animation: still ? false : { duration: 400 }, interaction: { mode: "index", intersect: false }, plugins: { legend: { position: "bottom", labels: { boxWidth: 10, boxHeight: 10, usePointStyle: true } }, tooltip: { backgroundColor: "#151713", titleColor: "#b8ff38", bodyColor: "#fff", cornerRadius: 8, padding: 10 } } };
+      cpuC = new Chart($("chCpu"), { type: "line", data: { labels: [], datasets: [
+        { label: "API (% of a core)", borderColor: ink, backgroundColor: "rgba(184,255,56,.4)", fill: true, borderWidth: 2, pointRadius: 0, tension: .3, data: [] },
+        { label: "Host (%)", borderColor: "#e0a83a", borderDash: [5, 4], borderWidth: 2, pointRadius: 0, tension: .3, data: [] }] },
+        options: { ...common, scales: { x: { ticks: { maxTicksLimit: 6 }, grid: { display: false } }, y: { beginAtZero: true, ticks: { callback: (v) => v + "%" } } } } });
+      memC = new Chart($("chMem"), { type: "line", data: { labels: [], datasets: [
+        { label: "API (MB)", yAxisID: "y", borderColor: ink, backgroundColor: "rgba(158,216,255,.5)", fill: true, borderWidth: 2, pointRadius: 0, tension: .3, data: [] },
+        { label: "Host used (%)", yAxisID: "y1", borderColor: "#e0a83a", borderDash: [5, 4], borderWidth: 2, pointRadius: 0, tension: .3, data: [] }] },
+        options: { ...common, scales: { x: { ticks: { maxTicksLimit: 6 }, grid: { display: false } }, y: { beginAtZero: false, title: { display: false }, ticks: { callback: (v) => v + " MB" } }, y1: { position: "right", min: 0, max: 100, grid: { display: false }, ticks: { callback: (v) => v + "%" } } } } });
+    }
+    cpuC.data.labels = labels; cpuC.data.datasets[0].data = h.map((x) => x.proc_cpu); cpuC.data.datasets[1].data = h.map((x) => x.sys_cpu); cpuC.update();
+    memC.data.labels = labels; memC.data.datasets[0].data = h.map((x) => x.proc_rss_mb); memC.data.datasets[1].data = h.map((x) => x.sys_mem_pct); memC.update();
+    $("eCpu").classList.toggle("hidden", h.length > 1); $("eMem").classList.toggle("hidden", h.length > 1);
   }
 
   // ---------- summary ----------

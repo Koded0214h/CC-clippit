@@ -20,7 +20,7 @@ from core.config import get_settings
 from core.database import AsyncSessionLocal
 from core.rate_limit import limiter
 
-from . import collector
+from . import collector, resources
 
 router = APIRouter(prefix="/observe", tags=["observe"])
 
@@ -125,6 +125,7 @@ async def summary(request: Request, window: int = 30):
         "readiness": {"ok": db["ok"]},
         "database": db,
     }
+    data["resources"] = {"now": resources.latest(), "disk_pct": resources.disk_percent(), "history": list(resources.history)[-90:]}
     data["environment"] = s.environment
     data["jobs_enabled"] = s.background_jobs_enabled
     return data

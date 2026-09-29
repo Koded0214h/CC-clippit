@@ -20,7 +20,7 @@ from modules.admin.router import require_admin
 from modules.auth.models import SocialAccount, User
 from modules.notifications.models import Notification, PushSubscription
 
-from . import collector
+from . import collector, resources
 from .router import _probe_db
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -35,12 +35,17 @@ async def system_health(admin: User = Depends(require_admin)):
     s = get_settings()
     db = await _probe_db()
     snap = collector.snapshot(30)
+    res = resources.latest()
+    host_status = "degraded" if res["sys_mem_pct"] >= 90 or res["sys_cpu"] >= 90 else "operational"
     services = [
         {"name": "API", "status": "operational" if snap["error_rate"] < 5 else "degraded",
          "metric": f"p95 {snap['latency']['p95']} ms" if snap["latency"]["p95"] is not None else "no traffic yet",
          "detail": f"{snap['requests']} requests · {snap['error_rate']}% 5xx (30 min)"},
         {"name": "Database", "status": "operational" if db["ok"] else "down",
          "metric": f"{db['ms']} ms" if db["ok"] else (db["error"] or "unreachable"), "detail": "SELECT 1 round trip"},
+        {"name": "Host resources", "status": host_status,
+         "metric": f"CPU {res['sys_cpu']}% · RAM {res['sys_mem_pct']}%",
+         "detail": f"API uses {res['proc_rss_mb']} MB, {res['proc_cpu']}% of a core · loop lag {res['loop_lag_ms']} ms"},
         {"name": "Background jobs", "status": "operational" if s.background_jobs_enabled else "disabled",
          "metric": f"{len(registered_jobs())} registered", "detail": "settlement, reconcile and Intelligence polling run in the API process"},
         {"name": "Payments", "status": "sandbox" if s.payment_provider == "sandbox" else "operational",

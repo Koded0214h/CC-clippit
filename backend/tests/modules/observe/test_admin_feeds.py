@@ -16,6 +16,8 @@ async def test_system_health_shape(api):
     names = [s["name"] for s in d["services"]]
     assert names[:2] == ["API", "Database"] and len(d["series"]) == 30
     assert d["services"][1]["status"] == "operational"
+    host = next(x for x in d["services"] if x["name"] == "Host resources")
+    assert "CPU" in host["metric"] and "RAM" in host["metric"]
 
 
 async def test_webhook_feed_counts_rejected_deliveries(api):
