@@ -417,7 +417,8 @@
 .admin-system-grid article > header { display: flex; align-items: center; justify-content: space-between; }
 .admin-system-grid article > header > span:not(.admin-status) { display: grid; width: 30px; height: 30px; place-items: center; border: 1px solid var(--admin-ink); border-radius: 50%; }
 .admin-system-grid article > header > span:not(.admin-status) i { width: 9px; height: 9px; border-radius: 50%; background: #5b9124; box-shadow: 0 0 0 5px #e1f0d2; }
-.admin-system-grid h2 { margin: 22px 0 15px; font-size: 18px; }
+.admin-system-grid h2 { margin: 22px 0 6px; font-size: 18px; }
+.admin-system-grid article > p { margin: 0 0 14px; color: var(--admin-muted); font-size: 8px; }
 .admin-system-grid dl { display: grid; grid-template-columns: 1fr 1fr; margin: 0; }
 .admin-system-grid dl div { display: grid; gap: 4px; }
 .admin-system-grid dt { color: var(--admin-muted); font-size: 7px; }
@@ -691,6 +692,7 @@
 .admin-shell .admin-system-grid dt,
 .admin-shell .admin-runtime-controls header p { font-size: 10px; }
 .admin-shell .admin-system-grid dd { font-size: 13px; }
+.admin-shell .admin-system-grid article > p { font-size: 11px; }
 
 @media (max-width: 900px) {
   .admin-shell .admin-mobile-dock :is(a, button) { font-size: 9px; }

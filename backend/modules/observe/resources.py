@@ -88,12 +88,18 @@ def with_sampler(inner):
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        task = asyncio.create_task(_run(), name="observe:resources")
+        from . import availability  # local: keeps this module importable without the DB layer
+
+        tasks = [
+            asyncio.create_task(_run(), name="observe:resources"),
+            asyncio.create_task(availability.run(), name="observe:availability"),
+        ]
         try:
             async with inner(app):
                 yield
         finally:
-            task.cancel()
-            await asyncio.gather(task, return_exceptions=True)
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     return lifespan

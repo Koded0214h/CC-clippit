@@ -128,6 +128,8 @@ def record_request(method: str, path: str, status: int, duration_ms: float, clie
             route.samples.append(duration_ms)
             if len(route.samples) > 200:
                 del route.samples[:100]
+    if path.startswith("/webhooks"):
+        _publish({"type": "event", "topic": "webhooks", "event": webhook_event(path, status, duration_ms, int(now * 1000))})
     _append({
         "ts": int(now * 1000),
         "level": _level_for_status(status),
@@ -252,6 +254,15 @@ def snapshot(window_minutes: int = 30) -> dict:
     }
 
 
+def webhook_event(path: str, status: int, duration_ms: float, ts: int) -> dict:
+    return {
+        "ts": ts, "path": path, "status": status, "duration_ms": round(duration_ms, 1),
+        "provider": "payments" if path.startswith("/webhooks/payments") else "social",
+        "title": "Handler failed" if status >= 500 else "Rejected" if status >= 400 else "Event accepted",
+        "result": "failed" if status >= 500 else "rejected" if status >= 400 else "complete",
+    }
+
+
 def _route_row(key: str, r: _Route) -> dict:
     method, path = key.split(" ", 1)
     s = sorted(r.samples)
@@ -274,6 +285,43 @@ def top_routes(limit: int = 8, by: str = "count") -> list[dict]:
 def routes_with_prefix(prefix: str) -> list[dict]:
     with _lock:
         return [_route_row(k, r) for k, r in _routes.items() if k.split(" ", 1)[1].startswith(prefix)]
+
+
+def bucketize(prefix: str, minutes: int = 60) -> list[dict]:
+    """Per-minute ok / failed request counts for paths under `prefix`, from the log buffer."""
+    now_min = int(time.time() // 60)
+    out = {m: {"t": m * 60000, "ok": 0, "retried": 0, "failed": 0} for m in range(now_min - minutes + 1, now_min + 1)}
+    with _lock:
+        rows = [e for e in _logs if e.get("source") == "http" and e["path"].startswith(prefix)]
+    for e in rows:
+        b = out.get(e["ts"] // 60000)
+        if b:
+            b["ok" if e["status"] < 400 else "failed"] += 1
+    return list(out.values())
+
+
+# --- live fan-out for the admin WebSocket ---------------------------------------
+_subscribers: set = set()
+
+
+def subscribe():
+    import asyncio
+
+    q: asyncio.Queue = asyncio.Queue(maxsize=200)
+    _subscribers.add(q)
+    return q
+
+
+def unsubscribe(q) -> None:
+    _subscribers.discard(q)
+
+
+def _publish(message: dict) -> None:
+    for q in list(_subscribers):
+        try:
+            q.put_nowait(message)
+        except Exception:  # noqa: BLE001 — a slow client drops events, never blocks a request
+            pass
 
 
 def recent_requests(prefix: str, limit: int = 30) -> list[dict]:

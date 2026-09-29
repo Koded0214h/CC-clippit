@@ -1,149 +1,151 @@
-"""Read-only feeds for the admin app's "System health" and "Trust & delivery"
-screens. Same in-process telemetry as /observe, but behind the normal admin
-login instead of the dashboard password.
+"""Ops feeds for the admin app's "System health" and "Trust & delivery" screens.
 
-Webhook/delivery numbers are counted from live traffic since the API process
-last started (nothing persists webhook attempts today), and every payload
-says so via `since` so the UI never presents them as lifetime figures.
+REST for a first paint and a WebSocket (`/admin/ws`) to keep the screens live.
+Both serve the same payloads (see `ops.py` and architecture/ops-api.md), and
+both sit behind the normal operator login.
 """
 
-from datetime import datetime, timedelta, timezone
+import asyncio
+import logging
+from contextlib import asynccontextmanager
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import func, select
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from core.config import get_settings
 from core.deps import get_db
-from core.jobs import registered as registered_jobs
 from modules.admin.router import require_admin
-from modules.auth.models import SocialAccount, User
-from modules.notifications.models import Notification, PushSubscription
+from modules.auth.deps import get_current_user
+from modules.auth.models import Role, User
 
-from . import collector, resources
-from .router import _probe_db
+from . import collector, ops
 
+logger = logging.getLogger("clippit.observe")
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-
-def _ratio_ok(count: int, errors: int) -> float | None:
-    return None if not count else round(100 * (count - errors) / count, 2)
+SNAPSHOT_SECONDS = 10
+AUTH_TIMEOUT_SECONDS = 5
 
 
 @router.get("/system/health")
-async def system_health(admin: User = Depends(require_admin)):
-    s = get_settings()
-    db = await _probe_db()
-    snap = collector.snapshot(30)
-    res = resources.latest()
-    host_status = "degraded" if res["sys_mem_pct"] >= 90 or res["sys_cpu"] >= 90 else "operational"
-    services = [
-        {"name": "API", "status": "operational" if snap["error_rate"] < 5 else "degraded",
-         "metric": f"p95 {snap['latency']['p95']} ms" if snap["latency"]["p95"] is not None else "no traffic yet",
-         "detail": f"{snap['requests']} requests · {snap['error_rate']}% 5xx (30 min)"},
-        {"name": "Database", "status": "operational" if db["ok"] else "down",
-         "metric": f"{db['ms']} ms" if db["ok"] else (db["error"] or "unreachable"), "detail": "SELECT 1 round trip"},
-        {"name": "Host resources", "status": host_status,
-         "metric": f"CPU {res['sys_cpu']}% · RAM {res['sys_mem_pct']}%",
-         "detail": f"API uses {res['proc_rss_mb']} MB, {res['proc_cpu']}% of a core · loop lag {res['loop_lag_ms']} ms"},
-        {"name": "Background jobs", "status": "operational" if s.background_jobs_enabled else "disabled",
-         "metric": f"{len(registered_jobs())} registered", "detail": "settlement, reconcile and Intelligence polling run in the API process"},
-        {"name": "Payments", "status": "sandbox" if s.payment_provider == "sandbox" else "operational",
-         "metric": s.payment_provider, "detail": "provider configuration"},
-        {"name": "Email", "status": "sandbox" if s.email_backend == "console" else "operational",
-         "metric": s.email_backend, "detail": "sender backend"},
-        {"name": "Storage", "status": "sandbox" if s.storage_backend == "local" else "operational",
-         "metric": s.storage_backend, "detail": "media backend"},
-    ]
-    return {
-        "environment": s.environment,
-        "uptime_seconds": snap["uptime_seconds"],
-        "started_at": snap["started_at"],
-        "services": services,
-        "requests": snap["requests"],
-        "error_rate": snap["error_rate"],
-        "throughput_rpm": snap["throughput_rpm"],
-        "latency": snap["latency"],
-        "series": snap["series"],
-        "db_history": snap["db_history"],
-        "log_counts": snap["log_counts"],
-    }
-
-
-def _traffic_group(label: str, prefix: str, note: str) -> dict:
-    routes = collector.routes_with_prefix(prefix)
-    count = sum(r["count"] for r in routes)
-    rejected = sum(r["client_err"] for r in routes)   # 4xx: bad signature etc.
-    failed = sum(r["server_err"] for r in routes)
-    p95 = max((r["p95_ms"] or 0 for r in routes), default=0)
-    return {
-        "name": label, "note": note, "events": count, "rejected": rejected, "failed": failed,
-        "success_rate": _ratio_ok(count, rejected + failed), "p95_ms": p95 or None,
-        "last_ts": max((r["last_ts"] for r in routes), default=None),
-    }
+async def system_health(admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    return await ops.system(db)
 
 
 @router.get("/delivery/webhooks")
 async def webhook_delivery(admin: User = Depends(require_admin)):
-    groups = [
-        _traffic_group("Payments provider", "/webhooks/payments", "Funding and transfer events"),
-        _traffic_group("Social platforms", "/webhooks/social", "Deauthorize and data-deletion callbacks"),
-    ]
-    recent = [
-        {"ts": e["ts"], "path": e["path"], "method": e["method"], "status": e["status"], "duration_ms": e["duration_ms"]}
-        for e in collector.recent_requests("/webhooks", 30)
-    ]
-    snap = collector.snapshot(60)
-    buckets = [{"t": r["t"], "ok": r["ok"], "err": r["client_err"] + r["server_err"]} for r in snap["series"]]
-    return {"since": snap["started_at"], "groups": groups, "recent": recent, "buckets": buckets}
+    return ops.webhooks()
 
 
 @router.get("/delivery/social")
 async def social_delivery(admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
-    from modules.auth.providers import REGISTRY
-
-    s = get_settings()
-    now = datetime.now(timezone.utc)
-    rows = (await db.execute(
-        select(
-            SocialAccount.platform,
-            func.count(),
-            func.count().filter(SocialAccount.expires_at.is_not(None), SocialAccount.expires_at < now, SocialAccount.refresh_token.is_(None)),
-            func.max(SocialAccount.updated_at),
-        ).group_by(SocialAccount.platform)
-    )).all()
-    stats = {r[0].value if hasattr(r[0], "value") else str(r[0]): r for r in rows}
-    out = []
-    for platform in REGISTRY:
-        creds = (getattr(s, f"{platform}_client_key", None) or getattr(s, f"{platform}_app_id", None) or getattr(s, f"{platform}_client_id", None))
-        r = stats.get(platform)
-        connected, expired = (r[1], r[2]) if r else (0, 0)
-        out.append({
-            "name": platform, "configured": bool(creds), "connected": connected, "expired": expired,
-            "last_update": r[3].isoformat() if r and r[3] else None,
-            "status": "unconfigured" if not creds else "attention" if expired else "healthy",
-        })
-    return {"platforms": out}
+    return await ops.social(db)
 
 
 @router.get("/delivery/notifications")
 async def notification_delivery(admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
-    s = get_settings()
-    since = datetime.now(timezone.utc) - timedelta(hours=24)
-    created, unread = (await db.execute(
-        select(func.count(), func.count().filter(Notification.read_at.is_(None))).where(Notification.created_at >= since)
-    )).one()
-    by_kind = (await db.execute(
-        select(Notification.kind, func.count()).where(Notification.created_at >= since)
-        .group_by(Notification.kind).order_by(func.count().desc()).limit(6)
-    )).all()
-    push_subs = await db.scalar(select(func.count()).select_from(PushSubscription))
-    email_problems = [
-        {"ts": e["ts"], "message": e["message"][:200]}
-        for e in collector.logs_since(0, 1000) if e["source"].startswith("clippit.email") and e["level"] != "info"
-    ][-10:][::-1]
-    return {
-        "email": {"backend": s.email_backend, "problems": email_problems, "status": "attention" if email_problems else "healthy"},
-        "in_app": {"created_24h": created, "unread_24h": unread, "by_kind": [{"kind": k, "count": c} for k, c in by_kind]},
-        "push": {"subscriptions": push_subs or 0},
-    }
+    return await ops.notifications(db)
+
+
+@router.get("/ops/snapshot")
+async def snapshot(admin: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    """All four topics in one call (what the WebSocket pushes, without the socket)."""
+    return {topic: await ops.build(topic, db) for topic in ops.TOPICS}
+
+
+# --- WebSocket ------------------------------------------------------------------------
+#
+# Browsers cannot set an Authorization header on a WebSocket, and a token in the URL
+# would land in access logs. So: connect, then send {"type":"auth","token":"<access token>"}
+# as the first message (within 5 s). The server answers {"type":"ready", "topics":[...]}.
+
+def _session(app):
+    """A short-lived DB session honouring dependency overrides (tests)."""
+    return asynccontextmanager(app.dependency_overrides.get(get_db, get_db))()
+
+
+async def _authenticate(ws: WebSocket) -> User | None:
+    try:
+        first = await asyncio.wait_for(ws.receive_json(), AUTH_TIMEOUT_SECONDS)
+    except (asyncio.TimeoutError, WebSocketDisconnect, ValueError):
+        await ws.close(code=4401, reason="Send an auth message first")
+        return None
+    if not isinstance(first, dict) or first.get("type") != "auth" or not isinstance(first.get("token"), str):
+        await ws.close(code=4401, reason="Send an auth message first")
+        return None
+    try:
+        async with _session(ws.app) as db:
+            user = await get_current_user(first["token"], db)
+    except HTTPException:
+        await ws.close(code=4401, reason="Not authenticated")
+        return None
+    if user.role != Role.admin:
+        await ws.close(code=4403, reason="Admin only")
+        return None
+    return user
+
+
+@router.websocket("/ws")
+async def ops_socket(ws: WebSocket):
+    await ws.accept()
+    if await _authenticate(ws) is None:
+        return
+
+    topics = set(ops.TOPICS)
+    kick = asyncio.Event()
+    send_lock = asyncio.Lock()
+    queue = collector.subscribe()
+
+    async def send(payload: dict) -> None:
+        async with send_lock:
+            await ws.send_json(payload)
+
+    await send({"type": "ready", "topics": sorted(topics), "snapshot_seconds": SNAPSHOT_SECONDS})
+
+    async def snapshots() -> None:
+        while True:
+            for topic in sorted(topics):
+                # The session lives only while building: never held across a send or a wait.
+                try:
+                    async with _session(ws.app) as db:
+                        payload = {"type": "snapshot", "topic": topic, "data": await ops.build(topic, db)}
+                except Exception:  # noqa: BLE001 — one bad topic must not kill the stream
+                    logger.warning("ops snapshot %s failed", topic, exc_info=True)
+                    payload = {"type": "error", "topic": topic, "message": "could not build this topic"}
+                await send(payload)
+            kick.clear()
+            try:
+                await asyncio.wait_for(kick.wait(), SNAPSHOT_SECONDS)
+            except asyncio.TimeoutError:
+                pass
+
+    async def events() -> None:
+        while True:
+            message = await queue.get()
+            if message["topic"] in topics:
+                await send(message)
+
+    async def reader() -> None:
+        while True:
+            msg = await ws.receive_json()
+            kind = msg.get("type") if isinstance(msg, dict) else None
+            if kind == "ping":
+                await send({"type": "pong"})
+            elif kind == "subscribe" and isinstance(msg.get("topics"), list):
+                chosen = {t for t in msg["topics"] if t in ops.TOPICS}
+                topics.clear()
+                topics.update(chosen)
+                await send({"type": "subscribed", "topics": sorted(topics)})
+                kick.set()  # push fresh snapshots for the new selection now
+
+    tasks = [asyncio.create_task(fn()) for fn in (snapshots, events, reader)]
+    try:
+        done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        for task in done:
+            exc = task.exception()
+            if exc is not None and not isinstance(exc, WebSocketDisconnect):
+                logger.warning("ops socket ended: %s: %s", type(exc).__name__, exc)
+    finally:
+        collector.unsubscribe(queue)
+        for task in tasks:
+            task.cancel()
+        await asyncio.wait(tasks, timeout=2)  # bounded: cleanup must never hang the connection

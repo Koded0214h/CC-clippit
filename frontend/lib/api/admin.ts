@@ -228,29 +228,45 @@ export interface ProviderHealth {
   detail: string | null;
 }
 
-// --- system health / delivery (live telemetry from the API process) ---------------------
+// --- system health / delivery (live telemetry; also streamed over /admin/ws) --------------
+// Contract documented in architecture/ops-api.md.
 
-export interface SystemService { name: string; status: "operational" | "degraded" | "down" | "sandbox" | "disabled"; metric: string; detail: string }
+export type OpsStatus = "operational" | "degraded" | "down" | "sandbox" | "disabled";
+export interface SystemService {
+  key: "api" | "database" | "jobs" | "media_checks" | "storage" | "host";
+  name: string; status: OpsStatus;
+  /** e.g. { label: "Latency (p95)", display: "48 ms" } */
+  headline: { label: string; display: string };
+  detail: string;
+  /** Persisted, survives restarts. null until ~5 minutes of samples exist (and for services we can't sample). */
+  availability_30d: number | null;
+  /** Small numeric series for a sparkline bar chart. */
+  trend: number[];
+  [extra: string]: unknown;
+}
 export interface SeriesPoint { t: number; ok: number; client_err: number; server_err: number; p50: number | null; p95: number | null }
 export interface SystemHealth {
-  environment: string; uptime_seconds: number; started_at: number; services: SystemService[];
+  generated_at: number; environment: string; status: "operational" | "degraded" | "down";
+  uptime_seconds: number; started_at: number; services: SystemService[];
   requests: number; error_rate: number; throughput_rpm: number;
   latency: { p50: number | null; p95: number | null; p99: number | null };
   series: SeriesPoint[]; db_history: Array<{ ts: number; ok: boolean; ms: number | null }>;
   log_counts: { info: number; warn: number; error: number };
 }
-export interface WebhookGroup { name: string; note: string; events: number; rejected: number; failed: number; success_rate: number | null; p95_ms: number | null; last_ts: number | null }
-export interface WebhookDelivery {
-  since: number; groups: WebhookGroup[];
-  recent: Array<{ ts: number; path: string; method: string; status: number; duration_ms: number }>;
-  buckets: Array<{ t: number; ok: number; err: number }>;
+
+export type DeliveryStatus = "healthy" | "attention" | "failing" | "quiet" | "unconfigured";
+export interface DeliveryEvent { id: string; ts: number | null; title: string; ref: string; result: string }
+export interface DeliveryCard {
+  key: string; name: string; note: string; status: DeliveryStatus;
+  /** 0-100, or null when there is nothing to measure yet. */
+  success_rate: number | null;
+  headline: { label: string; display: string };
+  /** Per-minute buckets for the "last 60 minutes" chart; null when there is no time series. */
+  window: { minutes: number; buckets: Array<{ t: number; ok: number; retried: number; failed: number }> } | null;
+  events: DeliveryEvent[];
+  facts: Record<string, string | number | boolean | null>;
 }
-export interface SocialDelivery { platforms: Array<{ name: string; configured: boolean; connected: number; expired: number; last_update: string | null; status: "healthy" | "attention" | "unconfigured" }> }
-export interface NotificationDelivery {
-  email: { backend: string; status: "healthy" | "attention"; problems: Array<{ ts: number; message: string }> };
-  in_app: { created_24h: number; unread_24h: number; by_kind: Array<{ kind: string; count: number }> };
-  push: { subscriptions: number };
-}
+export interface DeliveryFeed { kind: "webhooks" | "social" | "notifications"; generated_at: number; status: "healthy" | "attention" | "failing"; scope: string; cards: DeliveryCard[] }
 
 // --- support tickets ---------------------------------------------------------------------
 
@@ -456,9 +472,9 @@ export const adminApi = {
 
   // system health / trust & delivery
   systemHealth: () => api.get<SystemHealth>("/admin/system/health"),
-  webhookDelivery: () => api.get<WebhookDelivery>("/admin/delivery/webhooks"),
-  socialDelivery: () => api.get<SocialDelivery>("/admin/delivery/social"),
-  notificationDelivery: () => api.get<NotificationDelivery>("/admin/delivery/notifications"),
+  webhookDelivery: () => api.get<DeliveryFeed>("/admin/delivery/webhooks"),
+  socialDelivery: () => api.get<DeliveryFeed>("/admin/delivery/social"),
+  notificationDelivery: () => api.get<DeliveryFeed>("/admin/delivery/notifications"),
 
   // support tickets
   supportQueue: (params?: { status?: string; category?: string; assignee_id?: string; priority?: string; limit?: number; offset?: number }) =>
