@@ -28,15 +28,19 @@ jobs:
           fetch-depth: 0
 
       - name: Check fork credential
+        id: fork-credential
         env:
           FORK_SYNC_TOKEN: ${{ secrets.FORK_SYNC_TOKEN }}
         run: |
           if [ -z "${FORK_SYNC_TOKEN:-}" ]; then
-            echo "::error::Add the FORK_SYNC_TOKEN Actions secret before automatic fork sync can run."
-            exit 1
+            echo "::warning::FORK_SYNC_TOKEN is not configured. The fork's scheduled reconciliation will handle this update."
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Merge upstream main into the fork
+        if: steps.fork-credential.outputs.available == 'true'
         env:
           FORK_SYNC_TOKEN: ${{ secrets.FORK_SYNC_TOKEN }}
           FORK_REPOSITORY: qcoderx/Clippit
