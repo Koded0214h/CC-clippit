@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Clippit Observe</title>
+<style>
+:root {
+  --bg: #f5f6f8; --panel: #ffffff; --panel-2: #f0f2f5; --line: #e2e5ea;
+  --text: #14171c; --muted: #6a7382; --accent: #4f46e5;
+  --ok: #15803d; --ok-bg: #dcfce7; --warn: #b45309; --warn-bg: #fef3c7; --err: #b91c1c; --err-bg: #fee2e2;
+  --c1: #4f46e5; --c2: #0891b2; --c3: #d97706; --c4: #dc2626;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d0f13; --panel: #151920; --panel-2: #1b2029; --line: #262c37;
+    --text: #e7eaf0; --muted: #8b94a4; --accent: #818cf8;
+    --ok: #4ade80; --ok-bg: #12301f; --warn: #fbbf24; --warn-bg: #33270d; --err: #f87171; --err-bg: #3a1618;
+    --c1: #818cf8; --c2: #22d3ee; --c3: #fbbf24; --c4: #f87171;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d0f13; --panel: #151920; --panel-2: #1b2029; --line: #262c37;
+  --text: #e7eaf0; --muted: #8b94a4; --accent: #818cf8;
+  --ok: #4ade80; --ok-bg: #12301f; --warn: #fbbf24; --warn-bg: #33270d; --err: #f87171; --err-bg: #3a1618;
+  --c1: #818cf8; --c2: #22d3ee; --c3: #fbbf24; --c4: #f87171;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+button, input, select { font: inherit; color: inherit; }
+.hidden { display: none !important; }
+
+/* login */
+.login-wrap { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
+.login { width: 100%; max-width: 340px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 24px; }
+.login h1 { margin: 0 0 4px; font-size: 20px; }
+.login p { margin: 0 0 18px; color: var(--muted); }
+.login label { display: block; font-size: 12px; color: var(--muted); margin: 12px 0 4px; }
+.login input { width: 100%; padding: 9px 10px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; }
+.login input:focus, .search input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.login button { width: 100%; margin-top: 18px; padding: 10px; background: var(--accent); color: #fff; border: 0; border-radius: 8px; font-weight: 600; cursor: pointer; }
+.login .err { color: var(--err); min-height: 20px; margin-top: 10px; font-size: 13px; }
+
+/* navbar */
+nav { position: sticky; top: 0; z-index: 10; display: grid; grid-template-columns: auto minmax(120px, 1fr) auto; gap: 16px; align-items: center; padding: 10px 20px; background: var(--panel); border-bottom: 1px solid var(--line); }
+.brand { font-weight: 700; font-size: 17px; letter-spacing: -0.02em; display: flex; align-items: center; gap: 8px; }
+.brand i { width: 10px; height: 10px; border-radius: 3px; background: var(--accent); display: inline-block; }
+.brand small { font-weight: 500; color: var(--muted); font-size: 12px; }
+.search { position: relative; max-width: 560px; width: 100%; justify-self: center; }
+.search input { width: 100%; padding: 8px 40px 8px 12px; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; }
+.search kbd { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font: 11px var(--mono); color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; }
+.details { display: flex; gap: 14px; align-items: center; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.details b { color: var(--text); font-weight: 600; }
+.pill { padding: 2px 8px; border-radius: 999px; background: var(--panel-2); border: 1px solid var(--line); }
+.linkbtn { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; color: var(--muted); }
+.linkbtn:hover { color: var(--text); }
+
+main { max-width: 1400px; margin: 0 auto; padding: 20px; display: grid; gap: 16px; }
+.row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.group h2 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; }
+.cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; min-width: 0; }
+.card .k { font-size: 12px; color: var(--muted); }
+.card .v { font-size: 22px; font-weight: 650; letter-spacing: -0.02em; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-variant-numeric: tabular-nums; }
+.card .v small { font-size: 12px; font-weight: 500; color: var(--muted); margin-left: 2px; }
+.card .s { font-size: 12px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.badge { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; padding: 3px 9px; border-radius: 999px; }
+.badge::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.badge.ok { color: var(--ok); background: var(--ok-bg); }
+.badge.bad { color: var(--err); background: var(--err-bg); }
+.badge.unk { color: var(--muted); background: var(--panel-2); }
+.chartbox { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px 8px; }
+.chartbox h3 { margin: 0 0 8px; font-size: 13px; font-weight: 600; }
+.chartbox .canvas { position: relative; height: 210px; }
+.empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 12px; pointer-events: none; }
+
+/* logs */
+.logs { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.toolbar h3 { margin: 0; font-size: 14px; margin-right: auto; }
+.toolbar .count { color: var(--muted); font-weight: 400; margin-left: 8px; font-size: 12px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { background: none; border: 0; padding: 4px 10px; cursor: pointer; color: var(--muted); }
+.seg button.on { background: var(--panel-2); color: var(--text); font-weight: 600; }
+select { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; }
+.live { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+.live input { display: none; }
+.live .sw { width: 34px; height: 20px; border-radius: 999px; background: var(--line); position: relative; transition: background .15s; }
+.live .sw::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.live input:checked + .sw { background: var(--ok); }
+.live input:checked + .sw::after { transform: translateX(14px); }
+.live .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+.live.on .dot { background: var(--ok); animation: pulse 1.4s infinite; }
+@keyframes pulse { 50% { opacity: .3; } }
+.tablewrap { max-height: 520px; overflow: auto; }
+table { width: 100%; border-collapse: collapse; }
+th { position: sticky; top: 0; background: var(--panel-2); text-align: left; font-size: 12px; color: var(--muted); font-weight: 600; padding: 7px 14px; border-bottom: 1px solid var(--line); z-index: 1; }
+td { padding: 6px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+td.t { font: 12px var(--mono); color: var(--muted); white-space: nowrap; }
+td.src { font: 12px var(--mono); color: var(--muted); white-space: nowrap; }
+td.msg { font: 12.5px var(--mono); white-space: pre-wrap; word-break: break-word; }
+td.dur { font: 12px var(--mono); color: var(--muted); white-space: nowrap; text-align: right; }
+.lvl { font: 600 11px var(--mono); padding: 1px 7px; border-radius: 4px; text-transform: uppercase; }
+.lvl.info { color: var(--muted); background: var(--panel-2); }
+.lvl.warn { color: var(--warn); background: var(--warn-bg); }
+.lvl.error { color: var(--err); background: var(--err-bg); }
+mark { background: color-mix(in srgb, var(--accent) 30%, transparent); color: inherit; border-radius: 2px; }
+.none { padding: 28px; text-align: center; color: var(--muted); }
+
+@media (max-width: 1000px) {
+  .row3 { grid-template-columns: 1fr; }
+  nav { grid-template-columns: auto 1fr; }
+  .details { grid-column: 1 / -1; flex-wrap: wrap; white-space: normal; }
+}
+@media (max-width: 520px) {
+  main { padding: 12px; }
+  .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  nav { padding: 10px 12px; }
+  .col-src, td.src { display: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="login-wrap" id="loginView">
+  <form class="login" id="loginForm">
+    <h1>Clippit Observe</h1>
+    <p>Sign in to view API health and logs.</p>
+    <label for="u">Username</label>
+    <input id="u" autocomplete="username" required autofocus>
+    <label for="p">Password</label>
+    <input id="p" type="password" autocomplete="current-password" required>
+    <button type="submit">Sign in</button>
+    <div class="err" id="loginErr" role="alert"></div>
+  </form>
+</div>
+
+<div id="appView" class="hidden">
+  <nav>
+    <div class="brand"><i></i>clippit <small>observe</small></div>
+    <div class="search">
+      <input id="q" type="search" placeholder="Search logs — message, path, status, source…" aria-label="Search logs" autocomplete="off">
+      <kbd>/</kbd>
+    </div>
+    <div class="details">
+      <span class="pill" id="envPill">—</span>
+      <span>up <b id="navUp">—</b></span>
+      <span>updated <b id="navUpdated">—</b></span>
+      <button class="linkbtn" id="logout">Sign out</button>
+    </div>
+  </nav>
+
+  <main>
+    <div class="row3">
+      <section class="group">
+        <h2>Uptime &amp; traffic</h2>
+        <div class="cards">
+          <div class="card"><div class="k">Uptime</div><div class="v" id="cUptime">—</div><div class="s" id="cStarted">&nbsp;</div></div>
+          <div class="card"><div class="k">Requests</div><div class="v" id="cReqs">—</div><div class="s" id="cWindow">&nbsp;</div></div>
+          <div class="card"><div class="k">Error rate</div><div class="v" id="cErr">—</div><div class="s" id="cErr4">&nbsp;</div></div>
+        </div>
+      </section>
+      <section class="group">
+        <h2>Health</h2>
+        <div class="cards">
+          <div class="card"><div class="k">Liveness</div><div class="v"><span class="badge unk" id="cLive">—</span></div><div class="s">process responding</div></div>
+          <div class="card"><div class="k">Readiness</div><div class="v"><span class="badge unk" id="cReady">—</span></div><div class="s">can serve traffic</div></div>
+          <div class="card"><div class="k">Database</div><div class="v"><span id="cDb">—</span></div><div class="s" id="cDbS">&nbsp;</div></div>
+        </div>
+      </section>
+      <section class="group">
+        <h2>Latency &amp; throughput</h2>
+        <div class="cards">
+          <div class="card"><div class="k">p50</div><div class="v" id="cP50">—</div><div class="s">median</div></div>
+          <div class="card"><div class="k">p95 / p99</div><div class="v" id="cP95">—</div><div class="s" id="cP99">&nbsp;</div></div>
+          <div class="card"><div class="k">Throughput</div><div class="v" id="cRps">—</div><div class="s" id="cRpm">&nbsp;</div></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="row3">
+      <div class="chartbox"><h3>Requests per minute</h3><div class="canvas"><canvas id="chBar" role="img" aria-label="Requests per minute by status class"></canvas><div class="empty" id="eBar">No traffic yet</div></div></div>
+      <div class="chartbox"><h3>Database ping (ms)</h3><div class="canvas"><canvas id="chLine" role="img" aria-label="Database ping latency over time"></canvas><div class="empty" id="eLine">Collecting…</div></div></div>
+      <div class="chartbox"><h3>Latency distribution</h3><div class="canvas"><canvas id="chPie" role="img" aria-label="Share of requests by latency band"></canvas><div class="empty" id="ePie">No traffic yet</div></div></div>
+    </div>
+
+    <section class="logs">
+      <div class="toolbar">
+        <h3>Logs<span class="count" id="logCount"></span></h3>
+        <div class="seg" id="levels" role="group" aria-label="Level filter">
+          <button data-l="all" class="on">All</button><button data-l="info">Info</button><button data-l="warn">Warn</button><button data-l="error">Error</button>
+        </div>
+        <label>Time <select id="tsMode">
+          <option value="rel">Relative</option><option value="local">Local</option><option value="utc">UTC</option><option value="iso">ISO 8601</option>
+        </select></label>
+        <label class="live" id="liveLabel"><input type="checkbox" id="live"><span class="sw"></span><span class="dot"></span>Live feed</label>
+      </div>
+      <div class="tablewrap" id="tableWrap">
+        <table>
+          <thead><tr><th style="width:1%">Time</th><th style="width:1%">Level</th><th class="col-src" style="width:1%">Source</th><th>Message</th><th style="width:1%;text-align:right">Duration</th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+        <div class="none hidden" id="none">No log lines match.</div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const base = location.pathname.replace(/\/+$/, "");
+  const api = (p, opts) => fetch(base + "/api/" + p, { credentials: "same-origin", ...opts });
+  const store = {
+    get(k, d) { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+  };
+
+  // ---------- auth ----------
+  let timers = [], liveTimer = null;
+  function showLogin() { timers.forEach(clearInterval); timers = []; clearInterval(liveTimer); liveTimer = null; $("appView").classList.add("hidden"); $("loginView").classList.remove("hidden"); $("u").focus(); }
+  function showApp() { $("loginView").classList.add("hidden"); $("appView").classList.remove("hidden"); start(); }
+  $("loginForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    $("loginErr").textContent = "";
+    const r = await api("login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username: $("u").value, password: $("p").value }) });
+    if (r.ok) { $("p").value = ""; showApp(); return; }
+    $("loginErr").textContent = r.status === 429 ? "Too many attempts. Wait a minute." : "Wrong username or password.";
+  });
+  $("logout").addEventListener("click", async () => { await api("logout", { method: "POST" }); showLogin(); });
+
+  // ---------- formatting ----------
+  const fmtDur = (s) => { const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60); return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : m ? `${m}m ${s % 60}s` : `${s}s`; };
+  const fmtMs = (v) => v == null ? "—" : v >= 1000 ? (v / 1000).toFixed(2) + "<small>s</small>" : Math.round(v) + "<small>ms</small>";
+  const setText = (id, t) => { $(id).textContent = t; };
+  const badge = (id, ok, yes, no) => { const el = $(id); el.className = "badge " + (ok ? "ok" : "bad"); el.textContent = ok ? yes : no; };
+  const cssv = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+  // ---------- charts ----------
+  let bar, line, pie;
+  function chartBase() {
+    Chart.defaults.font.family = getComputedStyle(document.body).fontFamily;
+    Chart.defaults.color = cssv("--muted");
+    Chart.defaults.borderColor = cssv("--line");
+  }
+  const clock = (t) => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  function draw(d) {
+    if (!window.Chart) return;
+    if (!bar) {
+      chartBase();
+      const common = { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { position: "bottom", labels: { boxWidth: 10, boxHeight: 10 } } } };
+      bar = new Chart($("chBar"), { type: "bar", data: { labels: [], datasets: [
+        { label: "2xx–3xx", backgroundColor: cssv("--c2"), data: [] },
+        { label: "4xx", backgroundColor: cssv("--c3"), data: [] },
+        { label: "5xx", backgroundColor: cssv("--c4"), data: [] }] },
+        options: { ...common, scales: { x: { stacked: true, ticks: { maxTicksLimit: 6 }, grid: { display: false } }, y: { stacked: true, beginAtZero: true, ticks: { precision: 0 } } } } });
+      line = new Chart($("chLine"), { type: "line", data: { labels: [], datasets: [{ label: "ping", borderColor: cssv("--c1"), backgroundColor: "transparent", pointRadius: 2, tension: .25, spanGaps: true, data: [] }] },
+        options: { ...common, plugins: { legend: { display: false } }, scales: { x: { ticks: { maxTicksLimit: 6 }, grid: { display: false } }, y: { beginAtZero: true } } } });
+      pie = new Chart($("chPie"), { type: "doughnut", data: { labels: d.latency_bands.labels, datasets: [{ data: [], backgroundColor: [cssv("--c2"), cssv("--c1"), cssv("--c3"), cssv("--c4")], borderWidth: 0 }] },
+        options: { ...common, cutout: "55%" } });
+    }
+    bar.data.labels = d.series.map((r) => clock(r.t));
+    bar.data.datasets[0].data = d.series.map((r) => r.ok);
+    bar.data.datasets[1].data = d.series.map((r) => r.client_err);
+    bar.data.datasets[2].data = d.series.map((r) => r.server_err);
+    bar.update();
+    $("eBar").classList.toggle("hidden", d.requests > 0);
+
+    const pings = d.db_history.filter((p) => p.ms != null);
+    line.data.labels = d.db_history.map((p) => new Date(p.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+    line.data.datasets[0].data = d.db_history.map((p) => p.ms);
+    line.update();
+    $("eLine").classList.toggle("hidden", pings.length > 1);
+
+    pie.data.datasets[0].data = d.latency_bands.counts;
+    pie.update();
+    $("ePie").classList.toggle("hidden", d.requests > 0);
+  }
+
+  // ---------- summary ----------
+  async function loadSummary() {
+    const r = await api("summary?window=30");
+    if (r.status === 401) return showLogin();
+    if (!r.ok) return;
+    const d = await r.json();
+    setText("envPill", d.environment);
+    setText("navUp", fmtDur(d.uptime_seconds));
+    setText("navUpdated", new Date().toLocaleTimeString());
+    setText("cUptime", fmtDur(d.uptime_seconds));
+    setText("cStarted", "since " + new Date(d.started_at).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }));
+    setText("cReqs", d.requests.toLocaleString());
+    setText("cWindow", `last ${d.window_minutes} min`);
+    setText("cErr", d.error_rate + "%");
+    setText("cErr4", `5xx · ${d.client_error_rate}% 4xx`);
+    badge("cLive", d.health.liveness.ok, "Live", "Down");
+    badge("cReady", d.health.readiness.ok, "Ready", "Not ready");
+    const db = d.health.database;
+    $("cDb").innerHTML = db.ok ? `<span class="badge ok">Up</span>` : `<span class="badge bad">Down</span>`;
+    setText("cDbS", db.ok ? `ping ${db.ms} ms` : (db.error || "unreachable"));
+    $("cP50").innerHTML = fmtMs(d.latency.p50);
+    $("cP95").innerHTML = fmtMs(d.latency.p95);
+    setText("cP99", "p99 " + (d.latency.p99 == null ? "—" : Math.round(d.latency.p99) + " ms"));
+    setText("cRps", d.throughput_rps + " req/s");
+    setText("cRpm", d.throughput_rpm + " req/min");
+    draw(d);
+  }
+
+  // ---------- logs ----------
+  const MAX_ROWS = 2000;
+  let logs = [], lastId = 0, level = "all", query = "", tsMode = store.get("observe.ts", "rel");
+  $("tsMode").value = tsMode;
+
+  function fmtTime(ts) {
+    const d = new Date(ts);
+    switch (tsMode) {
+      case "iso": return d.toISOString();
+      case "utc": return d.toISOString().replace("T", " ").replace(/\.\d+Z$/, " UTC");
+      case "local": return d.toLocaleString([], { hour12: false, month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" });
+      default: { const s = Math.max(0, Math.round((Date.now() - ts) / 1000)); return s < 60 ? `${s}s ago` : s < 3600 ? `${Math.floor(s / 60)}m ago` : s < 86400 ? `${Math.floor(s / 3600)}h ago` : `${Math.floor(s / 86400)}d ago`; }
+    }
+  }
+  function highlight(el, text, q) {
+    if (!q) { el.textContent = text; return; }
+    const low = text.toLowerCase(); let i = 0, at;
+    while ((at = low.indexOf(q, i)) !== -1) {
+      el.append(text.slice(i, at));
+      const m = document.createElement("mark"); m.textContent = text.slice(at, at + q.length); el.append(m);
+      i = at + q.length;
+    }
+    el.append(text.slice(i));
+  }
+  const haystack = (l) => `${l.message} ${l.source} ${l.level} ${l.status ?? ""} ${l.client ?? ""}`.toLowerCase();
+
+  function render() {
+    const q = query.trim().toLowerCase();
+    const shown = logs.filter((l) => (level === "all" || l.level === level) && (!q || haystack(l).includes(q)));
+    const wrap = $("tableWrap");
+    const stick = wrap.scrollTop < 40; // newest first: keep the top in view only if the user is already there
+    const frag = document.createDocumentFragment();
+    for (let i = shown.length - 1; i >= 0 && frag.childNodes.length < 500; i--) {
+      const l = shown[i], tr = document.createElement("tr");
+      const t = document.createElement("td"); t.className = "t"; t.textContent = fmtTime(l.ts); t.title = new Date(l.ts).toISOString(); t.dataset.ts = l.ts;
+      const lv = document.createElement("td"); const sp = document.createElement("span"); sp.className = "lvl " + l.level; sp.textContent = l.level; lv.append(sp);
+      const src = document.createElement("td"); src.className = "src"; src.textContent = l.source;
+      const msg = document.createElement("td"); msg.className = "msg"; highlight(msg, l.message, q);
+      const dur = document.createElement("td"); dur.className = "dur"; dur.textContent = l.duration_ms != null ? l.duration_ms + " ms" : "";
+      tr.append(t, lv, src, msg, dur); frag.append(tr);
+    }
+    $("rows").replaceChildren(frag);
+    $("none").classList.toggle("hidden", shown.length > 0);
+    setText("logCount", `${shown.length.toLocaleString()} of ${logs.length.toLocaleString()}`);
+    if (stick) wrap.scrollTop = 0;
+  }
+
+  async function loadLogs() {
+    const r = await api("logs?after=" + lastId + (lastId ? "" : "&limit=1000"));
+    if (r.status === 401) return showLogin();
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d.logs.length) {
+      logs = logs.concat(d.logs).slice(-MAX_ROWS);
+      lastId = d.latest;
+      render();
+    }
+  }
+
+  // ---------- controls ----------
+  $("q").addEventListener("input", (e) => { query = e.target.value; render(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "/" && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)) { e.preventDefault(); $("q").focus(); }
+    if (e.key === "Escape" && document.activeElement === $("q")) { $("q").value = ""; query = ""; render(); $("q").blur(); }
+  });
+  $("levels").addEventListener("click", (e) => {
+    const b = e.target.closest("button"); if (!b) return;
+    level = b.dataset.l;
+    document.querySelectorAll("#levels button").forEach((x) => x.classList.toggle("on", x === b));
+    render();
+  });
+  $("tsMode").addEventListener("change", (e) => { tsMode = e.target.value; store.set("observe.ts", tsMode); render(); });
+
+  function setLive(on) {
+    $("liveLabel").classList.toggle("on", on);
+    clearInterval(liveTimer); liveTimer = null;
+    if (on) { loadLogs(); liveTimer = setInterval(() => { if (!document.hidden) loadLogs(); }, 2000); }
+    store.set("observe.live", on ? "1" : "0");
+  }
+  $("live").addEventListener("change", (e) => setLive(e.target.checked));
+
+  function start() {
+    loadSummary(); loadLogs();
+    timers.push(setInterval(() => { if (!document.hidden) loadSummary(); }, 10000));
+    timers.push(setInterval(() => { if (tsMode === "rel") render(); }, 15000)); // keep "12s ago" honest
+    const on = store.get("observe.live", "0") === "1";
+    $("live").checked = on; setLive(on);
+  }
+
+  // boot: a valid cookie skips the login form
+  (async () => {
+    const r = await api("logs?limit=1");
+    r.ok ? showApp() : showLogin();
+  })();
+})();
+</script>
+</body>
+</html>

@@ -32,6 +32,9 @@ from modules.earnings.router import router as earnings_router
 from modules.funding.router import router as funding_router
 from modules.intelligence.internal_router import router as intelligence_internal_router
 from modules.legal.router import router as legal_router
+from modules.observe.middleware import ObserveMiddleware
+from modules.observe import collector as observe_collector
+from modules.observe.router import router as observe_router
 from modules.notifications.router import push_router, router as notifications_router
 from modules.organisations.router import router as organisations_router
 from modules.payments.router import router as payments_router
@@ -55,6 +58,8 @@ settings = get_settings()
 app = FastAPI(title="Clippit API", version="0.1.0", lifespan=lifespan)
 
 app.state.limiter = limiter
+observe_collector.install_log_capture()
+app.add_middleware(ObserveMiddleware)
 app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
@@ -119,6 +124,9 @@ app.include_router(reports_admin_router)
 @app.get("/health")
 def health():
     return {"status": "ok"}
+# --- Ops dashboard (password-gated, in-memory telemetry) ---
+app.include_router(observe_router)
+
 
 
 @app.get("/health/email")

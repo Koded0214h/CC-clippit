@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     bcrypt_rounds: int = 12
     port: int = 8000
 
+    # /observe dashboard. Empty password keeps the route disabled (404).
+    observe_username: str = ""
+    observe_password: str = ""
+
     # Shared secret used between internal modules/services if any of this
     # backend is ever split out later. Not exposed to the browser.
     internal_service_secret: str = "dev-only-not-secret"
