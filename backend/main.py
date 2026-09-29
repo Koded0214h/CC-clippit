@@ -68,6 +68,10 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Lets the browser cache a preflight instead of re-sending it (a full
+    # round trip to Frankfurt) ahead of almost every call. 86400s = Chrome's
+    # own cap; browsers that allow less (e.g. Firefox at 86400 too) just clamp it.
+    max_age=86400,
 )
 
 
@@ -120,13 +124,13 @@ app.include_router(disputes_admin_router)
 app.include_router(reports_router)
 app.include_router(reports_admin_router)
 
+# --- Ops dashboard (password-gated, in-memory telemetry) ---
+app.include_router(observe_router)
+
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
-# --- Ops dashboard (password-gated, in-memory telemetry) ---
-app.include_router(observe_router)
-
 
 
 @app.get("/health/email")

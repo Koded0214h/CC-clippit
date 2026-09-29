@@ -302,21 +302,18 @@ async def joined_campaigns(db: AsyncSession, creator_id: uuid.UUID, ids: list[uu
     the feed — from having a live submission either way."""
     if not ids:
         return set()
-    from_membership = await db.scalars(
-        select(models.CampaignMembership.campaign_id).where(
-            models.CampaignMembership.creator_id == creator_id,
-            models.CampaignMembership.campaign_id.in_(ids),
-            models.CampaignMembership.left_at.is_(None),
-        )
+    from_membership = select(models.CampaignMembership.campaign_id).where(
+        models.CampaignMembership.creator_id == creator_id,
+        models.CampaignMembership.campaign_id.in_(ids),
+        models.CampaignMembership.left_at.is_(None),
     )
-    from_submission = await db.scalars(
-        select(Submission.campaign_id).where(
-            Submission.creator_id == creator_id,
-            Submission.campaign_id.in_(ids),
-            Submission.status != SubmissionStatus.withdrawn,
-        )
+    from_submission = select(Submission.campaign_id).where(
+        Submission.creator_id == creator_id,
+        Submission.campaign_id.in_(ids),
+        Submission.status != SubmissionStatus.withdrawn,
     )
-    return set(from_membership) | set(from_submission)
+    # One round trip, not two: UNION does the same de-duplication `set() | set()` did.
+    return set(await db.scalars(from_membership.union(from_submission)))
 
 
 # --- membership ---------------------------------------------------------------

@@ -46,42 +46,58 @@ class Balances:
 
 
 async def balances(db: AsyncSession, creator_id: uuid.UUID, at: datetime | None = None) -> Balances:
+    """One round trip, not seven: each figure below used to be its own
+    `await db.scalar(...)`, and at ~240ms per round trip to Neon that added
+    up fast. Postgres runs independent scalar subqueries in a single query
+    plan, so bundling them into one `select(...)` of several subqueries
+    costs one round trip total instead of one per figure — same numbers,
+    same semantics, just not paid for one at a time."""
     at = at or now()
     E = models.EarningEntry
 
-    total = to_decimal(await db.scalar(select(_sum(E.amount)).where(E.creator_id == creator_id)))
-    in_hold = to_decimal(await db.scalar(select(_sum(E.amount)).where(E.creator_id == creator_id, E.payable_at > at)))
-    payable_gross = total - in_hold
+    total_sq = select(_sum(E.amount)).where(E.creator_id == creator_id).scalar_subquery()
+    in_hold_sq = select(_sum(E.amount)).where(E.creator_id == creator_id, E.payable_at > at).scalar_subquery()
 
-    def allocated(*statuses):
-        query = (
+    def allocated_sq(*statuses):
+        return (
             select(_sum(PayoutAllocation.amount))
             .join(Payout, Payout.id == PayoutAllocation.payout_id)
-            .where(Payout.creator_id == creator_id)
+            .where(Payout.creator_id == creator_id, Payout.status.in_(statuses))
+            .scalar_subquery()
         )
-        return query.where(Payout.status.in_(statuses))
 
     live = (PayoutStatus.pending, PayoutStatus.processing, PayoutStatus.succeeded)
-    allocated_live = to_decimal(await db.scalar(allocated(*live)))
-    paid = to_decimal(await db.scalar(allocated(PayoutStatus.succeeded)))
+    allocated_live_sq = allocated_sq(*live)
+    paid_sq = allocated_sq(PayoutStatus.succeeded)
 
     # An admin release hold (POST /admin/earnings/{submission_id}/hold)
     # keeps otherwise-payable money out of `payable` without touching
     # accrual — see EarningAccount.release_hold_at's docstring.
-    held = to_decimal(
-        await db.scalar(
-            select(_sum(E.amount))
-            .join(models.EarningAccount, models.EarningAccount.submission_id == E.submission_id)
-            .where(E.creator_id == creator_id, E.payable_at <= at, models.EarningAccount.release_hold_at.is_not(None))
-        )
+    held_sq = (
+        select(_sum(E.amount))
+        .join(models.EarningAccount, models.EarningAccount.submission_id == E.submission_id)
+        .where(E.creator_id == creator_id, E.payable_at <= at, models.EarningAccount.release_hold_at.is_not(None))
+        .scalar_subquery()
+    )
+    views_sq = (
+        select(_sum(models.EarningAccount.cumulative_views))
+        .where(models.EarningAccount.creator_id == creator_id)
+        .scalar_subquery()
+    )
+    completed_sq = (
+        select(func.count())
+        .select_from(Payout)
+        .where(Payout.creator_id == creator_id, Payout.status == PayoutStatus.succeeded)
+        .scalar_subquery()
     )
 
-    views = await db.scalar(
-        select(_sum(models.EarningAccount.cumulative_views)).where(models.EarningAccount.creator_id == creator_id)
+    total, in_hold, allocated_live, paid, held, views, completed = (
+        await db.execute(select(total_sq, in_hold_sq, allocated_live_sq, paid_sq, held_sq, views_sq, completed_sq))
+    ).one()
+    total, in_hold, allocated_live, paid, held = (
+        to_decimal(total), to_decimal(in_hold), to_decimal(allocated_live), to_decimal(paid), to_decimal(held)
     )
-    completed = await db.scalar(
-        select(func.count()).select_from(Payout).where(Payout.creator_id == creator_id, Payout.status == PayoutStatus.succeeded)
-    )
+    payable_gross = total - in_hold
     return Balances(
         payable=payable_gross - allocated_live - held,
         in_hold=in_hold,
@@ -94,21 +110,36 @@ async def balances(db: AsyncSession, creator_id: uuid.UUID, at: datetime | None 
 
 
 async def summary(db: AsyncSession, creator_id: uuid.UUID) -> schemas.EarningsSummary:
+    """`balances()` is its own single round trip; these four figures are
+    independent of it and of each other, so they're bundled into one more
+    round trip alongside it rather than four separate ones."""
     at = now()
-    b = await balances(db, creator_id, at)
     E = models.EarningEntry
-    week = to_decimal(
-        await db.scalar(select(_sum(E.amount)).where(E.creator_id == creator_id, E.accrued_at >= at - timedelta(days=7)))
+    week_sq = (
+        select(_sum(E.amount))
+        .where(E.creator_id == creator_id, E.accrued_at >= at - timedelta(days=7))
+        .scalar_subquery()
     )
-    next_clear = await db.scalar(select(func.min(E.payable_at)).where(E.creator_id == creator_id, E.payable_at > at))
-    last_earned = await db.scalar(select(func.max(E.accrued_at)).where(E.creator_id == creator_id))
-    active = await db.scalar(
-        select(func.count()).select_from(Submission).where(
+    next_clear_sq = select(func.min(E.payable_at)).where(E.creator_id == creator_id, E.payable_at > at).scalar_subquery()
+    last_earned_sq = select(func.max(E.accrued_at)).where(E.creator_id == creator_id).scalar_subquery()
+    active_sq = (
+        select(func.count())
+        .select_from(Submission)
+        .where(
             Submission.creator_id == creator_id,
             Submission.status == SubmissionStatus.submitted,
             Submission.verification_status == VerificationStatus.approved,
         )
+        .scalar_subquery()
     )
+
+    # Sequential, not asyncio.gather: a single AsyncSession/connection can't
+    # run two queries concurrently. Still just two round trips total.
+    b = await balances(db, creator_id, at)
+    week, next_clear, last_earned, active = (
+        await db.execute(select(week_sq, next_clear_sq, last_earned_sq, active_sq))
+    ).one()
+    week = to_decimal(week)
     settings = get_settings()
     return schemas.EarningsSummary(
         payable=b.payable, in_hold=b.in_hold, processing=b.processing, paid_all_time=b.paid,
