@@ -38,8 +38,24 @@ engine = create_async_engine(
     # checked out after its recycle window, not pinged first.
     pool_pre_ping=False,
     pool_recycle=1800,
+    pool_size=settings.db_pool_size,
+    max_overflow=settings.db_pool_max_overflow,
     connect_args=_connect_args,
 )
+
+
+async def warm_pool() -> None:
+    """Opens `pool_size` real connections up front at startup instead of
+    lazily on the first requests that need them — a fresh connection costs
+    ~0.5-1.8s (TLS handshake + auth) over this link, and without this the
+    first wave of real traffic after a deploy pays that cost per request."""
+    import asyncio
+
+    async def _open_one() -> None:
+        async with engine.connect():
+            pass
+
+    await asyncio.gather(*(_open_one() for _ in range(settings.db_pool_size)), return_exceptions=True)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 

@@ -15,6 +15,12 @@ class Settings(BaseSettings):
 
     # Async (asyncpg) URL used by the running app: postgresql+asyncpg://...
     database_url: str = "postgresql+asyncpg://clippit:clippit@localhost:5432/clippit"
+    # Default (5 + 10) hard-failed under a concurrency load test — a burst of
+    # requests past the ceiling queued for up to 30s waiting for a pooled
+    # connection, then errored with a pool timeout. Raised so a real traffic
+    # spike degrades to slower responses rather than 500s.
+    db_pool_size: int = 20
+    db_pool_max_overflow: int = 30
     jwt_secret: str = "dev-only-not-secret"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 1440

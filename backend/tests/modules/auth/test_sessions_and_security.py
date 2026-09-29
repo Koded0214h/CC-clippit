@@ -261,6 +261,26 @@ def _state_from_login_redirect(location: str) -> str:
     return parse_qs(urlparse(location).query)["state"][0]
 
 
+async def _google_login_access_token(api, *, code: str, role: str = "creator") -> str:
+    """A full Google login round trip with no role hint (the generic
+    sign-in page's button never sends one). For a brand-new identity this
+    now lands on `/auth/choose-role`, not an immediate access token — see
+    modules.auth.google_router's `complete-signup`."""
+    from urllib.parse import parse_qs, urlparse
+
+    login = await api.get("/auth/google/login", follow_redirects=False)
+    cb = await api.get(
+        "/auth/google/callback", params={"code": code, "state": _state_from_login_redirect(login.headers["location"])},
+        follow_redirects=False,
+    )
+    location = cb.headers["location"]
+    if "access_token=" in location:
+        return parse_qs(urlparse(location).query)["access_token"][0]
+    pending_token = parse_qs(urlparse(location).query)["token"][0]
+    completed = await api.post("/auth/google/complete-signup", json={"token": pending_token, "role": role})
+    return completed.json()["access_token"]
+
+
 async def test_google_login_is_unavailable_without_client_credentials(api):
     r = await api.get("/auth/google/login", follow_redirects=False)
     assert r.status_code == 503
@@ -289,27 +309,43 @@ async def test_google_sign_in_creates_a_new_passwordless_account(api, monkeypatc
     assert by_provider["google"]["linked"] is True and by_provider["google"]["removable"] is False
 
 
-async def test_google_sign_in_reuses_the_same_account_on_a_second_login(api, monkeypatch):
-    await _fake_google_identity(monkeypatch, google_id="g-42", email="repeat@gmail.com")
-    login1 = await api.get("/auth/google/login", follow_redirects=False)
-    cb1 = await api.get(
-        "/auth/google/callback", params={"code": "abc", "state": _state_from_login_redirect(login1.headers["location"])},
-        follow_redirects=False,
-    )
+async def test_a_brand_new_google_identity_with_no_role_is_asked_not_defaulted(api, monkeypatch):
+    """The generic sign-in page's Google button sends no role — for a truly
+    new identity that must not silently become a creator account (the bug
+    this whole flow exists to close)."""
     from urllib.parse import parse_qs, urlparse
 
-    uid1 = (await api.get(
-        "/auth/me", headers={"Authorization": f"Bearer {parse_qs(urlparse(cb1.headers['location']).query)['access_token'][0]}"}
-    )).json()["id"]
-
-    login2 = await api.get("/auth/google/login", follow_redirects=False)
-    cb2 = await api.get(
-        "/auth/google/callback", params={"code": "def", "state": _state_from_login_redirect(login2.headers["location"])},
+    await _fake_google_identity(monkeypatch, google_id="g-ambiguous", email="brandnew@gmail.com")
+    login = await api.get("/auth/google/login", follow_redirects=False)
+    cb = await api.get(
+        "/auth/google/callback", params={"code": "abc", "state": _state_from_login_redirect(login.headers["location"])},
         follow_redirects=False,
     )
-    uid2 = (await api.get(
-        "/auth/me", headers={"Authorization": f"Bearer {parse_qs(urlparse(cb2.headers['location']).query)['access_token'][0]}"}
-    )).json()["id"]
+    location = cb.headers["location"]
+    assert "/auth/choose-role?token=" in location and "access_token=" not in location
+    pending_token = parse_qs(urlparse(location).query)["token"][0]
+
+    completed = await api.post("/auth/google/complete-signup", json={"token": pending_token, "role": "organisation"})
+    assert completed.status_code == 200
+    body = completed.json()
+    assert body["user"]["role"] == "organisation" and body["user"]["email"] == "brandnew@gmail.com"
+
+    # the pending token is single-use, not a standing credential
+    replay = await api.post("/auth/google/complete-signup", json={"token": pending_token, "role": "creator"})
+    assert replay.status_code == 200  # same google_id now has a user row: logs back in, ignores the replayed role
+    assert replay.json()["user"]["role"] == "organisation"
+
+    admin_attempt = await api.post("/auth/google/complete-signup", json={"token": pending_token, "role": "admin"})
+    assert admin_attempt.status_code == 422
+
+
+async def test_google_sign_in_reuses_the_same_account_on_a_second_login(api, monkeypatch):
+    await _fake_google_identity(monkeypatch, google_id="g-42", email="repeat@gmail.com")
+    token1 = await _google_login_access_token(api, code="abc")
+    uid1 = (await api.get("/auth/me", headers={"Authorization": f"Bearer {token1}"})).json()["id"]
+
+    token2 = await _google_login_access_token(api, code="def")
+    uid2 = (await api.get("/auth/me", headers={"Authorization": f"Bearer {token2}"})).json()["id"]
     assert uid1 == uid2
 
 
@@ -331,13 +367,7 @@ async def test_google_does_not_take_over_an_existing_account_with_an_unverified_
 
 async def test_set_first_password_needs_step_up_and_only_applies_to_passwordless_accounts(api, monkeypatch):
     await _fake_google_identity(monkeypatch, email="pwless@gmail.com")
-    login = await api.get("/auth/google/login", follow_redirects=False)
-    cb = await api.get(
-        "/auth/google/callback", params={"code": "x", "state": _state_from_login_redirect(login.headers["location"])},
-        follow_redirects=False,
-    )
-    from urllib.parse import parse_qs, urlparse
-    token = parse_qs(urlparse(cb.headers["location"]).query)["access_token"][0]
+    token = await _google_login_access_token(api, code="x")
     headers = {"Authorization": f"Bearer {token}"}
 
     challenge = (await api.post("/auth/step-up/request", headers=headers, json={"action": "set_password"})).json()

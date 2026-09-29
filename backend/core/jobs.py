@@ -79,6 +79,9 @@ async def _loop(job: Job) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     assert_safe_to_start()
+    from .database import warm_pool
+
+    await warm_pool()
     tasks: list[asyncio.Task] = []
     if get_settings().background_jobs_enabled:
         for job in _JOBS:

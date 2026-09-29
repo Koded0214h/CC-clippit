@@ -9,14 +9,21 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import get_settings
 from core.deps import get_db
-from core.security import create_google_state_token, decode_google_state_token, hash_password
+from core.security import (
+    create_google_pending_signup_token,
+    create_google_state_token,
+    decode_google_pending_signup_token,
+    decode_google_state_token,
+    hash_password,
+)
 
-from . import models, sessions
+from . import models, schemas, sessions
 from .deps import get_current_user
 from .google import GoogleAuthError, exchange_code, verify_id_token
 
@@ -113,7 +120,17 @@ async def google_callback(
         user = email_owner
 
     if user is None:
-        role = state_payload.get("role") or models.Role.creator.value
+        role = state_payload.get("role")
+        if role is None:
+            # The sign-in page's Google button never sends a role (correct
+            # for an existing user). For a genuinely new account this is
+            # ambiguous — guessing here would silently, permanently stamp
+            # the wrong role, so ask instead of defaulting to creator.
+            pending = create_google_pending_signup_token(
+                google_id=identity.google_id, email=identity.email,
+                name=identity.name, email_verified=identity.email_verified,
+            )
+            return RedirectResponse(f"{origin}/auth/choose-role?token={pending}")
         if role == models.Role.admin.value:
             return fail("cannot_sign_up_as_admin")
         user = models.User(
@@ -141,4 +158,53 @@ async def google_callback(
         dest = "/brand" if user.role == models.Role.organisation else "/dashboard"
     return RedirectResponse(
         f"{origin}/auth/success?access_token={issued.access_token}&refresh_token={issued.refresh_token}&next={dest}"
+    )
+
+
+class ChooseRoleBody(BaseModel):
+    token: str
+    role: models.Role
+
+
+@router.post("/complete-signup", response_model=schemas.TokenResponse)
+async def complete_pending_signup(
+    body: ChooseRoleBody, request: Request, db: AsyncSession = Depends(get_db),
+):
+    """Finishes a Google signup that `/callback` parked at `/auth/choose-role`
+    because it had no role to create the account with. Re-verifies nothing
+    with Google — the identity was already verified once; this only spends
+    the short-lived pending token and applies the role the person picked."""
+    if body.role == models.Role.admin:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Cannot sign up as admin.")
+    pending = decode_google_pending_signup_token(body.token)
+    if not pending:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "This link has expired. Try signing in again.")
+
+    user = await db.scalar(select(models.User).where(models.User.google_id == pending["google_id"]))
+    if user is None:
+        existing_email = await db.scalar(select(models.User).where(models.User.email == pending["email"]))
+        if existing_email is not None:
+            raise HTTPException(status.HTTP_409_CONFLICT, "An account with this email already exists.")
+        user = models.User(
+            email=pending["email"],
+            password_hash=hash_password(secrets.token_urlsafe(32)),
+            has_password=False,
+            full_name=pending["name"] or pending["email"].split("@")[0],
+            role=body.role,
+            google_id=pending["google_id"],
+            google_email=pending["email"],
+            email_verified=pending["email_verified"],
+        )
+        db.add(user)
+        await db.flush()
+        db.add(models.UserPreferences(user_id=user.id))
+
+    if user.deleted_at is not None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "This account was deleted.")
+
+    issued = await sessions.start_session(db, user, request)
+    await db.commit()
+    await db.refresh(user)
+    return schemas.TokenResponse(
+        access_token=issued.access_token, refresh_token=issued.refresh_token, user=schemas.UserOut.model_validate(user)
     )

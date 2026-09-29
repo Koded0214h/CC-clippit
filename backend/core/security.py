@@ -91,6 +91,28 @@ def decode_google_state_token(token: str) -> dict | None:
     return payload
 
 
+def create_google_pending_signup_token(*, google_id: str, email: str, name: str | None, email_verified: bool) -> str:
+    """A brand-new Google identity with no role to create the account as
+    (the sign-in page's Google button never sends one — only sign-up does).
+    Guessing here would silently, permanently stamp the wrong role on the
+    account, so instead this carries the already-verified identity to a
+    role-choice screen rather than re-running the whole Google consent
+    flow a second time."""
+    expire = datetime.now(timezone.utc) + timedelta(minutes=10)
+    payload = {
+        "google_id": google_id, "email": email, "name": name, "email_verified": email_verified,
+        "purpose": "google_pending_signup", "exp": expire,
+    }
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+
+
+def decode_google_pending_signup_token(token: str) -> dict | None:
+    payload = decode_access_token(token)
+    if not payload or payload.get("purpose") != "google_pending_signup":
+        return None
+    return payload
+
+
 def create_admin_invite_token(invitation_id: uuid.UUID, minutes: int) -> str:
     """Stateless on purpose: everything needed to look the invitation up
     (`jti` == the invitation's own id) travels in the signed token, so
