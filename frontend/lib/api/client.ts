@@ -37,7 +37,8 @@ async function request<T>(path: string, init: RequestInit = {}, isRetry = false)
       res.status === 401 &&
       !isRetry &&
       path !== "/auth/refresh" &&
-      path !== "/auth/login"
+      path !== "/auth/login" &&
+      path !== "/auth/admin/login"
     ) {
       const refreshToken = getRefreshToken();
       if (refreshToken) {
@@ -58,7 +59,9 @@ async function request<T>(path: string, init: RequestInit = {}, isRetry = false)
       }
       if (typeof window !== "undefined") {
         clearStoredTokens();
-        if (AUTH_PROTECTION_ENABLED) window.location.href = "/auth/sign-in";
+        if (AUTH_PROTECTION_ENABLED) window.location.href = window.location.pathname.startsWith("/admin")
+          ? `/admin/login?next=${encodeURIComponent(window.location.pathname)}`
+          : "/auth/sign-in";
       }
       throw new ApiError(401, "Session expired");
     }

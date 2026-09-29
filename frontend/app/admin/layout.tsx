@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { AdminShell } from "@/components/admin/AdminShell";
-import { AuthGuard } from "@/components/auth/AuthGuard";
+import { AdminGuard } from "@/components/admin/AdminGuard";
 import "../../styles/admin.css";
 
 export const metadata: Metadata = {
@@ -11,8 +11,8 @@ export const metadata: Metadata = {
 
 export default function Layout({ children }: { children: ReactNode }) {
   return (
-    <AuthGuard>
+    <AdminGuard>
       <AdminShell>{children}</AdminShell>
-    </AuthGuard>
+    </AdminGuard>
   );
 }

@@ -143,21 +143,23 @@ export function AdminLoginScreen() {
     setBusy(true);
     setError("");
     try {
-      const session = await authApi.login({ email, password });
+      const session = await authApi.adminLogin({ email: email.trim(), password });
       if ((session.user.role as string) !== "admin") {
         clearTokens();
         setError("This account does not have operator access.");
         return;
       }
-      storeTokens(session);
-      router.push("/admin");
+      storeTokens(session, "session");
+      const next = new URLSearchParams(window.location.search).get("next");
+      const destination = next && /^\/admin(?:\/|$)/.test(next) && !next.includes("\\") && !next.startsWith("/admin/login") ? next : "/admin";
+      router.replace(destination);
     } catch {
-      setError("We could not sign you in. Check your work email and password.");
+      setError("Unable to sign in. Check your administrator email and password, then try again.");
     } finally {
       setBusy(false);
     }
   };
-  return <main className="admin-login"><section><Link href="/"><Image src="/assets/clippit-mark-light.png" width={44} height={44} alt="" /><strong>Clippit</strong><span>operations</span></Link><div className="admin-login__signal"><i /><i /><i /><span><ProductIcon name="shield" /></span></div><blockquote>Customer money and decisions require an accountable operator.</blockquote><small>Restricted workspace · actions are written to the audit log</small></section><form onSubmit={submit}><AdminStatus tone="gold">Operator access</AdminStatus><h1>Sign in to operations.</h1><p>Use your company account and security key.</p><label><span>Work email</span><input type="email" defaultValue="amara@clippit.ng" required /></label><label><span>Password</span><input type="password" defaultValue="password" required /></label><div className="admin-login__key"><ProductIcon name="shield" /><span><strong>Security key</strong><small>Ready on this device</small></span><AdminStatus tone="lime">Connected</AdminStatus></div><AdminButton type="submit" disabled={busy}>{busy ? "Opening workspace" : "Continue securely"}</AdminButton><Link href="/support/tickets/new">Cannot access your operator account?</Link></form></main>;
+  return <main className="admin-login"><section><Link href="/"><Image src="/assets/clippit-mark-light.png" width={44} height={44} alt="" /><strong>Clippit</strong><span>operations</span></Link><div className="admin-login__signal"><i /><i /><i /><span><ProductIcon name="shield" /></span></div><blockquote>Customer money and decisions require an accountable operator.</blockquote><small>Restricted workspace · actions are written to the audit log</small></section><form onSubmit={submit}><AdminStatus tone="gold">Operator access</AdminStatus><h1>Sign in to operations.</h1><p>Sign in with your administrator email and password.</p><label><span>Work email</span><input type="email" name="email" autoComplete="username" placeholder="you@example.com" disabled={busy} required /></label><label><span>Password</span><input type="password" name="password" autoComplete="current-password" placeholder="Enter your password" disabled={busy} required /></label><div className="admin-login__key"><ProductIcon name="shield" /><span><strong>Administrator access only</strong><small>Your session ends when this browser session closes.</small></span></div><div aria-live="polite">{error && <p className="admin-login-error" role="alert">{error}</p>}</div><AdminButton type="submit" disabled={busy}>{busy ? "Signing in…" : "Sign in to operations"}</AdminButton><Link href="/support/tickets/new">Cannot access your operator account?</Link></form></main>;
 }
 
 export function AdminCommandCentreScreen() {
