@@ -11,6 +11,7 @@ from core.database import Base
 import modules.audit.models  # noqa: E402,F401
 import modules.auth.models  # noqa: E402,F401
 import modules.campaigns.models  # noqa: E402,F401
+import modules.observe.models  # noqa: E402,F401
 import modules.creators.models  # noqa: E402,F401
 import modules.disputes.models  # noqa: E402,F401
 import modules.earnings.models  # noqa: E402,F401

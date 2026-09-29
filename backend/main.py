@@ -32,6 +32,11 @@ from modules.earnings.router import router as earnings_router
 from modules.funding.router import router as funding_router
 from modules.intelligence.internal_router import router as intelligence_internal_router
 from modules.legal.router import router as legal_router
+from modules.observe.middleware import ObserveMiddleware
+from modules.observe import collector as observe_collector
+from modules.observe.resources import with_sampler
+from modules.observe.admin_router import router as observe_admin_router
+from modules.observe.router import router as observe_router
 from modules.notifications.router import push_router, router as notifications_router
 from modules.organisations.router import router as organisations_router
 from modules.payments.router import router as payments_router
@@ -52,9 +57,11 @@ import modules.scheduled  # noqa: F401  (registers the periodic jobs)
 
 settings = get_settings()
 
-app = FastAPI(title="Clippit API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Clippit API", version="0.1.0", lifespan=with_sampler(lifespan))
 
 app.state.limiter = limiter
+observe_collector.install_log_capture()
+app.add_middleware(ObserveMiddleware)
 app.add_middleware(SlowAPIMiddleware)
 
 app.add_middleware(
@@ -63,6 +70,10 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Lets the browser cache a preflight instead of re-sending it (a full
+    # round trip to Frankfurt) ahead of almost every call. 86400s = Chrome's
+    # own cap; browsers that allow less (e.g. Firefox at 86400 too) just clamp it.
+    max_age=86400,
 )
 
 
@@ -114,6 +125,10 @@ app.include_router(disputes_router)
 app.include_router(disputes_admin_router)
 app.include_router(reports_router)
 app.include_router(reports_admin_router)
+
+# --- Ops dashboard (password-gated, in-memory telemetry) ---
+app.include_router(observe_router)
+app.include_router(observe_admin_router)
 
 
 @app.get("/health")

@@ -14,13 +14,14 @@ from modules.auth import emails
 SAMPLES = {
     "verification": emails.verification_email("tobi@example.com", "331242", "creator"),
     "recovery": emails.recovery_email("tobi@example.com", "804517"),
+    "remember-device": emails.remember_device_email("tobi@example.com", "625190"),
     "admin-invite": emails.admin_invitation_email(
         "ops@example.com", "https://clippit.click/admin/invite?token=sample", "Adam Lawal"
     ),
     "notification": emails.notification_email(
         "tobi@example.com",
         "Your clip was approved",
-        "“The main-character entrance” passed every requirement for No Long Thing. "
+        '"The main-character entrance" passed every requirement for No Long Thing. '
         "Views now count toward your earnings.",
         "/dashboard/submissions/approved?id=sample",
     ),

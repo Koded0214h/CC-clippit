@@ -27,7 +27,19 @@ def _asyncpg_url_and_connect_args(url: str) -> tuple[str, dict]:
 
 
 _database_url, _connect_args = _asyncpg_url_and_connect_args(settings.database_url)
-engine = create_async_engine(_database_url, pool_pre_ping=True, connect_args=_connect_args)
+engine = create_async_engine(
+    _database_url,
+    # pool_pre_ping sends a throwaway "SELECT 1" over the network before
+    # every checkout to test the connection is alive — on a database this
+    # far away (Neon in Frankfurt, this app in NYC), that doubles the cost
+    # of every single query. pool_recycle catches the same staleness
+    # (Neon's pooler dropping an idle connection) without paying that tax
+    # on every request — a connection just gets replaced the next time it's
+    # checked out after its recycle window, not pinged first.
+    pool_pre_ping=False,
+    pool_recycle=1800,
+    connect_args=_connect_args,
+)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
 

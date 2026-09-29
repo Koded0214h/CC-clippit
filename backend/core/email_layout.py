@@ -1,8 +1,8 @@
-"""The one branded HTML shell every Clippit email is rendered into.
+"""The shared Clippit shell for every customer-facing HTML email.
 
-Email clients ignore <style> blocks and modern layout inconsistently, so
-this is table-based with inline styles only. Images are hot-linked from
-the live site; the text still reads correctly with images blocked.
+The markup intentionally stays table-based and mostly inline because inboxes
+render a much smaller version of the web platform. The layout remains useful
+with remote images, web fonts, media queries, and clipboard APIs disabled.
 """
 
 from __future__ import annotations
@@ -15,9 +15,9 @@ from .config import get_settings
 INK = "#151713"
 LIME = "#b8ff38"
 PAPER = "#f7f8f2"
-LINE = "#dce2d2"
-MUTED = "#61665a"
-SOFT = "#eef2e6"
+WHITE = "#ffffff"
+LINE = "#d8ddcf"
+MUTED = "#60665a"
 
 SANS = "'Geist','Helvetica Neue',Helvetica,Arial,sans-serif"
 MONO = "'SF Mono','SFMono-Regular',Menlo,Consolas,'Liberation Mono',monospace"
@@ -37,9 +37,9 @@ def absolute_link(link: str) -> str:
     return link if link.startswith(("http://", "https://")) else f"{get_settings().app_url}/{link.lstrip('/')}"
 
 
-def _paragraphs(text: str, color: str = MUTED, size: int = 16) -> str:
+def _paragraphs(text: str, color: str = MUTED, size: int = 17) -> str:
     return "".join(
-        f'<p style="margin:0 0 14px;font-family:{SANS};font-size:{size}px;line-height:1.6;color:{color};">'
+        f'<p style="margin:0 0 15px;font-family:{SANS};font-size:{size}px;line-height:1.58;color:{color};">'
         f"{escape(chunk).replace(chr(10), '<br>')}</p>"
         for chunk in text.split("\n\n")
         if chunk.strip()
@@ -47,38 +47,53 @@ def _paragraphs(text: str, color: str = MUTED, size: int = 16) -> str:
 
 
 def _code_block(code: str, expires: str | None) -> str:
-    expiry = (
-        f'<p style="margin:14px 0 0;font-family:{SANS};font-size:13px;line-height:1.4;color:#a9ae9f;">'
-        f'<span style="display:inline-block;width:7px;height:7px;border-radius:7px;background:{LIME};'
-        f'margin-right:8px;vertical-align:1px;"></span>{escape(expires)}</p>'
-        if expires
-        else ""
+    safe_code = escape(code)
+    # JavaScript is stripped by many mail clients. This handler is progressive
+    # enhancement only; user-select:all keeps the code easy to copy without it.
+    copy_script = (
+        "if(navigator.clipboard){navigator.clipboard.writeText('"
+        + safe_code
+        + "');this.innerHTML='Copied &#10003;';}return false;"
     )
+    expiry = escape(expires) if expires else "Use this code once"
     return f"""
-      <tr><td style="padding:10px 40px 6px;">
+      <tr><td class="content-pad" style="padding:18px 48px 12px;">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
-               style="background:{INK};border-radius:18px;">
-          <tr><td align="center" style="padding:30px 20px 28px;">
-            <p style="margin:0 0 12px;font-family:{SANS};font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:#8d9384;">Your code</p>
-            <p style="margin:0;font-family:{MONO};font-size:44px;line-height:1;font-weight:700;letter-spacing:.22em;color:{LIME};padding-left:.22em;">{escape(code)}</p>
-            {expiry}
-          </td></tr>
+               style="border-collapse:separate;background:{INK};border:2px solid {INK};">
+          <tr>
+            <td width="14" style="width:14px;background:{LIME};font-size:0;line-height:0;">&nbsp;</td>
+            <td class="code-main" style="padding:25px 24px 23px;">
+              <p style="margin:0 0 8px;font-family:{SANS};font-size:12px;line-height:1.2;font-weight:700;color:#b6bbaf;">Verification code</p>
+              <p id="clippit-code-{safe_code}" title="Select and copy this code"
+                 style="margin:0;font-family:{MONO};font-size:42px;line-height:1;font-weight:700;letter-spacing:.18em;color:{WHITE};white-space:nowrap;-webkit-user-select:all;user-select:all;cursor:text;">{safe_code}</p>
+              <p style="margin:11px 0 0;font-family:{SANS};font-size:12px;line-height:1.4;color:#b6bbaf;">
+                <span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:{LIME};margin-right:7px;vertical-align:1px;"></span>{expiry}
+              </p>
+            </td>
+            <td class="copy-cell" width="126" valign="middle" align="center"
+                style="width:126px;padding:18px;border-left:1px dashed #52564e;">
+              <a href="#clippit-code-{safe_code}" onclick="{copy_script}"
+                 style="display:block;padding:13px 12px;background:{LIME};border:1px solid {LIME};font-family:{SANS};font-size:14px;line-height:1;font-weight:800;color:{INK};text-decoration:none;text-align:center;box-shadow:4px 4px 0 #000000;">Copy code</a>
+              <p style="margin:12px 0 0;font-family:{SANS};font-size:10px;line-height:1.35;color:#b6bbaf;">Or tap the code<br>to select it</p>
+            </td>
+          </tr>
         </table>
       </td></tr>"""
 
 
 def _button(button: Button) -> str:
+    url = escape(button.url, quote=True)
     return f"""
-      <tr><td style="padding:10px 40px 6px;">
+      <tr><td class="content-pad" style="padding:18px 48px 10px;">
         <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
-          <td style="background:{LIME};border-radius:999px;border:2px solid {INK};">
-            <a href="{escape(button.url, quote=True)}" target="_blank"
-               style="display:inline-block;padding:15px 28px;font-family:{SANS};font-size:16px;font-weight:700;color:{INK};text-decoration:none;">{escape(button.label)}&nbsp;&nbsp;&rarr;</a>
+          <td style="background:{INK};box-shadow:5px 5px 0 {LIME};">
+            <a href="{url}" target="_blank"
+               style="display:inline-block;padding:16px 25px;font-family:{SANS};font-size:16px;line-height:1;font-weight:800;color:{WHITE};text-decoration:none;">{escape(button.label)}&nbsp;&nbsp;&#8599;</a>
           </td>
         </tr></table>
-        <p style="margin:14px 0 0;font-family:{SANS};font-size:12px;line-height:1.5;color:{MUTED};">
-          Button not working? Paste this into your browser:<br>
-          <a href="{escape(button.url, quote=True)}" style="color:{INK};word-break:break-all;">{escape(button.url)}</a></p>
+        <p style="margin:19px 0 0;font-family:{SANS};font-size:12px;line-height:1.5;color:{MUTED};">
+          If the button does not open, copy this address into your browser:<br>
+          <a href="{url}" style="color:{INK};word-break:break-all;text-decoration:underline;text-underline-offset:3px;">{escape(button.url)}</a></p>
       </td></tr>"""
 
 
@@ -86,35 +101,35 @@ def _steps(title: str, steps: list[tuple[str, str]]) -> str:
     rows = "".join(
         f"""
           <tr>
-            <td valign="top" width="40" style="padding:14px 0 14px 18px;">
-              <span style="display:inline-block;width:26px;height:26px;line-height:26px;border-radius:26px;background:{LIME};border:1.5px solid {INK};text-align:center;font-family:{SANS};font-size:12px;font-weight:800;color:{INK};">{i}</span>
+            <td valign="top" width="38" style="width:38px;padding:17px 0;border-top:1px solid {LINE};">
+              <span style="display:inline-block;width:25px;height:25px;line-height:25px;background:{INK};text-align:center;font-family:{SANS};font-size:12px;font-weight:800;color:{LIME};">{i}</span>
             </td>
-            <td valign="top" style="padding:14px 18px 14px 12px;{'border-bottom:1px solid ' + LINE + ';' if i < len(steps) else ''}">
-              <p style="margin:0;font-family:{SANS};font-size:15px;font-weight:700;line-height:1.35;color:{INK};">{escape(head)}</p>
-              <p style="margin:3px 0 0;font-family:{SANS};font-size:13px;line-height:1.5;color:{MUTED};">{escape(detail)}</p>
+            <td valign="top" style="padding:17px 0 17px 8px;border-top:1px solid {LINE};">
+              <p style="margin:0;font-family:{SANS};font-size:15px;font-weight:800;line-height:1.35;color:{INK};">{escape(head)}</p>
+              <p style="margin:4px 0 0;font-family:{SANS};font-size:13px;line-height:1.5;color:{MUTED};">{escape(detail)}</p>
             </td>
           </tr>"""
         for i, (head, detail) in enumerate(steps, start=1)
     )
     return f"""
-      <tr><td style="padding:24px 40px 4px;">
-        <p style="margin:0 0 10px;font-family:{SANS};font-size:11px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:{MUTED};">{escape(title)}</p>
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
-               style="border:1px solid {LINE};border-radius:16px;background:#fbfcf8;">{rows}
-        </table>
+      <tr><td class="content-pad" style="padding:27px 48px 3px;">
+        <p style="margin:0 0 11px;font-family:{SANS};font-size:13px;font-weight:800;line-height:1.3;color:{INK};">{escape(title)}</p>
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">{rows}</table>
       </td></tr>"""
 
 
 def _note(note: str) -> str:
-    lead, _, rest = note.partition(" — ")
-    if rest and not lead.endswith(("?", ".", "!")):
-        lead += "."
-    body = f"<strong style=\"color:{INK};\">{escape(lead)}</strong> {escape(rest)}" if rest else escape(note)
     return f"""
-      <tr><td style="padding:22px 40px 8px;">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
-               style="background:{SOFT};border-radius:14px;border-left:4px solid {LIME};">
-          <tr><td style="padding:16px 18px;font-family:{SANS};font-size:14px;line-height:1.55;color:{MUTED};">{body}</td></tr>
+      <tr><td class="content-pad" style="padding:24px 48px 5px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td width="34" valign="top" style="width:34px;padding-top:1px;">
+              <span style="display:inline-block;width:24px;height:24px;line-height:24px;border:1px solid {INK};text-align:center;font-family:{SANS};font-size:13px;font-weight:800;color:{INK};">!</span>
+            </td>
+            <td style="font-family:{SANS};font-size:13px;line-height:1.55;color:{MUTED};">
+              <strong style="display:block;margin-bottom:2px;color:{INK};">Keep your account safe</strong>{escape(note)}
+            </td>
+          </tr>
         </table>
       </td></tr>"""
 
@@ -129,15 +144,16 @@ def render(
     expires: str | None = None,
     button: Button | None = None,
     steps: list[tuple[str, str]] | None = None,
-    steps_title: str = "What's next",
+    steps_title: str = "What happens next",
     note: str | None = None,
     preheader: str = "",
-    reason: str = "You're receiving this because this address is registered on Clippit.",
+    reason: str = "You are receiving this because this address is registered on Clippit.",
 ) -> str:
-    """`note` renders its text before " — " in bold, as a lead-in."""
+    """Render one resilient, branded email document."""
     site = get_settings().app_url
+    intro_html = _paragraphs(intro)
     parts = [
-        _paragraphs(intro) and f'<tr><td style="padding:0 40px 8px;">{_paragraphs(intro)}</td></tr>',
+        f'<tr><td class="content-pad" style="padding:0 48px 5px;">{intro_html}</td></tr>' if intro_html else "",
         _code_block(code, expires) if code else "",
         _button(button) if button else "",
         _steps(steps_title, steps) if steps else "",
@@ -152,54 +168,72 @@ def render(
 <meta name="supported-color-schemes" content="light">
 <title>{escape(title)}</title>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+  @media only screen and (max-width:620px) {{
+    .email-wrap {{ padding:0 !important; }}
+    .email-sheet {{ width:100% !important; }}
+    .header-pad {{ padding:20px 22px !important; }}
+    .hero-pad {{ padding:34px 24px 8px !important; }}
+    .content-pad {{ padding-left:24px !important;padding-right:24px !important; }}
+    .email-title {{ font-size:34px !important;line-height:1.05 !important; }}
+    .code-main {{ padding:22px 15px 21px !important; }}
+    .code-main p[id] {{ font-size:31px !important;letter-spacing:.12em !important; }}
+    .copy-cell {{ width:98px !important;padding:12px 10px !important; }}
+    .copy-cell a {{ padding:12px 6px !important;font-size:12px !important;box-shadow:3px 3px 0 #000000 !important; }}
+    .copy-cell p {{ font-size:9px !important; }}
+    .footer-copy {{ display:block !important;width:100% !important;padding-bottom:18px !important; }}
+    .footer-mark {{ display:block !important;width:100% !important;text-align:left !important; }}
+  }}
+</style>
 </head>
 <body style="margin:0;padding:0;background:{PAPER};-webkit-text-size-adjust:100%;">
 <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">{escape(preheader)}&#8199;&#65279;&#847;&#8199;&#65279;&#847;&#8199;&#65279;&#847;</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:{PAPER};">
-  <tr><td align="center" style="padding:36px 14px 28px;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
-           style="max-width:560px;background:#ffffff;border-radius:22px;border:1px solid {LINE};overflow:hidden;">
+  <tr><td class="email-wrap" align="center" style="padding:38px 14px 32px;">
+    <table class="email-sheet" role="presentation" width="600" cellpadding="0" cellspacing="0" border="0"
+           style="width:100%;max-width:600px;background:{WHITE};border-top:7px solid {LIME};border-bottom:2px solid {INK};">
 
-      <tr><td style="background:{INK};padding:22px 28px;">
+      <tr><td class="header-pad" style="background:{INK};padding:23px 30px;">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
           <td valign="middle">
-            <a href="{site}" target="_blank" style="text-decoration:none;">
-              <img src="{_asset('clippit-mark-light.png')}" width="36" height="36" alt=""
-                   style="display:inline-block;vertical-align:middle;border:0;">
-              <span style="display:inline-block;vertical-align:middle;margin-left:10px;font-family:{SANS};font-size:22px;font-weight:800;letter-spacing:-.03em;color:#ffffff;">Clippit</span>
+            <a href="{site}" target="_blank" style="text-decoration:none;white-space:nowrap;">
+              <img src="{_asset('clippit-mark-light.png')}" width="38" height="38" alt=""
+                   style="display:inline-block;vertical-align:middle;border:0;outline:none;">
+              <span style="display:inline-block;vertical-align:middle;margin-left:10px;font-family:{SANS};font-size:23px;font-weight:800;letter-spacing:-.04em;color:{WHITE};">Clippit</span>
             </a>
           </td>
           <td valign="middle" align="right">
-            <span style="display:inline-block;background:{LIME};color:{INK};border-radius:999px;padding:7px 12px;font-family:{SANS};font-size:10px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;">{escape(tag)}</span>
+            <span style="display:inline-block;padding:7px 10px;border:1px solid #62675e;font-family:{SANS};font-size:11px;line-height:1;font-weight:700;color:#dce1d7;">{escape(tag)}</span>
           </td>
         </tr></table>
       </td></tr>
-      <tr><td style="height:5px;line-height:5px;font-size:0;background:{LIME};">&nbsp;</td></tr>
 
-      <tr><td style="padding:38px 40px 6px;">
-        <p style="margin:0 0 14px;font-family:{SANS};font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:{MUTED};">
-          <span style="display:inline-block;width:8px;height:8px;border-radius:8px;background:{LIME};border:1.5px solid {INK};margin-right:8px;vertical-align:0;"></span>{escape(eyebrow)}</p>
-        <h1 style="margin:0 0 16px;font-family:{SANS};font-size:32px;line-height:1.12;font-weight:800;letter-spacing:-.035em;color:{INK};">{escape(title)}</h1>
+      <tr><td class="hero-pad" style="padding:43px 48px 9px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+          <td width="18" valign="middle" style="width:18px;"><span style="display:block;width:8px;height:8px;background:{LIME};border:1px solid {INK};"></span></td>
+          <td style="font-family:{SANS};font-size:13px;line-height:1.2;font-weight:700;color:{MUTED};">{escape(eyebrow)}</td>
+        </tr></table>
+        <h1 class="email-title" style="margin:15px 0 18px;font-family:{SANS};font-size:42px;line-height:1.04;font-weight:800;letter-spacing:-.045em;color:{INK};">{escape(title)}</h1>
       </td></tr>
-      {''.join(p for p in parts if p)}
+      {''.join(part for part in parts if part)}
 
-      <tr><td style="padding:30px 40px 0;"><div style="height:1px;background:{LINE};line-height:1px;font-size:0;">&nbsp;</div></td></tr>
-      <tr><td style="padding:22px 40px 30px;">
+      <tr><td class="content-pad" style="padding:36px 48px 0;"><div style="height:1px;background:{LINE};line-height:1px;font-size:0;">&nbsp;</div></td></tr>
+      <tr><td class="content-pad" style="padding:22px 48px 31px;">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
-          <td valign="middle" style="font-family:{SANS};font-size:13px;line-height:1.5;color:{MUTED};">
-            <strong style="color:{INK};">Post clips. Get paid for verified views.</strong><br>
-            <a href="{site}" style="color:{MUTED};text-decoration:underline;">clippit.click</a>
-            &nbsp;&middot;&nbsp;<a href="{site}/help" style="color:{MUTED};text-decoration:underline;">Help</a>
-            &nbsp;&middot;&nbsp;<a href="{site}/legal/privacy" style="color:{MUTED};text-decoration:underline;">Privacy</a>
+          <td class="footer-copy" valign="top" style="font-family:{SANS};font-size:12px;line-height:1.6;color:{MUTED};">
+            <strong style="font-size:13px;color:{INK};">Clippit</strong><br>
+            <a href="{site}" style="color:{MUTED};text-decoration:underline;text-underline-offset:3px;">Open Clippit</a>
+            &nbsp;&nbsp;<a href="{site}/help" style="color:{MUTED};text-decoration:underline;text-underline-offset:3px;">Help</a>
+            &nbsp;&nbsp;<a href="{site}/legal/privacy" style="color:{MUTED};text-decoration:underline;text-underline-offset:3px;">Privacy</a>
           </td>
-          <td valign="middle" align="right" width="44">
-            <img src="{_asset('clippit-mark.png')}" width="34" height="34" alt="Clippit" style="display:block;border:0;">
+          <td class="footer-mark" valign="top" align="right" width="48">
+            <img src="{_asset('clippit-mark.png')}" width="38" height="38" alt="Clippit" style="display:inline-block;border:0;outline:none;">
           </td>
         </tr></table>
       </td></tr>
     </table>
 
-    <p style="max-width:520px;margin:18px auto 0;font-family:{SANS};font-size:12px;line-height:1.5;color:#8d9384;text-align:center;">
+    <p style="max-width:550px;margin:18px auto 0;padding:0 20px;font-family:{SANS};font-size:11px;line-height:1.55;color:#7d8376;text-align:center;">
       {escape(reason)}<br>&copy; Clippit</p>
   </td></tr>
 </table>

@@ -28,6 +28,7 @@ import modules.funding.models  # noqa: F401
 import modules.intelligence.models  # noqa: F401
 import modules.legal.models  # noqa: F401
 import modules.notifications.models  # noqa: F401
+import modules.observe.models  # noqa: F401
 import modules.organisations.models  # noqa: F401
 import modules.payouts.models  # noqa: F401
 import modules.refunds.models  # noqa: F401

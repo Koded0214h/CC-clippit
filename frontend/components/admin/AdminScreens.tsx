@@ -31,7 +31,7 @@ import {
   type TicketOut,
 } from "@/lib/api/admin";
 
-function relativeTime(iso: string | null | undefined): string {
+export function relativeTime(iso: string | null | undefined): string {
   if (!iso) return "—";
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return "—";
@@ -61,15 +61,15 @@ function titleCase(value: string): string {
   return value.replace(/[_-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-type Tone = "lime" | "gold" | "red" | "blue" | "ink" | "paper";
+export type Tone = "lime" | "gold" | "red" | "blue" | "ink" | "paper";
 type QueueKind = "users" | "creator-verifications" | "brand-verifications" | "campaigns" | "submissions" | "support" | "disputes" | "payouts" | "refunds" | "risk";
 type DetailKind = "user" | "creator-verification" | "brand-verification" | "campaign" | "submission" | "support" | "dispute" | "payout" | "refund" | "risk";
 
-function AdminStatus({ children, tone = "paper" }: { children: ReactNode; tone?: Tone }) {
+export function AdminStatus({ children, tone = "paper" }: { children: ReactNode; tone?: Tone }) {
   return <span className={`admin-status admin-status--${tone}`}><i />{children}</span>;
 }
 
-function AdminHeading({ title, copy, eyebrow, action, back }: { title: string; copy?: string; eyebrow?: string; action?: ReactNode; back?: string }) {
+export function AdminHeading({ title, copy, eyebrow, action, back }: { title: string; copy?: string; eyebrow?: string; action?: ReactNode; back?: string }) {
   return <header className="admin-heading"><div>{back && <Link className="admin-back" href={back}><ProductIcon name="chevron" />Back</Link>}{eyebrow && <span>{eyebrow}</span>}<h1>{title}</h1>{copy && <p>{copy}</p>}</div>{action}</header>;
 }
 
@@ -163,13 +163,14 @@ export function AdminLoginScreen() {
 export function AdminCommandCentreScreen() {
   const [overview, setOverview] = useState<AdminOverview | null>(null);
   const [loading, setLoading] = useState(true);
-  useEffect(() => { adminApi.overview().then(setOverview).catch(() => undefined).finally(() => setLoading(false)); }, []);
+  const [errorRate, setErrorRate] = useState<number | null>(null);
+  useEffect(() => { adminApi.overview().then(setOverview).catch(() => undefined).finally(() => setLoading(false)); adminApi.systemHealth().then((h) => setErrorRate(h.error_rate)).catch(() => undefined); }, []);
   if (loading) return <div className="admin-page"><ClippitLoader contained tone="ink" label="Opening the operations desk" note="Checking live queues, money movement and service health." /></div>;
   const pulse = [
     { label: "Money moving", value: overview?.creator_liability ?? 4820000, suffix: "", format: "money" as const, tone: "lime" as Tone, href: "/admin/payouts" },
     { label: "Decisions due", value: overview?.submissions_needing_review ?? 23, suffix: "", format: "number" as const, tone: "gold" as Tone, href: "/admin/submissions" },
     { label: "Risk holds", value: overview?.blocked_earning_accounts ?? 14, suffix: "", format: "number" as const, tone: "red" as Tone, href: "/admin/risk" },
-    { label: "Delivery health", value: 99.94, suffix: "%", format: "number" as const, tone: "blue" as Tone, href: "/admin/system" },
+    { label: "Delivery health", value: errorRate == null ? 100 : Math.round((100 - errorRate) * 100) / 100, suffix: "%", format: "number" as const, tone: "blue" as Tone, href: "/admin/system" },
   ];
   return <div className="admin-page"><AdminHeading eyebrow="Tuesday · 22 September" title="Operations, right now" copy="The queues that need a person before customers feel the delay." action={<AdminStatus tone="lime">Live</AdminStatus>} /><section className="admin-command-pulse">{pulse.map((item) => <Link href={item.href} key={item.label} className={`is-${item.tone}`}><small>{item.label}</small><strong><AnimatedNumber value={item.value} format={item.format} decimals={item.value % 1 ? 2 : 0} suffix={item.suffix} duration={720} /></strong><span>Open queue<ProductIcon name="arrow" /></span></Link>)}</section><div className="admin-command-grid"><section className="admin-now"><header><div><h2>Needs attention</h2><p>Ordered by customer impact and deadline.</p></div><Link href="/admin/audit">Open audit log<ProductIcon name="arrow" /></Link></header>{[
     ["red", "Payout failed", "PAY-90217 · Access Bank rejected the transfer", "₦29,760", "/admin/payouts/PAY-90217"],
@@ -185,6 +186,7 @@ export function AdminQueueScreen({ kind }: { kind: QueueKind }) {
   const [filter, setFilter] = useState("All");
   const [sourceRows, setSourceRows] = useState(config.rows);
   const [loading, setLoading] = useState(true);
+  const [live, setLive] = useState(false);
   useEffect(() => {
     setLoading(true);
     setSourceRows(config.rows);
@@ -196,12 +198,13 @@ export function AdminQueueScreen({ kind }: { kind: QueueKind }) {
     if (kind === "support") adminApi.supportQueue().then((items) => apply(items.map((item) => ({ id: item.id, name: item.subject, meta: titleCase(item.category), value: titleCase(item.priority), status: titleCase(item.status), tone: item.priority === "urgent" ? "red" : item.status === "open" ? "gold" : "lime", age: relativeTime(item.updated_at), href: `/admin/support/${item.id}` })))).catch(() => undefined).finally(finish);
     if (kind === "disputes") adminApi.disputeQueue().then((items) => apply(items.map((item) => ({ id: item.id, name: titleCase(item.type), meta: item.reason, value: item.amount_at_risk === null ? "No money held" : money(item.amount_at_risk), status: titleCase(item.status), tone: item.status === "open" ? "gold" : "lime", age: untilTime(item.deadline_at), href: `/admin/disputes/${item.id}` })))).catch(() => undefined).finally(finish);
     if (kind === "payouts") adminApi.listPayouts().then((items) => apply(items.map((item) => ({ id: item.id, name: item.creator_name, meta: `${item.provider} · ${item.reference}`, value: money(item.amount), status: titleCase(item.status), tone: item.status === "failed" ? "red" : item.status === "processing" ? "blue" : "gold", age: relativeTime(item.initiated_at), href: `/admin/payouts/${item.id}` })))).catch(() => undefined).finally(finish);
-    if (!["users", "campaigns", "submissions", "support", "disputes", "payouts"].includes(kind)) finish();
+    if (kind === "risk") adminApi.blockedAccounts().then((items) => { setLive(true); setSourceRows(items.map((item) => ({ id: item.submission_id, name: titleCase(item.reason), meta: `Submission ${item.submission_id.slice(0, 8)} · ${item.cumulative_views.toLocaleString()} views`, value: `${money(item.accrued)} held`, status: "Earnings held", tone: "red" as Tone, age: relativeTime(item.last_settled_at), href: `/admin/submissions/${item.submission_id}` }))); }).catch(() => undefined).finally(finish);
+    if (!["users", "campaigns", "submissions", "support", "disputes", "payouts", "risk"].includes(kind)) finish();
   }, [config.rows, kind]);
   const rows = useMemo(() => sourceRows.filter((row) => `${row.name} ${row.id} ${row.meta}`.toLowerCase().includes(query.toLowerCase()) && (filter === "All" || row.status === filter)), [filter, query, sourceRows]);
   const statuses = ["All", ...new Set(sourceRows.map((row) => row.status))];
   if (loading) return <div className="admin-page"><ClippitLoader contained tone="ink" label="Preparing this queue" note="Checking the latest cases and account activity." /></div>;
-  return <div className="admin-page"><AdminHeading eyebrow={config.eyebrow} title={config.title} copy={config.copy} action={<div className="admin-queue-count"><ProductIcon name={config.icon} /><span><strong>{config.metric}</strong><small>{config.unit}</small></span></div>} /><section className="admin-queue-tools"><label><ProductIcon name="search" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`Search ${config.title.toLowerCase()}`} /></label><div>{statuses.map((status) => <button type="button" className={filter === status ? "is-active" : ""} onClick={() => setFilter(status)} key={status}>{status}</button>)}</div></section><section className="admin-queue"><header><span>Case</span><span>Account or subject</span><span>Value</span><span>Status</span><span>Age</span></header>{rows.map((row) => <Link href={row.href} key={row.id}><code>{row.id}</code><p><strong>{row.name}</strong><small>{row.meta}</small></p><b>{row.value}</b><AdminStatus tone={row.tone}>{row.status}</AdminStatus><time>{row.age}</time><ProductIcon name="arrow" /></Link>)}{rows.length === 0 && <ClippitEmptyState className="admin-queue-empty" size="compact" tone="ink" icon="search" title="No matching cases" copy="Clear the search or choose another status." />}</section></div>;
+  return <div className="admin-page"><AdminHeading eyebrow={config.eyebrow} title={config.title} copy={config.copy} action={<div className="admin-queue-count"><ProductIcon name={config.icon} /><span><strong>{kind === "risk" && live ? sourceRows.length : config.metric}</strong><small>{config.unit}</small></span></div>} /><section className="admin-queue-tools"><label><ProductIcon name="search" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={`Search ${config.title.toLowerCase()}`} /></label><div>{statuses.map((status) => <button type="button" className={filter === status ? "is-active" : ""} onClick={() => setFilter(status)} key={status}>{status}</button>)}</div></section><section className="admin-queue"><header><span>Case</span><span>Account or subject</span><span>Value</span><span>Status</span><span>Age</span></header>{rows.map((row) => <Link href={row.href} key={row.id}><code>{row.id}</code><p><strong>{row.name}</strong><small>{row.meta}</small></p><b>{row.value}</b><AdminStatus tone={row.tone}>{row.status}</AdminStatus><time>{row.age}</time><ProductIcon name="arrow" /></Link>)}{rows.length === 0 && <ClippitEmptyState className="admin-queue-empty" size="compact" tone="ink" icon="search" title="No matching cases" copy="Clear the search or choose another status." />}</section></div>;
 }
 
 const detailMeta: Record<DetailKind, { back: string; eyebrow: string; title: string; subject: string; status: string; tone: Tone; amount: string; summary: string; facts: Array<[string, string]>; events: Array<[string, string, string]>; primary: string; secondary: string; image?: string }> = {
@@ -234,18 +237,6 @@ export function AdminReconciliationScreen() {
   return <div className="admin-page"><AdminHeading eyebrow="Provider reconciliation" title="Books meet provider reality" copy="Compare Clippit entries with funding, transfer and refund records." action={<AdminButton onClick={() => setRun(true)}>{run ? "Reconciliation queued" : "Run reconciliation"}</AdminButton>} /><section className="admin-recon-board"><div className="admin-recon-sides"><article><span><ProductIcon name="source" /></span><small>Clippit ledger</small><strong>₦28,410,300</strong><p>2,841 entries through 10:30 WAT</p></article><div><i /><i /><i /><strong>₦0</strong><small>unexplained difference</small></div><article><span><ProductIcon name="bank" /></span><small>Provider records</small><strong>₦28,410,300</strong><p>Paystack through 10:28 WAT</p></article></div><section>{[["Paystack collections", "1,204", "₦19.82M", "Matched"], ["Paystack transfers", "884", "₦6.51M", "3 pending"], ["Refund instructions", "42", "₦2.08M", "Matched"]].map((row) => <article key={row[0]}><p><strong>{row[0]}</strong><small>{row[1]} records</small></p><b>{row[2]}</b><AdminStatus tone={row[3] === "Matched" ? "lime" : "gold"}>{row[3]}</AdminStatus><button type="button">Inspect<ProductIcon name="arrow" /></button></article>)}</section></section></div>;
 }
 
-const deliveryCards = {
-  social: [["TikTok", "Readings current", "99.97%", "128 ms", "lime"], ["Instagram", "184 checks delayed", "98.41%", "11 min", "gold"], ["Facebook", "Readings current", "99.96%", "164 ms", "lime"], ["X", "Readings current", "99.93%", "207 ms", "lime"], ["YouTube", "Readings current", "99.92%", "241 ms", "lime"]],
-  webhooks: [["Paystack", "Funding events", "99.99%", "82 ms", "lime"], ["Paystack", "Transfer events", "99.94%", "190 ms", "lime"], ["Identity provider", "Verification events", "99.12%", "3 retries", "gold"]],
-  notifications: [["Email", "Transactional", "99.81%", "2.1 s", "lime"], ["Push", "Workspace alerts", "98.94%", "38 queued", "gold"], ["SMS", "Security codes", "99.98%", "4.2 s", "lime"]],
-} as const;
-
-export function AdminDeliveryScreen({ kind }: { kind: keyof typeof deliveryCards }) {
-  const titles = { social: ["Social provider health", "Platform connections, permissions and view-reading freshness."], webhooks: ["Webhook delivery", "Provider events, retries and dead-letter activity."], notifications: ["Notification delivery", "Email, push and SMS delivery across customer journeys."] } as const;
-  const [selected, setSelected] = useState(0);
-  return <div className="admin-page"><AdminHeading eyebrow="Trust & delivery" title={titles[kind][0]} copy={titles[kind][1]} action={<AdminStatus tone="lime">Monitoring</AdminStatus>} /><section className="admin-provider-grid">{deliveryCards[kind].map((item, index) => <button type="button" key={item[0]} className={selected === index ? "is-selected" : ""} onClick={() => setSelected(index)}><span><ProductIcon name={kind === "social" ? "link" : kind === "webhooks" ? "spark" : "bell"} /></span><p><strong>{item[0]}</strong><small>{item[1]}</small></p><b>{item[2]}</b><AdminStatus tone={item[4] as Tone}>{item[4] === "gold" ? "Attention" : "Healthy"}</AdminStatus></button>)}</section><section className="admin-delivery-detail"><header><div><h2>{deliveryCards[kind][selected][0]} activity</h2><p>Last 60 minutes · live delivery window</p></div><strong>{deliveryCards[kind][selected][3]}</strong></header><div className="admin-signal-chart">{Array.from({ length: 24 }, (_, index) => <i key={index} style={{ height: `${22 + ((index * 17 + selected * 11) % 68)}%` }} />)}</div><footer><span><i />Successful</span><span><i />Retried</span><Link href="/admin/audit">View related audit events<ProductIcon name="arrow" /></Link></footer></section><section className="admin-delivery-log">{["Event accepted", "Customer record updated", "Delivery acknowledgement stored", "Retry window checked"].map((item, index) => <article key={item}><time>{`10:${28 - index * 3}`}</time><span><i className={index === 2 && selected === 1 ? "is-warn" : ""} /></span><p><strong>{item}</strong><small>{kind.toUpperCase()}-{88410 - index}</small></p><b>{index === 2 && selected === 1 ? "Retried" : "Complete"}</b></article>)}</section></div>;
-}
-
 export function AdminOperatorsScreen() {
   const operators = [["AA", "Amara A.", "Operations lead", "Online", "12 assigned"], ["KO", "Kunle O.", "Trust reviewer", "Online", "7 assigned"], ["NE", "Nneka E.", "Support specialist", "Away", "9 assigned"], ["IF", "Ife F.", "Finance operator", "Online", "4 assigned"]];
   return <div className="admin-page"><AdminHeading eyebrow="Operator access" title="Operators" copy="People with access to customer decisions, money and system controls." action={<Link className="admin-button admin-button--lime" href="/admin/operators/invite">Invite operator<ProductIcon name="arrow" /></Link>} /><section className="admin-operator-board"><header><span>Operator</span><span>Role</span><span>Presence</span><span>Workload</span></header>{operators.map((row) => <article key={row[1]}><i>{row[0]}</i><p><strong>{row[1]}</strong><small>Last active {row[3] === "Online" ? "now" : "18 min ago"}</small></p><b>{row[2]}</b><AdminStatus tone={row[3] === "Online" ? "lime" : "gold"}>{row[3]}</AdminStatus><span>{row[4]}</span><button type="button"><ProductIcon name="more" /></button></article>)}</section></div>;
@@ -267,12 +258,6 @@ export function AdminRolesScreen() {
 export function AdminAuditScreen() {
   const events = [["10:31:42", "Amara A.", "Opened payout investigation", "PAY-90241", "Read"], ["10:29:08", "System", "Applied risk hold", "RSK-7712", "Automatic"], ["10:24:51", "Kunle O.", "Requested identity correction", "KYC-2034", "Write"], ["10:20:14", "Finance worker", "Posted payout ledger entries", "PAY-90241", "Automatic"], ["10:14:02", "Nneka E.", "Replied to support ticket", "CLP-2894", "Write"]];
   return <div className="admin-page"><AdminHeading eyebrow="Immutable record" title="Audit log" copy="Who did what, when, and which evidence version they saw." action={<button className="admin-export" type="button"><ProductIcon name="brief" />Export signed log</button>} /><section className="admin-audit-filters"><label><ProductIcon name="search" /><input placeholder="Operator, action or reference" /></label><button type="button"><ProductIcon name="calendar" />22 Sep 2026</button><button type="button"><ProductIcon name="filter" />All actions</button></section><section className="admin-audit-stream">{events.map((event, index) => <article key={event[0]}><time>{event[0]}<small>WAT</small></time><span><i /></span><p><strong>{event[2]}</strong><small>{event[1]} · {event[3]}</small></p><AdminStatus tone={event[4] === "Write" ? "gold" : event[4] === "Automatic" ? "blue" : "paper"}>{event[4]}</AdminStatus><button type="button" aria-label="Open event"><ProductIcon name="arrow" /></button>{index === 1 && <div><code>SHA-256 8f32…901c</code><span>Evidence version EV-10942</span></div>}</article>)}</section></div>;
-}
-
-export function AdminSystemScreen() {
-  const [maintenance, setMaintenance] = useState(false);
-  const services = [["API gateway", "Operational", "48 ms", "99.99%"], ["Database", "Operational", "12 ms", "99.98%"], ["Queue workers", "Operational", "184 jobs", "99.94%"], ["Media checks", "Operational", "38 running", "99.91%"], ["Receipt renderer", "Operational", "7 queued", "100%"], ["Object storage", "Operational", "21 ms", "99.99%"]];
-  return <div className="admin-page"><AdminHeading eyebrow="Runtime controls" title="System health" copy="The services customers rely on, their current load and safe operational controls." action={<AdminStatus tone="lime">All systems operational</AdminStatus>} /><section className="admin-system-grid">{services.map((service, index) => <article key={service[0]}><header><span><i /></span><AdminStatus tone="lime">{service[1]}</AdminStatus></header><h2>{service[0]}</h2><dl><div><dt>{index === 2 || index === 3 || index === 4 ? "Current work" : "Latency"}</dt><dd>{service[2]}</dd></div><div><dt>30-day availability</dt><dd>{service[3]}</dd></div></dl><div>{Array.from({ length: 18 }, (_, bar) => <i key={bar} style={{ height: `${24 + ((bar * 13 + index * 19) % 65)}%` }} />)}</div></article>)}</section><section className="admin-runtime-controls"><header><div><h2>Runtime controls</h2><p>Changes are audited and require a typed confirmation in production.</p></div><ProductIcon name="settings" /></header><article><p><strong>Customer maintenance notice</strong><small>Show a status notice without disabling the product.</small></p><label><input type="checkbox" checked={maintenance} onChange={() => setMaintenance((value) => !value)} /><i /></label></article><article><p><strong>New campaign funding</strong><small>Funding is currently available.</small></p><AdminStatus tone="lime">Enabled</AdminStatus></article><article><p><strong>Creator withdrawals</strong><small>Withdrawal requests are currently available.</small></p><AdminStatus tone="lime">Enabled</AdminStatus></article>{maintenance && <div role="status"><ProductIcon name="check" />Maintenance notice will appear after an operations lead approves it.</div>}</section></div>;
 }
 
 const adminReviewRoutes = [

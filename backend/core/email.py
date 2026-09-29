@@ -13,12 +13,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import smtplib
+import time
 from collections import deque
 from dataclasses import dataclass
 from email.message import EmailMessage as MimeMessage
 from functools import lru_cache
 from typing import Protocol
 
+from . import delivery_stats
 from .config import get_settings
 
 logger = logging.getLogger("clippit.email")
@@ -100,8 +102,32 @@ class ResendEmailSender:
         await asyncio.to_thread(self._send_blocking, message)
 
 
+class _Measured:
+    """Times every send and records the outcome for the ops screens. Everything
+    else (e.g. the console sender's `last_to`) passes straight through."""
+
+    def __init__(self, inner: EmailSender) -> None:
+        self._inner = inner
+
+    async def send(self, message: EmailMessage) -> None:
+        started = time.perf_counter()
+        try:
+            await self._inner.send(message)
+        except Exception as exc:
+            delivery_stats.record("email", False, (time.perf_counter() - started) * 1000, type(exc).__name__)
+            raise
+        delivery_stats.record("email", True, (time.perf_counter() - started) * 1000)
+
+    def __getattr__(self, name: str):
+        return getattr(self._inner, name)
+
+
 @lru_cache
 def get_email_sender() -> EmailSender:
+    return _Measured(_build_email_sender())
+
+
+def _build_email_sender() -> EmailSender:
     settings = get_settings()
     if settings.email_backend == "resend":
         if not settings.resend_api_key:
