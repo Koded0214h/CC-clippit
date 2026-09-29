@@ -1,6 +1,6 @@
-"""Transactional email bodies — plain text plus the branded HTML version.
+"""Transactional email bodies, with plain text and branded HTML versions.
 Kept in one place so copy changes don't touch route logic. Codes are never
-logged by callers — only the console sender prints them, and only in
+logged by callers. Only the console sender prints them, and only in
 development."""
 
 from core import email_layout
@@ -10,14 +10,14 @@ from core.email import EmailMessage
 
 _NEXT_STEPS = {
     "creator": [
-        ("Confirm your email", "Enter the code above. You're doing it now."),
-        ("Connect your account", "Link the TikTok, Instagram, Facebook, X or YouTube account you post on."),
-        ("Join a campaign and post", "Submit your clip link and earn on verified views."),
+        ("Confirm your email", "Enter the code above on the screen you already have open."),
+        ("Complete your profile", "Tell us what you make and connect the account you post from."),
+        ("Browse campaigns", "Open a brief, submit your work, and track verified results."),
     ],
     "organisation": [
-        ("Confirm your email", "Enter the code above. You're doing it now."),
-        ("Set up your brand profile", "Add your brand name and logo so creators know who you are."),
-        ("Launch a campaign", "Set the brief and rate, fund it, and pay only for verified views."),
+        ("Confirm your email", "Enter the code above on the screen you already have open."),
+        ("Complete your organisation profile", "Add the details creators need to recognise your brand."),
+        ("Create a campaign", "Choose the outcomes, write the brief, and set the campaign budget."),
     ],
 }
 
@@ -28,18 +28,18 @@ def verification_email(to: str, code: str, role: str | None = None) -> EmailMess
         to=to,
         subject="Your Clippit verification code",
         text=(
-            f"Your Clippit verification code is {code}.\n\n"
+            f"Clippit email confirmation code: {code}\n\n"
             f"It expires in {minutes} minutes. If you didn't create a Clippit account, ignore this email."
         ),
         html=email_layout.render(
-            tag="Verify email",
-            eyebrow="One step left",
-            title="Here's your code.",
-            intro="Enter this on the verification screen to confirm your email and finish setting up your Clippit account.",
+            tag="Email confirmation",
+            eyebrow="Clippit account",
+            title="Confirm your email.",
+            intro="Enter this code on the verification screen to confirm that this email belongs to you.",
             code=code,
             expires=f"Expires in {minutes} minutes",
             steps=_NEXT_STEPS.get(role or ""),
-            note="Keep it to yourself — Clippit will never ask for this code by phone, DM or email. "
+            note="Do not share this code. Clippit will never ask for it by phone, direct message, or email. "
             "If you didn't create an account, you can ignore this email.",
             preheader=f"{code} is your Clippit verification code. It expires in {minutes} minutes.",
             reason="You're receiving this because this address was used to sign up at clippit.click.",
@@ -54,15 +54,15 @@ def admin_invitation_email(to: str, link: str, invited_by: str) -> EmailMessage:
         text=(
             f"{invited_by} invited you to a Clippit operator account.\n\n"
             f"Accept the invitation: {link}\n\n"
-            "If you weren't expecting this, ignore it — nothing is created until the link is used."
+            "If you weren't expecting this, ignore it. Nothing is created until the link is used."
         ),
         html=email_layout.render(
-            tag="Admin invite",
-            eyebrow="You're invited",
-            title="Join the Clippit operator team.",
-            intro=f"{invited_by} invited you to a Clippit operator account. Accept below to set your password and get started.",
+            tag="Operator invitation",
+            eyebrow="Clippit admin",
+            title="You have been invited.",
+            intro=f"{invited_by} invited you to a Clippit operator account. Use the secure link below to set your password.",
             button=email_layout.Button("Accept invitation", link),
-            note="Weren't expecting this? — Ignore it. Nothing is created until the link is used.",
+            note="If you were not expecting this invitation, ignore this email. Nothing is created until the link is used.",
             preheader=f"{invited_by} invited you to a Clippit operator account.",
             reason="You're receiving this because a Clippit admin invited this address.",
         ),
@@ -76,17 +76,17 @@ def recovery_email(to: str, code: str) -> EmailMessage:
         subject="Your Clippit recovery code",
         text=(
             f"Use {code} to reset your Clippit password.\n\n"
-            f"It expires in {minutes} minutes. If you didn't ask for this, you can ignore it — "
+            f"It expires in {minutes} minutes. If you didn't ask for this, you can ignore it. "
             "your password hasn't changed."
         ),
         html=email_layout.render(
             tag="Password reset",
-            eyebrow="Reset your password",
-            title="Let's get you back in.",
-            intro="Enter this code on the reset screen, then choose a new password.",
+            eyebrow="Account security",
+            title="Reset your password.",
+            intro="Enter this code on the password reset screen. After it is confirmed, you can choose a new password.",
             code=code,
             expires=f"Expires in {minutes} minutes",
-            note="Didn't ask for this? — You can ignore it. Your password hasn't changed.",
+            note="If you did not request a password reset, ignore this email. Your password has not changed.",
             preheader=f"{code} is your Clippit recovery code. It expires in {minutes} minutes.",
         ),
     )
@@ -103,9 +103,9 @@ def remember_device_email(to: str, code: str) -> EmailMessage:
         ),
         html=email_layout.render(
             tag="Device confirmation",
-            eyebrow="Keep this device signed in",
+            eyebrow="Account security",
             title="Confirm this device.",
-            intro="Enter this code in Clippit to keep this browser signed in until you sign out or remove it.",
+            intro="Enter this code in Clippit to keep this browser signed in until you sign out or remove the device.",
             code=code,
             expires=f"Expires in {minutes} minutes",
             note="If this wasn't you, do not share this code. You can remove signed-in devices from Security settings.",
@@ -124,7 +124,7 @@ def notification_email(to: str, title: str, body: str = "", link: str | None = N
         text="\n\n".join(part for part in (body or title, url) if part),
         html=email_layout.render(
             tag="Update",
-            eyebrow="From your Clippit account",
+            eyebrow="Clippit notification",
             title=title,
             intro=body,
             button=email_layout.Button("Open in Clippit", url) if url else None,
