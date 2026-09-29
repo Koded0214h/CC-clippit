@@ -2,9 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState, type ReactNode } from "react";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
+
+import { authApi, clearTokens } from "@/lib/api/auth";
 
 type AdminNavItem = { href: string; label: string; short: string; icon: ProductIconName; group: string };
 
@@ -38,6 +40,27 @@ function isCurrent(pathname: string, href: string) {
 
 export function AdminShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [operatorName, setOperatorName] = useState("Administrator");
+  const [signingOut, setSigningOut] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
+  useEffect(() => {
+    if (pathname === "/admin/login") return;
+    let active = true;
+    authApi.me().then((user) => { if (active) setOperatorName(user.full_name); }).catch(() => undefined);
+    return () => { active = false; };
+  }, [pathname]);
+  const initials = operatorName.split(/\s+/).map((part) => part[0]).slice(0, 2).join("");
+  const signOut = async () => {
+    setSigningOut(true);
+    setLogoutError("");
+    try {
+      await authApi.logout();
+      clearTokens();
+      router.replace("/admin/login");
+    } catch { setLogoutError("Sign out failed. Please try again."); }
+    finally { setSigningOut(false); }
+  };
   const [moreOpen, setMoreOpen] = useState(false);
   if (pathname === "/admin/login") return <>{children}</>;
 
@@ -49,11 +72,11 @@ export function AdminShell({ children }: { children: ReactNode }) {
     <aside className="admin-rail">
       <Link className="admin-brand" href="/admin"><Image src="/assets/clippit-mark-light.png" width={39} height={39} alt="" priority /><span><strong>Clippit</strong><small>operations</small></span></Link>
       <nav aria-label="Operations navigation">{groups.map((group) => <section key={group}><small>{group}</small>{adminNavigation.filter((item) => item.group === group).map((item) => <Link key={item.href} href={item.href} className={isCurrent(pathname, item.href) ? "is-active" : ""}><ProductIcon name={item.icon} /><span>{item.label}</span>{["/admin/creators/verifications", "/admin/submissions", "/admin/disputes", "/admin/risk"].includes(item.href) && <b />}</Link>)}</section>)}</nav>
-      <div className="admin-operator"><span>AA</span><p><strong>Amara A.</strong><small>Operations lead</small></p><ProductIcon name="chevron" /></div>
+      <div className="admin-operator"><span>{initials}</span><p><strong>{operatorName}</strong><small>Administrator</small></p></div>
     </aside>
 
     <div className="admin-stage">
-      <header className="admin-topbar"><Link href="/admin" className="admin-mobile-brand"><Image src="/assets/clippit-mark.png" width={31} height={31} alt="" /><strong>Ops</strong></Link><div className="admin-live"><i />All money rails operational</div><div className="admin-top-actions"><button type="button" aria-label="Search operations"><ProductIcon name="search" /></button><Link href="/admin/notifications" aria-label="Delivery alerts"><ProductIcon name="bell" /><b>3</b></Link><span>AA</span></div></header>
+      <header className="admin-topbar"><Link href="/admin" className="admin-mobile-brand"><Image src="/assets/clippit-mark.png" width={31} height={31} alt="" /><strong>Ops</strong></Link><div className="admin-live"><i />All money rails operational</div><div className="admin-top-actions"><button type="button" aria-label="Search operations"><ProductIcon name="search" /></button><Link href="/admin/notifications" aria-label="Delivery alerts"><ProductIcon name="bell" /><b>3</b></Link><span>{initials}</span><button type="button" onClick={signOut} disabled={signingOut}>{signingOut ? "Signing out…" : "Sign out"}</button></div></header>{logoutError && <p role="alert">{logoutError}</p>}
       <main className="admin-content">{children}</main>
     </div>
 

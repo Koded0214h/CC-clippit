@@ -477,6 +477,10 @@
 .admin-login form > label { display: grid; gap: 7px; margin-bottom: 15px; }
 .admin-login form > label span { font-size: 8px; font-weight: 740; }
 .admin-login form > label input { min-height: 52px; padding: 0 14px; border: 1px solid var(--admin-ink); border-radius: 9px; background: #fff; outline: 0; }
+.admin-login-error { padding: 12px; border: 1px solid var(--admin-ink); border-radius: 9px; background: var(--admin-gold); color: var(--admin-ink); }
+.admin-access-error { min-height: 100svh; display: grid; place-content: center; gap: 16px; padding: 24px; }
+.admin-access-error button { padding: 12px 20px; cursor: pointer; }
+.admin-login form > label input:focus-visible { outline: 3px solid var(--admin-gold); outline-offset: 3px; }
 .admin-login__key { display: grid; grid-template-columns: 30px minmax(0,1fr) auto; align-items: center; gap: 10px; margin: 4px 0 24px; padding: 12px; border: 1px solid var(--admin-line); border-radius: 10px; background: #fff; }
 .admin-login__key > svg { width: 24px; }
 .admin-login__key > span { display: grid; gap: 2px; }

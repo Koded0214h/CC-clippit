@@ -88,6 +88,26 @@ async def login(request: Request, payload: schemas.LoginRequest, db: AsyncSessio
     )
 
 
+@router.post("/admin/login", response_model=schemas.TokenResponse)
+@limiter.limit("5/minute")
+async def admin_login(request: Request, payload: schemas.LoginRequest, db: AsyncSession = Depends(get_db)):
+    """Only active operators may create a session through the admin sign-in."""
+    invalid = HTTPException(status.HTTP_401_UNAUTHORIZED, "Incorrect email or password, or no administrator access.")
+    user = await _user_by_email(db, payload.email)
+    if (
+        not user or user.deleted_at is not None or not user.has_password
+        or not verify_password(payload.password, user.password_hash)
+        or user.role != models.Role.admin
+        or (user.suspended_at is not None and "access" in user.suspension_scopes)
+    ):
+        raise invalid
+    issued = await sessions.start_session(db, user, request)
+    await db.commit()
+    return schemas.TokenResponse(
+        access_token=issued.access_token, refresh_token=issued.refresh_token, user=schemas.UserOut.model_validate(user)
+    )
+
+
 @router.post("/refresh", response_model=schemas.TokenResponse)
 @limiter.limit("30/minute")
 async def refresh(request: Request, payload: schemas.RefreshRequest, db: AsyncSession = Depends(get_db)):
