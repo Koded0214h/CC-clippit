@@ -39,7 +39,7 @@ export interface ConversionSetup {
   destination_url?: string | null;
   whatsapp_number?: string | null;
   attribution_window_days: number;
-  attribution_model: "first_touch" | "last_touch";
+  attribution_model: "first_touch";
 }
 
 export interface CampaignIntegrationOut {
@@ -53,7 +53,7 @@ export interface CampaignIntegrationOut {
   attribution_parameter: "clippit_ref";
   destination_url: string | null;
   attribution_window_days: number;
-  attribution_model: "first_touch" | "last_touch";
+  attribution_model: "first_touch";
   selected_event_types: Array<"visit" | "signup" | "lead" | "purchase">;
   events_received: number;
   last_event_at: string | null;

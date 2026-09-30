@@ -69,7 +69,7 @@ async def test_conversion_setup_can_autosave_before_the_store_url_is_complete(ap
                 "destination_type": "website",
                 "destination_url": "https://",
                 "attribution_window_days": 30,
-                "attribution_model": "last_touch",
+                "attribution_model": "first_touch",
             },
         },
     )

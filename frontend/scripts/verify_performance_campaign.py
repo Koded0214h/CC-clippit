@@ -88,7 +88,7 @@ CAMPAIGN = {
         "destination_url": "https://shop.example/new-record",
         "whatsapp_number": None,
         "attribution_window_days": 30,
-        "attribution_model": "last_touch",
+        "attribution_model": "first_touch",
     },
     "rules": [],
     "feed_status": "Joined",
@@ -199,6 +199,26 @@ def handle_api(route: Route):
         )
     elif path == "/campaigns/live-hybrid/submissions":
         json_response(route, [])
+    elif path == "/campaigns/live-hybrid/integration" and method == "GET":
+        json_response(
+            route,
+            {
+                "campaign_id": CAMPAIGN["id"],
+                "configured": False,
+                "secret_last_four": None,
+                "created_at": None,
+                "rotated_at": None,
+                "event_endpoint": "https://api.clippit.click/performance/events",
+                "tracker_script_url": "https://api.clippit.click/tracker.js",
+                "attribution_parameter": "clippit_ref",
+                "destination_url": "https://shop.example/new-record",
+                "attribution_window_days": 30,
+                "attribution_model": "first_touch",
+                "selected_event_types": ["visit", "signup", "purchase"],
+                "events_received": 0,
+                "last_event_at": None,
+            },
+        )
     elif path == "/campaigns/live-hybrid/integration-secret" and method == "POST":
         json_response(
             route,
@@ -253,10 +273,12 @@ with sync_playwright() as playwright:
 
     page.goto(f"{BASE}/brand/campaigns/new/metrics", wait_until="networkidle")
     page.get_by_role("heading", name="What should this campaign achieve?").wait_for()
-    assert page.locator(".metric-studio__rail article").count() == 7
+    assert page.locator(".metric-studio__rail article").count() == 3
     assert page.locator(".metric-studio__rail article.is-selected").count() == 1
+    page.get_by_role("button", name="More business results").click()
+    assert page.locator(".metric-studio__rail article").count() == 7
 
-    for label in ("Comments", "Shares", "Purchases"):
+    for label in ("Comments", "Shares", "Purchases or paid uses"):
         card = page.locator(".metric-studio__rail article").filter(has_text=label)
         card.locator("button").click()
         assert "is-selected" in (card.get_attribute("class") or "")
@@ -270,9 +292,10 @@ with sync_playwright() as playwright:
     assert next_link.get_attribute("aria-disabled") == "false"
 
     page.get_by_role("button", name="WhatsApp orders").click()
-    page.get_by_placeholder("2348012345678").fill("+234 801 234 5678")
+    page.get_by_label("WhatsApp country code").select_option("NG")
+    page.get_by_placeholder("8012345678").fill("8012345678")
     page.get_by_label("Attribution window").select_option("14")
-    page.get_by_label("Credit goes to").select_option("first_touch")
+    expect(page.get_by_text("The first creator gets paid.")).to_be_visible()
     assert next_link.get_attribute("href") == "/brand/campaigns/new/rules"
 
     for width, height in ((1440, 1000), (1024, 768), (390, 844), (320, 720)):
@@ -286,12 +309,13 @@ with sync_playwright() as playwright:
     assert page.locator(".live-performance-strip article").count() == 3
     page.get_by_role("heading", name="Connect confirmed customer actions").wait_for()
     no_horizontal_overflow(page)
-    page.get_by_role("button", name="Create setup key").click()
-    page.get_by_text("Copy now. It will not be shown again.", exact=True).wait_for()
-    assert page.locator(".campaign-integration-card__secret code").inner_text() == (
+    page.get_by_role("link", name="Open tracking setup").click()
+    page.get_by_role("button", name="Create server key").click()
+    page.get_by_text("Save this before leaving the page", exact=True).wait_for()
+    assert page.locator(".tracking-secret > code").inner_text() == (
         "clp_live_browser_test_secret"
     )
-    page.get_by_role("button", name="Copy setup key").click()
+    page.get_by_role("button", name="Copy .env line").click()
     page.get_by_role("button", name="Copied").wait_for()
 
     role = "creator"

@@ -311,6 +311,17 @@
 .conversion-route .brand-input-with-icon svg { color: var(--brand-ink); }
 .conversion-route label > small { color: #adb5a6; font-size: 8px; }
 .conversion-route__settings { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.whatsapp-number-field { display: grid; grid-template-columns: minmax(150px, 1.25fr) minmax(118px, .75fr) auto; align-items: stretch; overflow: hidden; color: var(--brand-ink); border: 1px solid #fff; border-radius: 10px; background: #fff; transition: box-shadow 160ms ease; }
+.whatsapp-number-field:focus-within { box-shadow: 0 0 0 3px rgb(184 255 56 / 38%); }
+.conversion-route .whatsapp-number-field select,
+.conversion-route .whatsapp-number-field input { min-width: 0; border: 0; border-radius: 0; outline: 0; }
+.conversion-route .whatsapp-number-field select { padding: 0 34px 0 13px; border-right: 1px solid var(--brand-line); font-size: 12px; font-weight: 740; text-overflow: ellipsis; }
+.conversion-route .whatsapp-number-field input { padding: 0 10px 0 13px; font-size: 13px; font-weight: 800; letter-spacing: .035em; }
+.whatsapp-number-field > b { display: grid; min-width: 43px; place-items: center; color: #747b70; border-left: 1px solid var(--brand-line); background: #f0f2eb; font-size: 11px; }
+.conversion-route__first-touch { display: flex; align-items: center; gap: 10px; min-height: 48px; margin: 0; padding: 9px 12px; border: 1px solid #43483e; border-radius: 10px; background: #242720; }
+.conversion-route__first-touch > svg { flex: 0 0 auto; width: 20px; color: var(--brand-lime); }
+.conversion-route__first-touch > span { color: #cbd1c5; font-size: 11px; line-height: 1.45; }
+.conversion-route__first-touch strong { display: block; color: #fff; font-size: 12px; }
 .conversion-route__proof { display: flex; align-items: center; gap: 8px; margin: 0; padding-top: 14px; color: #cbd1c5; border-top: 1px solid #3d4238; font-size: 9px; line-height: 1.45; }
 .conversion-route__proof svg { flex: 0 0 auto; width: 18px; color: var(--brand-lime); }
 .metric-rate-recap { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow: hidden; border: 1px solid var(--brand-ink); border-radius: 14px; }
@@ -358,6 +369,10 @@
   .metric-studio__rail article > button > span { width: 42px; height: 42px; }
   .metric-studio__rail article > button strong { font-size: 13px; }
   .metric-studio__rail article > button small { font-size: 8px; }
+  .whatsapp-number-field { grid-template-columns: minmax(116px, 1.15fr) minmax(98px, .85fr) 39px; }
+  .conversion-route .whatsapp-number-field select { padding-left: 10px; font-size: 11px; }
+  .conversion-route .whatsapp-number-field input { padding-inline: 9px; font-size: 12px; }
+  .whatsapp-number-field > b { min-width: 39px; font-size: 10px; }
   .conversion-route > header h2 { font-size: 18px; }
   .live-performance-strip > header { align-items: start; }
   .live-performance-strip > header > span { flex: 0 0 auto; }

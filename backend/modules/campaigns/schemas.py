@@ -52,7 +52,7 @@ class ConversionSetup(BaseModel):
     destination_url: str | None = Field(default=None, max_length=2048)
     whatsapp_number: str | None = Field(default=None, max_length=24)
     attribution_window_days: int = Field(default=30, ge=1, le=90)
-    attribution_model: Literal["first_touch", "last_touch"] = "last_touch"
+    attribution_model: Literal["first_touch", "last_touch"] = "first_touch"
 
     @field_validator("destination_url")
     @classmethod
@@ -78,6 +78,9 @@ class ConversionSetup(BaseModel):
 
     @model_validator(mode="after")
     def destination_matches_type(self):
+        # Attribution is a platform rule, not a brand choice. Once a customer
+        # arrives through a creator, later creator links cannot replace them.
+        self.attribution_model = "first_touch"
         if self.destination_type == "website" and not self.destination_url:
             raise ValueError("An online store or website link is required.")
         if self.destination_type == "whatsapp" and not self.whatsapp_number:
@@ -97,12 +100,17 @@ class ConversionSetupDraft(BaseModel):
     destination_url: str | None = Field(default=None, max_length=2048)
     whatsapp_number: str | None = Field(default=None, max_length=40)
     attribution_window_days: int = Field(default=30, ge=1, le=90)
-    attribution_model: Literal["first_touch", "last_touch"] = "last_touch"
+    attribution_model: Literal["first_touch", "last_touch"] = "first_touch"
 
     @field_validator("destination_url", "whatsapp_number")
     @classmethod
     def keep_partial_value(cls, value: str | None) -> str | None:
         return value.strip() if isinstance(value, str) else value
+
+    @model_validator(mode="after")
+    def first_creator_keeps_credit(self):
+        self.attribution_model = "first_touch"
+        return self
 
 
 class PayoutRuleIn(BaseModel):

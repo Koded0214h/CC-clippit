@@ -109,7 +109,7 @@ async def create_campaign(db: AsyncSession, owner: User, payload: schemas.Campai
         conversion_destination_url=destination_url,
         conversion_whatsapp_number=conversion.whatsapp_number if conversion else None,
         attribution_window_days=conversion.attribution_window_days if conversion else 30,
-        attribution_model=conversion.attribution_model if conversion else "last_touch",
+        attribution_model="first_touch",
     )
     db.add(campaign)
     await db.flush()

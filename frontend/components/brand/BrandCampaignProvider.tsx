@@ -18,6 +18,7 @@ import {
 } from "@/lib/api/campaigns";
 import { uploadsApi } from "@/lib/api/account";
 import { errorMessage } from "@/lib/api/client";
+import { callingCodeForCountry, splitWhatsAppNumber } from "@/lib/country-calling-codes";
 
 export type BriefRule = { id: string; text: string; kind: "must" | "avoid" };
 export type CampaignMetricKey = "view" | "comment" | "share" | "visit" | "signup" | "lead" | "purchase";
@@ -46,9 +47,9 @@ export type BrandCampaignDraft = {
   metrics: CampaignMetricDraft[];
   conversionMode: "website" | "whatsapp";
   storeUrl: string;
+  whatsappCountry: string;
   whatsappNumber: string;
   attributionWindowDays: number;
-  attributionModel: "first_touch" | "last_touch";
 };
 
 const initialDraft: BrandCampaignDraft = {
@@ -56,7 +57,7 @@ const initialDraft: BrandCampaignDraft = {
   accessMode: "public", rules: [], minimumViews: 1000, videoCap: 50000, creatorCap: 75000, maxSubmissions: 3,
   endCondition: "duration", days: 14, pot: 500000, rate: 500,
   metrics: [{ type: "view", rate: 500, unitSize: 1000, minimum: 1000 }], conversionMode: "website", storeUrl: "",
-  whatsappNumber: "", attributionWindowDays: 30, attributionModel: "last_touch",
+  whatsappCountry: "NG", whatsappNumber: "", attributionWindowDays: 30,
 };
 
 type BrandCampaignContextValue = {
@@ -86,6 +87,7 @@ function fromServer(record: CampaignDraftOut): BrandCampaignDraft {
   const rawRules = Array.isArray(answers.rules) ? answers.rules : [];
   const rawMetrics = Array.isArray(answers.performance_metrics) ? answers.performance_metrics : [];
   const rawAssets = Array.isArray(answers.assets) ? answers.assets : [];
+  const whatsapp = splitWhatsAppNumber(typeof conversion.whatsapp_number === "string" ? conversion.whatsapp_number : "");
   return {
     ...initialDraft,
     title: typeof answers.title === "string" ? answers.title : "",
@@ -124,9 +126,9 @@ function fromServer(record: CampaignDraftOut): BrandCampaignDraft {
     }) : initialDraft.metrics,
     conversionMode: conversion.destination_type === "whatsapp" ? "whatsapp" : "website",
     storeUrl: typeof conversion.destination_url === "string" ? conversion.destination_url : "",
-    whatsappNumber: typeof conversion.whatsapp_number === "string" ? conversion.whatsapp_number : "",
+    whatsappCountry: whatsapp.countryIso,
+    whatsappNumber: whatsapp.localNumber,
     attributionWindowDays: numberValue(conversion.attribution_window_days, initialDraft.attributionWindowDays),
-    attributionModel: conversion.attribution_model === "first_touch" ? "first_touch" : "last_touch",
   };
 }
 
@@ -156,9 +158,9 @@ function toServer(draft: BrandCampaignDraft) {
     conversion_setup: hasConversion ? {
       destination_type: draft.conversionMode,
       destination_url: draft.conversionMode === "website" ? draft.storeUrl : null,
-      whatsapp_number: draft.conversionMode === "whatsapp" ? draft.whatsappNumber : null,
+      whatsapp_number: draft.conversionMode === "whatsapp" ? `${callingCodeForCountry(draft.whatsappCountry)}${draft.whatsappNumber}` : null,
       attribution_window_days: draft.attributionWindowDays,
-      attribution_model: draft.attributionModel,
+      attribution_model: "first_touch",
     } : null,
   };
 }

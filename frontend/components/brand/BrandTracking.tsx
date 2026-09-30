@@ -259,7 +259,7 @@ export function CampaignIntegrationScreen({ slug }: { slug: string }) {
   }, [slug]);
 
   const browserTag = useMemo(() => integration
-    ? `<script src="${integration.tracker_script_url}" data-attribution-days="${integration.attribution_window_days}" data-attribution-model="${integration.attribution_model}" defer></script>`
+    ? `<script src="${integration.tracker_script_url}" data-attribution-days="${integration.attribution_window_days}" defer></script>`
     : "", [integration]);
   const captureCode = `const clippitRef = window.ClippitTracking?.getAttribution();
 
@@ -296,7 +296,7 @@ await createCustomerAction({ ...formData, clippit_ref: clippitRef });`;
       <section className="tracking-connection-bar">
         <div className={integration.configured || !requiresServer ? "is-live" : ""}><i /><span><small>Server key</small><strong>{requiresServer ? integration.configured ? `Ready, ending ${integration.secret_last_four}` : "Not created" : "Not needed for visits"}</strong></span></div>
         <div><ProductIcon name="link" /><span><small>Destination</small><strong>{integration.destination_url ?? "Not set"}</strong></span></div>
-        <div><ProductIcon name="clock" /><span><small>Attribution</small><strong>{integration.attribution_window_days} days, {integration.attribution_model === "first_touch" ? "first creator" : "last creator"}</strong></span></div>
+        <div><ProductIcon name="clock" /><span><small>Attribution</small><strong>{integration.attribution_window_days} days, first creator</strong></span></div>
         <div><ProductIcon name="check" /><span><small>Tracked events</small><strong><AnimatedNumber value={integration.events_received} /></strong></span></div>
       </section>
       <SignalPath />

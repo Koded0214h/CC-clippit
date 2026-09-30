@@ -106,7 +106,9 @@ async def performance_api() -> PerformanceHarness:
             app.state.limiter.enabled = False
 
         transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        # Attribution cookies are Secure in production, so the isolated client
+        # must also use HTTPS to exercise real browser behavior.
+        async with httpx.AsyncClient(transport=transport, base_url="https://test") as client:
             yield PerformanceHarness(client, sessions, intelligence)
     finally:
         app.dependency_overrides.pop(get_db, None)
@@ -229,7 +231,7 @@ async def test_hybrid_campaign_tracking_settlement_and_isolation(performance_api
                 "destination_type": "website",
                 "destination_url": "https://shop.example/products?id=42",
                 "attribution_window_days": 30,
-                "attribution_model": "last_touch",
+                "attribution_model": "first_touch",
             },
         },
     )
@@ -281,6 +283,7 @@ async def test_hybrid_campaign_tracking_settlement_and_isolation(performance_api
     assert destination.netloc == "shop.example"
     assert destination_query["id"] == ["42"]
     assert destination_query["clippit_ref"] == [first_link_body["short_code"]]
+    assert destination_query["clippit_campaign"] == [campaign_id.replace("-", "")]
 
     duplicate_visit = await harness.client.get(
         token_path,
@@ -385,13 +388,15 @@ async def test_hybrid_campaign_tracking_settlement_and_isolation(performance_api
         follow_redirects=False,
     )
     assert second_visit.status_code == 307
+    second_destination = parse_qs(urlsplit(second_visit.headers["location"]).query)
+    assert second_destination["clippit_ref"] == [first_link_body["short_code"]]
     second_purchase = await harness.client.post(
         "/performance/events",
         headers={"X-Clippit-Secret": secret},
         json={
             "campaign_id": campaign_id,
             "event_type": "purchase",
-            "attribution_code": second_body["short_code"],
+            "attribution_code": second_destination["clippit_ref"][0],
             "source_event_id": "order-2",
             "quantity": 1,
             "value_amount": 20_000,

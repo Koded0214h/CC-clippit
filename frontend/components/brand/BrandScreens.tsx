@@ -42,6 +42,7 @@ import {
   calculateFee,
   feePercentage,
 } from "@/lib/fees";
+import { COUNTRY_CALLING_CODES } from "@/lib/country-calling-codes";
 import {
   useBrandCampaign,
   type BriefRule,
@@ -1131,7 +1132,7 @@ export function CampaignMetricsScreen() {
     !hasConversion ||
     (draft.conversionMode === "website"
       ? /^https?:\/\//i.test(draft.storeUrl)
-      : draft.whatsappNumber.replace(/\D/g, "").length >= 10);
+      : draft.whatsappNumber.length === 10);
   return (
     <BuilderFrame
       step={3}
@@ -1285,20 +1286,35 @@ export function CampaignMetricsScreen() {
             ) : (
               <label>
                 <span>Business WhatsApp number</span>
-                <div className="brand-input-with-icon">
-                  <ProductIcon name="phone" />
+                <div className="whatsapp-number-field">
+                  <select
+                    aria-label="WhatsApp country code"
+                    value={draft.whatsappCountry}
+                    onChange={(event) => update({ whatsappCountry: event.target.value })}
+                  >
+                    {COUNTRY_CALLING_CODES.map((country) => (
+                      <option key={country.iso} value={country.iso}>
+                        {country.name} (+{country.dialCode})
+                      </option>
+                    ))}
+                  </select>
                   <input
-                    inputMode="tel"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="tel-national"
+                    pattern="[0-9]{10}"
+                    maxLength={10}
                     value={draft.whatsappNumber}
                     onChange={(event) =>
-                      update({ whatsappNumber: event.target.value })
+                      update({ whatsappNumber: event.target.value.replace(/\D/g, "").slice(0, 10) })
                     }
-                    placeholder="2348012345678"
+                    placeholder="8012345678"
+                    aria-describedby="whatsapp-number-help"
                   />
+                  <b aria-live="polite">{draft.whatsappNumber.length}/10</b>
                 </div>
-                <small>
-                  Include the country code. Clippit will generate the wa.me
-                  link.
+                <small id="whatsapp-number-help">
+                  Enter the 10 digits after the country code. Leave out the first zero.
                 </small>
               </label>
             )}
@@ -1320,22 +1336,10 @@ export function CampaignMetricsScreen() {
                   <option value={90}>90 days</option>
                 </select>
               </label>
-              <label>
-                <span>Credit goes to</span>
-                <select
-                  value={draft.attributionModel}
-                  onChange={(event) =>
-                    update({
-                      attributionModel: event.target.value as
-                        | "first_touch"
-                        | "last_touch",
-                    })
-                  }
-                >
-                  <option value="last_touch">Last creator link used</option>
-                  <option value="first_touch">First creator link used</option>
-                </select>
-              </label>
+              <p className="conversion-route__first-touch">
+                <ProductIcon name="check" />
+                <span><strong>The first creator gets paid.</strong> Once a customer clicks a creator&apos;s link, that creator keeps the customer&apos;s tracked results during this window.</span>
+              </p>
             </div>
             <p className="conversion-route__proof">
               <ProductIcon name="shield" />

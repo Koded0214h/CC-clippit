@@ -39,6 +39,7 @@ def attributed_destination(link: models.AttributionLink, campaign: models.Campai
     parts = urlsplit(link.destination_url)
     query = dict(parse_qsl(parts.query, keep_blank_values=True))
     query["clippit_ref"] = link.short_code
+    query["clippit_campaign"] = campaign.id.hex
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
 
 

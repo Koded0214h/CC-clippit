@@ -27,14 +27,22 @@ TRACKER_SCRIPT = r'''(function (window, document) {
   "use strict";
   var script = document.currentScript;
   var days = Math.max(1, Math.min(90, Number(script && script.dataset.attributionDays) || 30));
-  var model = script && script.dataset.attributionModel === "first_touch" ? "first_touch" : "last_touch";
   var query = new URLSearchParams(window.location.search);
   var incoming = (query.get("clippit_ref") || "").toUpperCase();
+  var incomingCampaign = (query.get("clippit_campaign") || "").toLowerCase().replace(/[^a-f0-9]/g, "");
   var valid = /^[A-Z0-9]{6,16}$/.test(incoming);
-  var storageKey = "clippit_ref";
+  var activeCampaignKey = "clippit_active_campaign";
+
+  function activeCampaign() {
+    if (incomingCampaign) return incomingCampaign;
+    try { return window.localStorage.getItem(activeCampaignKey) || "general"; }
+    catch (_) { return "general"; }
+  }
+
+  var storageKey = "clippit_ref_" + activeCampaign();
 
   function fromCookie() {
-    var match = document.cookie.match(/(?:^|;\s*)clippit_ref=([^;]+)/);
+    var match = document.cookie.match(new RegExp("(?:^|;\\s*)" + storageKey + "=([^;]+)"));
     return match ? decodeURIComponent(match[1]) : "";
   }
 
@@ -45,10 +53,13 @@ TRACKER_SCRIPT = r'''(function (window, document) {
 
   function store(value) {
     var existing = getStored();
-    if (model === "first_touch" && existing) return existing;
+    if (existing) return existing;
     var secure = window.location.protocol === "https:" ? "; Secure" : "";
     document.cookie = storageKey + "=" + encodeURIComponent(value) + "; Max-Age=" + (days * 86400) + "; Path=/; SameSite=Lax" + secure;
-    try { window.localStorage.setItem(storageKey, value); } catch (_) {}
+    try {
+      window.localStorage.setItem(storageKey, value);
+      if (incomingCampaign) window.localStorage.setItem(activeCampaignKey, incomingCampaign);
+    } catch (_) {}
     return value;
   }
 
@@ -163,13 +174,29 @@ async def follow_attribution_link(token: str, request: Request, db: AsyncSession
     if campaign is None:
         raise HTTPException(404, "Campaign not found")
 
+    # A separate cookie per campaign preserves the first creator without
+    # allowing one campaign's attribution to leak into another campaign.
+    cookie_name = f"clippit_attribution_{campaign.id.hex}"
+    credited_link = link
+    first_code = request.cookies.get(cookie_name)
+    if first_code:
+        first_link = await db.scalar(
+            select(models.AttributionLink).where(
+                models.AttributionLink.campaign_id == campaign.id,
+                models.AttributionLink.short_code == first_code.upper(),
+                models.AttributionLink.active.is_(True),
+            )
+        )
+        if first_link is not None and (first_link.expires_at is None or first_link.expires_at >= now):
+            credited_link = first_link
+
     fingerprint = service.digest(
-        f"{request.client.host if request.client else ''}|{request.headers.get('user-agent', '')}|{link.id}"
+        f"{request.client.host if request.client else ''}|{request.headers.get('user-agent', '')}|{credited_link.id}"
     )[:24]
     recent_events = list(
         await db.scalars(
             select(models.PerformanceEvent).where(
-                models.PerformanceEvent.attribution_link_id == link.id,
+                models.PerformanceEvent.attribution_link_id == credited_link.id,
                 models.PerformanceEvent.event_type == "visit",
                 models.PerformanceEvent.occurred_at >= now - timedelta(seconds=30),
             )
@@ -179,9 +206,9 @@ async def follow_attribution_link(token: str, request: Request, db: AsyncSession
     db.add(
         models.PerformanceEvent(
             campaign_id=campaign.id,
-            creator_id=link.creator_id,
-            submission_id=link.submission_id,
-            attribution_link_id=link.id,
+            creator_id=credited_link.creator_id,
+            submission_id=credited_link.submission_id,
+            attribution_link_id=credited_link.id,
             event_type="visit",
             quantity=1,
             source="tracked_link",
@@ -192,10 +219,10 @@ async def follow_attribution_link(token: str, request: Request, db: AsyncSession
             occurred_at=now,
         )
     )
-    link.last_visited_at = now
+    credited_link.last_visited_at = now
     await db.commit()
-    response = RedirectResponse(service.attributed_destination(link, campaign), status_code=307)
-    response.set_cookie("clippit_attribution", link.short_code, max_age=campaign.attribution_window_days * 86400, httponly=True, samesite="lax", secure=True)
+    response = RedirectResponse(service.attributed_destination(credited_link, campaign), status_code=307)
+    response.set_cookie(cookie_name, credited_link.short_code, max_age=campaign.attribution_window_days * 86400, httponly=True, samesite="lax", secure=True)
     return response
 
 
@@ -265,7 +292,7 @@ async def campaign_integration(
         tracker_script_url=f"{base_url}/tracker.js",
         destination_url=campaign.conversion_destination_url,
         attribution_window_days=campaign.attribution_window_days,
-        attribution_model=campaign.attribution_model,
+        attribution_model="first_touch",
         selected_event_types=selected,
         events_received=int(event_count or 0),
         last_event_at=last_event_at,
