@@ -846,7 +846,7 @@ async def unified_ledger(
     brand's own ledger (`modules.organisations.ledger`), just unscoped."""
     rows: list[schemas.AdminLedgerRow] = []
     if kind in (None, "funding"):
-        orders = await db.scalars(select(funding_models.FundingOrder).order_by(funding_models.FundingOrder.created_at.desc()).limit(limit))
+        orders = await db.scalars(select(funding_models.FundingOrder).order_by(funding_models.FundingOrder.created_at.desc()).limit(offset + limit))
         rows += [
             schemas.AdminLedgerRow(
                 id=o.id, kind="funding", organisation_id=o.organisation_id, creator_id=None, campaign_id=o.campaign_id,
@@ -856,7 +856,7 @@ async def unified_ledger(
             for o in orders
         ]
     if kind in (None, "refund"):
-        refunds = await db.scalars(select(refund_models.Refund).order_by(refund_models.Refund.created_at.desc()).limit(limit))
+        refunds = await db.scalars(select(refund_models.Refund).order_by(refund_models.Refund.created_at.desc()).limit(offset + limit))
         rows += [
             schemas.AdminLedgerRow(
                 id=r.id, kind="refund", organisation_id=r.organisation_id, creator_id=None, campaign_id=r.campaign_id,
@@ -866,7 +866,7 @@ async def unified_ledger(
             for r in refunds
         ]
     if kind in (None, "payout"):
-        payouts = await db.scalars(select(payout_models.Payout).order_by(payout_models.Payout.initiated_at.desc()).limit(limit))
+        payouts = await db.scalars(select(payout_models.Payout).order_by(payout_models.Payout.initiated_at.desc()).limit(offset + limit))
         rows += [
             schemas.AdminLedgerRow(
                 id=p.id, kind="payout", organisation_id=None, creator_id=p.creator_id, campaign_id=None,

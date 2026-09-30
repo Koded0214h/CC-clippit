@@ -185,6 +185,18 @@ class RevokedCountOut(BaseModel):
     revoked: int
 
 
+class AccountUpdate(BaseModel):
+    full_name: str = Field(min_length=2, max_length=120)
+
+    @field_validator("full_name")
+    @classmethod
+    def strip_name(cls, value: str) -> str:
+        value = " ".join(value.split())
+        if len(value) < 2:
+            raise ValueError("Enter your name.")
+        return value
+
+
 class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str

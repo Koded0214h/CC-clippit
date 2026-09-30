@@ -49,6 +49,8 @@ export interface HandleAvailability {
 export const socialApi = {
   accounts: () => api.get<ConnectedAccountOut[]>("/creators/me/accounts"),
   disconnect: (platform: string) => api.delete<void>(`/social/${platform.toLowerCase()}`),
+  syncProfile: (platform: string) =>
+    api.post<ConnectedAccountOut>(`/social/${platform.toLowerCase()}/sync-profile`, {}),
   connectUrl: (platform: string) => {
     const token = typeof window !== "undefined" ? localStorage.getItem("clippit:access-token") ?? "" : "";
     return `${API_URL}/social/${platform.toLowerCase()}/login?token=${encodeURIComponent(token)}`;

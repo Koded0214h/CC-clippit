@@ -13,7 +13,7 @@ import { ClippitEmptyState } from "@/components/ui/ClippitEmptyState";
 import { BRAND_CAMPAIGN_FEE_RATE, calculateFee } from "@/lib/fees";
 import { money } from "@/lib/product";
 import { authApi } from "@/lib/api/auth";
-import type { SessionOut } from "@/lib/api/auth";
+import type { ProviderStatus, SessionOut } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
 import { announceNotificationsChanged, notificationsApi, type NotificationOut } from "@/lib/api/notifications";
 import { bankDetailsApi, banksApi, type BankAccountOut, type BankOut } from "@/lib/api/bankDetails";
@@ -381,6 +381,9 @@ export function SecurityScreen() {
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordError, setPasswordError] = useState("");
   const [passwords, setPasswords] = useState({ current: "", next: "", confirm: "" });
+  const [providers, setProviders] = useState<ProviderStatus[] | null>(null);
+  const [providerError, setProviderError] = useState("");
+  const [providerBusy, setProviderBusy] = useState(false);
   const valid = passwords.current.length >= 6 && passwords.next.length >= 8 && /\d/.test(passwords.next) && passwords.next === passwords.confirm;
   const update = (key: keyof typeof passwords, value: string) => setPasswords((current) => ({ ...current, [key]: value }));
 
@@ -398,7 +401,29 @@ export function SecurityScreen() {
     })
     .catch((err) => setSessionError(err instanceof ApiError ? err.detail : "We couldn't load your devices."));
 
-  useEffect(() => { void loadSessions(); }, []);
+  useEffect(() => {
+    void loadSessions();
+    authApi.providers().then((data) => setProviders(data.providers)).catch((err) => setProviderError(err instanceof ApiError ? err.detail : "We couldn't load your sign-in methods."));
+  }, []);
+
+  const connectGoogle = async () => {
+    setProviderBusy(true); setProviderError("");
+    try { const { url } = await authApi.googleLinkUrl(); window.location.assign(url); }
+    catch (err) { setProviderError(err instanceof ApiError ? err.detail : "Google could not be opened."); setProviderBusy(false); }
+  };
+
+  const unlinkGoogle = async () => {
+    const password = window.prompt("Enter your Clippit password to remove Google sign-in.");
+    if (!password) return;
+    setProviderBusy(true); setProviderError("");
+    try {
+      const challenge = await authApi.requestStepUp({ action: "unlink_google" });
+      const proof = await authApi.verifyStepUp({ challenge_token: challenge.challenge_token, password });
+      await authApi.unlinkGoogle(proof.step_up_token);
+      const data = await authApi.providers(); setProviders(data.providers);
+    } catch (err) { setProviderError(err instanceof ApiError ? err.detail : "Google sign-in could not be removed."); }
+    finally { setProviderBusy(false); }
+  };
 
   const signOutOthers = async () => {
     setSessionError("");
@@ -442,6 +467,7 @@ export function SecurityScreen() {
     <div className="security-layout">
       <section className="security-sheet security-score"><div className="security-orbit"><strong><ProductIcon name="shield" /></strong><span>Account protection</span><i /><i /><i /></div><div><h2>Keep your account yours</h2><p>Use a strong password and remove devices you don&apos;t recognise. Removing your payout account asks for your password again.</p><label className="security-toggle is-disabled"><span><ProductIcon name="shield" /><b>Two-step verification</b><small>Coming soon — we&apos;ll let you know when it&apos;s ready.</small></span><input type="checkbox" checked={false} disabled readOnly /><i /></label></div></section>
       <form className="security-sheet password-sheet" onSubmit={changePassword}><header><span><ProductIcon name="settings" /></span><div><h2>Change password</h2><p>Use at least eight characters including a number.</p></div></header><label><span>Current password</span><input type="password" value={passwords.current} onChange={(event) => update("current", event.target.value)} /></label><label><span>New password</span><input type="password" value={passwords.next} onChange={(event) => update("next", event.target.value)} /></label><label><span>Confirm new password</span><input type="password" value={passwords.confirm} onChange={(event) => update("confirm", event.target.value)} /></label>{passwordError && <p className="auth-error" role="alert">{passwordError}</p>}<button className="lime-button" type="submit" disabled={!valid || passwordLoading} aria-busy={passwordLoading}>{passwordLoading ? <ButtonLoader label="Securing your password" /> : <>{saved ? "Password changed" : "Change password"}<ProductIcon name={saved ? "check" : "arrow"} /></>}</button></form>
+      <section className="security-sheet sessions-sheet"><header><div><h2>Sign-in methods</h2><p>Connect Google as another secure way to access this account.</p></div></header>{providerError && <p className="auth-error" role="alert">{providerError}</p>}{!providers && !providerError && <p>Loading sign-in methods…</p>}{providers?.map((provider) => <article key={provider.provider}><span><ProductIcon name={provider.provider === "google" ? "person" : "shield"} /></span><p><strong>{provider.provider === "google" ? "Google" : "Password"}{provider.linked && <i>Connected</i>}</strong><small>{provider.email ?? (provider.linked ? "Available for sign in" : "Not connected")}</small></p>{provider.provider === "google" && (provider.linked ? <button type="button" disabled={!provider.removable || providerBusy} title={!provider.removable ? "Set a password before removing Google." : undefined} onClick={() => void unlinkGoogle()}>Remove</button> : <button type="button" disabled={providerBusy} onClick={() => void connectGoogle()}>Connect</button>)}</article>)}</section>
       <section className="security-sheet sessions-sheet"><header><div><h2>Signed-in devices</h2><p>Remove any session you do not recognise.</p></div><button className="customer-text-button" type="button" onClick={signOutOthers} disabled={!sessions || sessions.length <= 1}>Sign out other devices</button></header>{sessionError && <p className="auth-error" role="alert">{sessionError}</p>}{!sessions && !sessionError && <p>Loading your devices…</p>}{(sessions ?? []).map((session) => <article key={session.id}><span><ProductIcon name={session.device.includes("Android") || session.device.includes("iPhone") ? "phone" : "tech"} /></span><p><strong>{session.device}{(session.current || session.remembered) && <i>{session.current ? (session.remembered ? "Current · remembered" : "Current") : "Remembered"}</i>}</strong><small>{session.place} · {session.seen}</small></p>{!session.current && <button type="button" onClick={() => removeSession(session.id)}>Remove</button>}</article>)}</section>
     </div>
   </div>;

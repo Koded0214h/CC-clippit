@@ -59,6 +59,19 @@ async def google_link_start(user: models.User = Depends(get_current_user)):
     return RedirectResponse(authorize_url(state, nonce))
 
 
+@router.get("/link-url")
+async def google_link_url(user: models.User = Depends(get_current_user)):
+    """Return a provider URL an authenticated browser app can navigate to."""
+    settings = get_settings()
+    if not settings.google_client_id:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "Google sign-in isn't configured yet.")
+    nonce = secrets.token_urlsafe(24)
+    state = create_google_state_token(nonce=nonce, intent="link", role=None, link_user_id=user.id)
+    from .google import authorize_url
+
+    return {"url": authorize_url(state, nonce)}
+
+
 @router.get("/callback")
 async def google_callback(
     request: Request,
@@ -98,7 +111,8 @@ async def google_callback(
         user.google_id = identity.google_id
         user.google_email = identity.email
         await db.commit()
-        return RedirectResponse(f"{origin}/dashboard/security?google=linked")
+        destination = "/brand/settings" if user.role == models.Role.organisation else "/dashboard/security"
+        return RedirectResponse(f"{origin}{destination}?google=linked")
 
     # intent == "login": sign in to an existing Google-linked account,
     # auto-link a verified-email match, or create a new one.

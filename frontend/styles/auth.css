@@ -2879,3 +2879,10 @@ fieldset {
     height: 43px;
   }
 }
+.auth-role-choice { max-width: 650px; }
+.auth-role-options { display: grid; gap: 14px; margin: 28px 0; }
+.auth-role-options button { display: grid; gap: 7px; width: 100%; padding: 20px; text-align: left; color: inherit; border: 1px solid var(--auth-line, #d9d6ce); border-radius: 14px; background: #fff; cursor: pointer; }
+.auth-role-options button.is-selected { border-color: #152117; box-shadow: 0 0 0 3px #b8ff38; }
+.auth-role-options strong { font-size: 1.05rem; }
+.auth-role-options span { color: #686b66; line-height: 1.5; }
+.auth-secondary-link { display: block; margin-top: 18px; text-align: center; text-decoration: underline; }

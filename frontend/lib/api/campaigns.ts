@@ -289,6 +289,9 @@ export const campaignsApi = {
       `/campaigns/${ref}/submissions${qs({ limit })}`,
     ),
 
+  downloadReport: (ref: string) =>
+    api.download(`/campaigns/${encodeURIComponent(ref)}/report`),
+
   join: (ref: string, inviteCode?: string) =>
     api.post<MembershipOut>(
       `/campaigns/${ref}/join${qs({ invite_code: inviteCode })}`,

@@ -15,6 +15,7 @@ import { disputesApi, legalApi, publicProfilesApi, receiptsApi, supportApi, uplo
 import { earningsApi, type EarningRow } from "@/lib/api/earnings";
 import { payoutsApi, type PayoutOut } from "@/lib/api/payouts";
 import { creatorApi, type ClipRow } from "@/lib/api/creator";
+import { organisationsApi } from "@/lib/api/organisations";
 import { bankDetailsApi, type BankAccountOut } from "@/lib/api/bankDetails";
 import { socialApi } from "@/lib/api/social";
 import { formatDate, formatDateTime, naira, platformLabel } from "@/lib/format";
@@ -666,6 +667,8 @@ const DISPUTE_TYPES: Array<{ type: DisputeType; label: string; copy: string; ico
   { type: "earning_entry", label: "Earning", copy: "Amount, view reading or hold", icon: "wallet" },
   { type: "payout", label: "Payout", copy: "Failed or missing transfer", icon: "bank" },
   { type: "submission_verdict", label: "Submission verdict", copy: "Escalate after an appeal", icon: "play" },
+  { type: "funding_order", label: "Campaign funding", copy: "Missing or incorrect campaign payment", icon: "campaigns" },
+  { type: "refund", label: "Refund", copy: "Returned campaign balance", icon: "wallet" },
 ];
 const DISPUTE_LABEL: Record<string, string> = { earning_entry: "Earning", payout: "Payout", submission_verdict: "Submission verdict", funding_order: "Campaign funding", refund: "Refund" };
 
@@ -702,11 +705,14 @@ export function ProductionNewDisputeScreen() {
       earningsApi.history({ limit: 50 }).then((data) => data.items).catch(() => [] as EarningRow[]),
       payoutsApi.list({ limit: 30 }).then((data) => data.items).catch(() => [] as PayoutOut[]),
       creatorApi.clips().then((data) => data.items).catch(() => [] as ClipRow[]),
-    ]).then(([earnings, payouts, clips]) => {
+      organisationsApi.transactions({ limit: 100 }).then((data) => data.items).catch(() => []),
+    ]).then(([earnings, payouts, clips, organisationTransactions]) => {
       setOptions({
         earning_entry: earnings.map((row) => ({ id: row.id, label: `${naira(row.amount)} · ${row.campaign_title}`, detail: `${row.clip} · ${formatDate(row.date)} · ${row.state}` })),
         payout: payouts.map((payout) => ({ id: payout.id, label: `${naira(payout.amount)} · ${payout.reference}`, detail: `${payout.status} · ${formatDate(payout.initiated_at)}` })),
         submission_verdict: clips.map((clip) => ({ id: clip.id, label: clip.title || clip.campaign_title, detail: `${clip.label} · ${platformLabel(clip.platform)} · ${formatDate(clip.submitted_at)}` })),
+        funding_order: organisationTransactions.filter((row) => row.kind === "funding").map((row) => ({ id: row.id, label: `${naira(row.amount)} · ${row.campaign_title}`, detail: `${row.status} · ${row.reference} · ${formatDate(row.created_at)}` })),
+        refund: organisationTransactions.filter((row) => row.kind === "refund").map((row) => ({ id: row.id, label: `${naira(row.amount)} · ${row.campaign_title}`, detail: `${row.status} · ${row.reference} · ${formatDate(row.created_at)}` })),
       });
       if (presetType && DISPUTE_TYPES.some((item) => item.type === presetType)) setType(presetType);
       if (presetResource) setResourceId(presetResource);
