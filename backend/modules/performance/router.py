@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,11 +23,72 @@ from . import service
 router = APIRouter(tags=["performance"])
 
 
+TRACKER_SCRIPT = r'''(function (window, document) {
+  "use strict";
+  var script = document.currentScript;
+  var days = Math.max(1, Math.min(90, Number(script && script.dataset.attributionDays) || 30));
+  var model = script && script.dataset.attributionModel === "first_touch" ? "first_touch" : "last_touch";
+  var query = new URLSearchParams(window.location.search);
+  var incoming = (query.get("clippit_ref") || "").toUpperCase();
+  var valid = /^[A-Z0-9]{6,16}$/.test(incoming);
+  var storageKey = "clippit_ref";
+
+  function fromCookie() {
+    var match = document.cookie.match(/(?:^|;\s*)clippit_ref=([^;]+)/);
+    return match ? decodeURIComponent(match[1]) : "";
+  }
+
+  function getStored() {
+    try { return window.localStorage.getItem(storageKey) || fromCookie(); }
+    catch (_) { return fromCookie(); }
+  }
+
+  function store(value) {
+    var existing = getStored();
+    if (model === "first_touch" && existing) return existing;
+    var secure = window.location.protocol === "https:" ? "; Secure" : "";
+    document.cookie = storageKey + "=" + encodeURIComponent(value) + "; Max-Age=" + (days * 86400) + "; Path=/; SameSite=Lax" + secure;
+    try { window.localStorage.setItem(storageKey, value); } catch (_) {}
+    return value;
+  }
+
+  var attribution = valid ? store(incoming) : getStored();
+
+  function fill(root) {
+    if (!attribution) return;
+    (root || document).querySelectorAll('input[name="clippit_ref"], input[name="clippit_attribution"]').forEach(function (field) {
+      field.value = attribution;
+    });
+  }
+
+  window.ClippitTracking = Object.freeze({
+    getAttribution: function () { return attribution || null; },
+    attachTo: function (payload) {
+      return Object.assign({}, payload || {}, attribution ? { clippit_ref: attribution } : {});
+    },
+    fill: fill
+  });
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", function () { fill(document); });
+  else fill(document);
+  window.dispatchEvent(new CustomEvent("clippit:attribution", { detail: { reference: attribution || null } }));
+})(window, document);'''
+
+
 async def _campaign(ref: str, db: AsyncSession) -> models.Campaign:
     campaign = await campaign_service.resolve(db, ref)
     if campaign is None:
         raise HTTPException(404, "Campaign not found")
     return campaign
+
+
+@router.get("/tracker.js", include_in_schema=False)
+async def tracker_script():
+    return Response(
+        TRACKER_SCRIPT,
+        media_type="application/javascript",
+        headers={"Cache-Control": "public, max-age=3600, stale-while-revalidate=86400"},
+    )
 
 
 @router.post("/campaigns/{campaign_ref}/attribution-links", response_model=schemas.AttributionLinkOut)
@@ -165,6 +226,50 @@ async def rotate_integration_secret(
         integration.rotated_at = datetime.now(timezone.utc)
     await db.commit()
     return schemas.IntegrationSecretOut(campaign_id=campaign.id, secret=secret, last_four=secret[-4:])
+
+
+@router.get("/campaigns/{campaign_ref}/integration", response_model=schemas.CampaignIntegrationOut)
+async def campaign_integration(
+    campaign_ref: str,
+    user: User = Depends(get_verified_user),
+    db: AsyncSession = Depends(get_db),
+):
+    campaign = await _campaign(campaign_ref, db)
+    campaign_service.ensure_can_manage(campaign, user)
+    integration = await db.get(models.CampaignIntegration, campaign.id)
+    selected = list(
+        await db.scalars(
+            select(models.CampaignMetric.metric_type)
+            .where(
+                models.CampaignMetric.campaign_id == campaign.id,
+                models.CampaignMetric.metric_type.in_(["visit", "signup", "lead", "purchase"]),
+            )
+            .order_by(models.CampaignMetric.position)
+        )
+    )
+    event_stats = await db.execute(
+        select(func.count(models.PerformanceEvent.id), func.max(models.PerformanceEvent.occurred_at)).where(
+            models.PerformanceEvent.campaign_id == campaign.id,
+            models.PerformanceEvent.event_type.in_(selected),
+        )
+    )
+    event_count, last_event_at = event_stats.one()
+    base_url = get_settings().public_base_url.rstrip("/")
+    return schemas.CampaignIntegrationOut(
+        campaign_id=campaign.id,
+        configured=integration is not None,
+        secret_last_four=integration.secret_last_four if integration else None,
+        created_at=integration.created_at if integration else None,
+        rotated_at=integration.rotated_at if integration else None,
+        event_endpoint=f"{base_url}/performance/events",
+        tracker_script_url=f"{base_url}/tracker.js",
+        destination_url=campaign.conversion_destination_url,
+        attribution_window_days=campaign.attribution_window_days,
+        attribution_model=campaign.attribution_model,
+        selected_event_types=selected,
+        events_received=int(event_count or 0),
+        last_event_at=last_event_at,
+    )
 
 
 @router.post("/performance/events", response_model=schemas.PerformanceEventOut, status_code=status.HTTP_201_CREATED)

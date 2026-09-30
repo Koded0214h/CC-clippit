@@ -1112,8 +1112,8 @@ const metricChoices: Array<{
   },
   {
     type: "purchase",
-    title: "Purchases",
-    note: "Completed orders confirmed by your store",
+    title: "Purchases or paid uses",
+    note: "Orders, bookings or paid actions confirmed by your business",
     icon: "wallet",
     group: "conversion",
   },
@@ -1121,6 +1121,9 @@ const metricChoices: Array<{
 
 export function CampaignMetricsScreen() {
   const { draft, toggleMetric, updateMetric, update } = useBrandCampaign();
+  const [moreMetricsOpen, setMoreMetricsOpen] = useState(() =>
+    draft.metrics.some((metric) => ["visit", "signup", "lead", "purchase"].includes(metric.type)),
+  );
   const hasConversion = draft.metrics.some((metric) =>
     ["visit", "signup", "lead", "purchase"].includes(metric.type),
   );
@@ -1150,14 +1153,14 @@ export function CampaignMetricsScreen() {
     >
       <section className="metric-studio">
         <div className="metric-studio__rail" aria-label="Campaign metrics">
-          {metricChoices.map((choice) => {
+          {metricChoices.filter((choice) => choice.group === "social" || moreMetricsOpen).map((choice) => {
             const metric = draft.metrics.find(
               (item) => item.type === choice.type,
             );
             return (
               <article
                 key={choice.type}
-                className={metric ? "is-selected" : ""}
+                className={`${metric ? "is-selected" : ""}${choice.group === "conversion" ? " is-business-metric" : ""}`}
               >
                 <button
                   type="button"
@@ -1197,6 +1200,19 @@ export function CampaignMetricsScreen() {
               </article>
             );
           })}
+          <button
+            type="button"
+            className={`metric-more${moreMetricsOpen ? " is-open" : ""}`}
+            onClick={() => setMoreMetricsOpen((open) => !open)}
+            aria-expanded={moreMetricsOpen}
+          >
+            <span><ProductIcon name="link" /></span>
+            <p>
+              <strong>{moreMetricsOpen ? "Hide business results" : "More business results"}</strong>
+              <small>Visits, signups, leads, purchases and paid uses</small>
+            </p>
+            <b>{draft.metrics.filter((metric) => ["visit", "signup", "lead", "purchase"].includes(metric.type)).length || "+"}</b>
+          </button>
         </div>
         {hasConversion ? (
           <section className="conversion-route">
@@ -2217,10 +2233,6 @@ export function LiveCampaignScreen({ slug }: { slug?: string }) {
   const [controlBusy, setControlBusy] = useState(false);
   const [pauseMode, setPauseMode] = useState<"entries" | "full">("entries");
   const [control, setControl] = useState<"pause" | null>(null);
-  const [integrationSecret, setIntegrationSecret] = useState("");
-  const [integrationBusy, setIntegrationBusy] = useState(false);
-  const [integrationError, setIntegrationError] = useState("");
-  const [integrationCopied, setIntegrationCopied] = useState(false);
 
   useEffect(() => {
     if (!slug) { setLoading(false); setLoadError("Campaign reference is missing."); return; }
@@ -2274,29 +2286,6 @@ export function LiveCampaignScreen({ slug }: { slug?: string }) {
   const tracksConversions = campaignMetrics.some((metric) =>
     ["visit", "signup", "lead", "purchase"].includes(metric.metric_type),
   );
-
-  const createIntegrationKey = async () => {
-    if (!slug || integrationBusy) return;
-    setIntegrationBusy(true);
-    setIntegrationError("");
-    try {
-      const result = await campaignsApi.rotateIntegrationSecret(slug);
-      setIntegrationSecret(result.secret);
-      setIntegrationCopied(false);
-    } catch (error) {
-      setIntegrationError(
-        errorMessage(error, "The setup key could not be created. Try again."),
-      );
-    } finally {
-      setIntegrationBusy(false);
-    }
-  };
-
-  const copyIntegrationKey = async () => {
-    if (!integrationSecret) return;
-    await navigator.clipboard?.writeText(integrationSecret);
-    setIntegrationCopied(true);
-  };
 
   const resumeCampaign = async () => {
     if (!slug || controlBusy) return;
@@ -2497,33 +2486,12 @@ export function LiveCampaignScreen({ slug }: { slug?: string }) {
               website or store. It lets your store confirm signups, leads and
               purchases against the right creator link.
             </p>
-            {integrationError ? (
-              <span className="campaign-integration-card__error">
-                {integrationError}
-              </span>
-            ) : null}
           </div>
           <div className="campaign-integration-card__action">
-            {integrationSecret ? (
-              <div className="campaign-integration-card__secret">
-                <span>Copy now. It will not be shown again.</span>
-                <code>{integrationSecret}</code>
-                <button type="button" onClick={copyIntegrationKey}>
-                  <ProductIcon name={integrationCopied ? "check" : "link"} />
-                  {integrationCopied ? "Copied" : "Copy setup key"}
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="brand-button"
-                onClick={createIntegrationKey}
-                disabled={!slug || integrationBusy}
-              >
-                {integrationBusy ? "Creating key..." : "Create setup key"}
-                <ProductIcon name="arrow" />
-              </button>
-            )}
+            <Link className="brand-button" href={`/brand/campaigns/${slug}/integration`}>
+              Open tracking setup
+              <ProductIcon name="arrow" />
+            </Link>
           </div>
         </section>
       ) : null}

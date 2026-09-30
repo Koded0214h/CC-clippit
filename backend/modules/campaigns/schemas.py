@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import Any, Literal
+from urllib.parse import urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -61,6 +62,8 @@ class ConversionSetup(BaseModel):
         value = value.strip()
         if not value.lower().startswith(("https://", "http://")):
             raise ValueError("Enter a complete website link beginning with https:// or http://.")
+        if not urlsplit(value).netloc:
+            raise ValueError("Enter a complete website link with a domain name.")
         return value
 
     @field_validator("whatsapp_number")
@@ -80,6 +83,26 @@ class ConversionSetup(BaseModel):
         if self.destination_type == "whatsapp" and not self.whatsapp_number:
             raise ValueError("A business WhatsApp number is required.")
         return self
+
+
+class ConversionSetupDraft(BaseModel):
+    """A deliberately permissive conversion setup used while autosaving.
+
+    Campaign creation still validates the completed answer through
+    ``ConversionSetup``. A draft, however, must be able to remember that a
+    brand chose "website" before they have finished typing the URL.
+    """
+
+    destination_type: Literal["website", "whatsapp"] | None = None
+    destination_url: str | None = Field(default=None, max_length=2048)
+    whatsapp_number: str | None = Field(default=None, max_length=40)
+    attribution_window_days: int = Field(default=30, ge=1, le=90)
+    attribution_model: Literal["first_touch", "last_touch"] = "last_touch"
+
+    @field_validator("destination_url", "whatsapp_number")
+    @classmethod
+    def keep_partial_value(cls, value: str | None) -> str | None:
+        return value.strip() if isinstance(value, str) else value
 
 
 class PayoutRuleIn(BaseModel):
@@ -398,7 +421,7 @@ class CampaignDraftPatch(BaseModel):
     assets: list[AssetIn] | None = Field(default=None, max_length=20)
     end_condition: EndCondition | None = None
     performance_metrics: list[CampaignMetricIn] | None = Field(default=None, min_length=1, max_length=7)
-    conversion_setup: ConversionSetup | None = None
+    conversion_setup: ConversionSetupDraft | None = None
 
 
 class CampaignDraftOut(BaseModel):
@@ -441,6 +464,23 @@ class IntegrationSecretOut(BaseModel):
     secret: str
     last_four: str
     warning: str = "Copy this secret now. It will not be shown again."
+
+
+class CampaignIntegrationOut(BaseModel):
+    campaign_id: uuid.UUID
+    configured: bool
+    secret_last_four: str | None = None
+    created_at: datetime | None = None
+    rotated_at: datetime | None = None
+    event_endpoint: str
+    tracker_script_url: str
+    attribution_parameter: str = "clippit_ref"
+    destination_url: str | None = None
+    attribution_window_days: int
+    attribution_model: str
+    selected_event_types: list[str] = Field(default_factory=list)
+    events_received: int = 0
+    last_event_at: datetime | None = None
 
 
 class PerformanceEventIn(BaseModel):

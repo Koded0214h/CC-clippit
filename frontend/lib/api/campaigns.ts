@@ -42,6 +42,23 @@ export interface ConversionSetup {
   attribution_model: "first_touch" | "last_touch";
 }
 
+export interface CampaignIntegrationOut {
+  campaign_id: string;
+  configured: boolean;
+  secret_last_four: string | null;
+  created_at: string | null;
+  rotated_at: string | null;
+  event_endpoint: string;
+  tracker_script_url: string;
+  attribution_parameter: "clippit_ref";
+  destination_url: string | null;
+  attribution_window_days: number;
+  attribution_model: "first_touch" | "last_touch";
+  selected_event_types: Array<"visit" | "signup" | "lead" | "purchase">;
+  events_received: number;
+  last_event_at: string | null;
+}
+
 export interface CampaignCreatePayload {
   title: string;
   description: string;
@@ -319,6 +336,9 @@ export const campaignsApi = {
       last_four: string;
       warning: string;
     }>(`/campaigns/${ref}/integration-secret`, {}),
+
+  integration: (ref: string) =>
+    api.get<CampaignIntegrationOut>(`/campaigns/${ref}/integration`),
 
   performance: (ref: string) =>
     api.get<{

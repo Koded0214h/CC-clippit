@@ -180,6 +180,12 @@ async def _submit_and_approve(
 
 async def test_hybrid_campaign_tracking_settlement_and_isolation(performance_api: PerformanceHarness):
     harness = performance_api
+    tracker = await harness.client.get("/tracker.js")
+    assert tracker.status_code == 200
+    assert tracker.headers["content-type"].startswith("application/javascript")
+    assert "window.ClippitTracking" in tracker.text
+    assert "clippit_ref" in tracker.text
+
     organisation = await _signup_verified(harness, "organisation")
     creator = await _signup_verified(harness, "creator")
 
@@ -229,6 +235,13 @@ async def test_hybrid_campaign_tracking_settlement_and_isolation(performance_api
     )
     created.raise_for_status()
     campaign_id = created.json()["id"]
+
+    setup_before_key = await harness.client.get(
+        f"/campaigns/{campaign_id}/integration", headers=_auth(organisation)
+    )
+    setup_before_key.raise_for_status()
+    assert setup_before_key.json()["configured"] is False
+    assert set(setup_before_key.json()["selected_event_types"]) == {"visit", "signup", "purchase"}
 
     async with harness.sessions() as session:
         campaign = await session.get(Campaign, uuid.UUID(campaign_id))
@@ -283,6 +296,13 @@ async def test_hybrid_campaign_tracking_settlement_and_isolation(performance_api
     )
     integration.raise_for_status()
     secret = integration.json()["secret"]
+
+    setup_after_key = await harness.client.get(
+        f"/campaigns/{campaign_id}/integration", headers=_auth(organisation)
+    )
+    setup_after_key.raise_for_status()
+    assert setup_after_key.json()["configured"] is True
+    assert setup_after_key.json()["secret_last_four"] == secret[-4:]
 
     event_base = {
         "campaign_id": campaign_id,
