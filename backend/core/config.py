@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     #: Where OAuth callbacks and emailed links send people. Not derived from
     #: frontend_origin: that's a CORS allow-list whose first entry is localhost.
     frontend_url: str = "https://clippit.click"
+    #: An admin account's email must end in this — checked both at invite
+    #: time and on every admin-gated request (require_admin), so a role
+    #: flipped by hand in the database still can't reach /admin/* with an
+    #: outside email. Empty disables the check (useful for tests/dev).
+    admin_email_domain: str = "@clippit.click"
 
     @property
     def app_url(self) -> str:

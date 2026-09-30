@@ -46,6 +46,12 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 async def require_admin(user: User = Depends(get_current_user)) -> User:
     if user.role != Role.admin:
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Admin only")
+    domain = get_settings().admin_email_domain
+    if domain and not user.email.lower().endswith(domain.lower()):
+        # Checked here, not just at invite time: a role flipped by hand in
+        # the database (or any future admin-creation path) still can't
+        # reach an admin route with an email outside the company domain.
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Admin only")
     return user
 
 
@@ -943,6 +949,10 @@ async def invite_operator(
 ):
     from core.security import create_admin_invite_token
     from modules.auth import emails as auth_emails
+
+    domain = get_settings().admin_email_domain
+    if domain and not payload.email.lower().endswith(domain.lower()):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Operators must have a {domain} email address.")
 
     existing = await db.scalar(select(User.id).where(User.email == payload.email))
     if existing:

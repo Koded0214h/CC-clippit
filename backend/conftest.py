@@ -37,3 +37,6 @@ for _name in (
     "YOUTUBE_CLIENT_ID", "YOUTUBE_CLIENT_SECRET", "YOUTUBE_API_KEY",
 ):
     os.environ.setdefault(_name, "")
+# require_admin's email-domain check defaults to @clippit.click; test admin
+# accounts (make_admin() in tests/http_app.py) use @example.com.
+os.environ.setdefault("ADMIN_EMAIL_DOMAIN", "")
