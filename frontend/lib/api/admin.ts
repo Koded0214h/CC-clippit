@@ -373,6 +373,14 @@ function qs(params: Record<string, string | number | boolean | undefined | null>
 }
 
 export const adminApi = {
+  opsSnapshot: () => api.get<{ system: SystemHealth; webhooks: DeliveryFeed; social: DeliveryFeed; notifications: DeliveryFeed }>("/admin/ops/snapshot"),
+  listRefunds: (params?: { status?: string; limit?: number; offset?: number }) => api.get<AdminLedgerRow[]>(`/admin/refunds${qs(params ?? {})}`),
+  reconcilePayout: (id: string) => api.post<AdminPayoutRow>(`/admin/payouts/${id}/reconcile`, {}),
+  listJobs: () => api.get<Array<{ name: string; interval_seconds: number }>>("/admin/jobs"),
+  runJob: (name: string) => api.post<RunResult>(`/admin/jobs/${encodeURIComponent(name)}/run`, {}),
+  auditDetail: (id: string) => api.get<AuditRow>(`/admin/audit/${id}`),
+  exportAudit: (kind?: string) => api.download(`/admin/audit/export${qs({ kind })}`),
+  exportLedger: (kind?: string) => api.download(`/admin/ledger/export${qs({ kind })}`),
   // overview
   overview: () => api.get<AdminOverview>("/admin/overview"),
 
@@ -428,6 +436,10 @@ export const adminApi = {
   }) => api.get<AdminSubmissionRow[]>(`/admin/submissions${qs(params ?? {})}`),
   randomAudits: (params?: { limit?: number }) => api.get<RandomAuditRow[]>(`/admin/submissions/random-audits${qs(params ?? {})}`),
   submissionDetail: (submissionId: string) => api.get<AdminSubmissionDetail>(`/admin/submissions/${submissionId}`),
+  approveSubmission: (submissionId: string, note?: string) =>
+    api.post<unknown>(`/brand/reviews/${submissionId}/approve`, { note: note || null }),
+  requestSubmissionCorrection: (submissionId: string, reason: string) =>
+    api.post<unknown>(`/brand/reviews/${submissionId}/request-correction`, { reason }),
   clearTrustFlag: (submissionId: string, note: string) =>
     api.post<AdminSubmissionDetail>(`/admin/submissions/${submissionId}/trust/clear`, { note }),
   confirmTrustFraud: (submissionId: string, note: string) =>

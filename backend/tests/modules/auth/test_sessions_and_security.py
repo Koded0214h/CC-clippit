@@ -286,6 +286,15 @@ async def test_google_login_is_unavailable_without_client_credentials(api):
     assert r.status_code == 503
 
 
+async def test_google_link_url_requires_login_and_returns_a_navigable_url(api, monkeypatch):
+    await _fake_google_identity(monkeypatch)
+    assert (await api.get("/auth/google/link-url")).status_code == 401
+    _, creator = await signup(api, "creator")
+    response = await api.get("/auth/google/link-url", headers=auth(creator))
+    assert response.status_code == 200
+    assert response.json()["url"].startswith("https://accounts.google.com/")
+
+
 async def test_google_sign_in_creates_a_new_passwordless_account(api, monkeypatch):
     await _fake_google_identity(monkeypatch, email="newcreator@gmail.com")
     login = await api.get("/auth/google/login", params={"role": "creator"}, follow_redirects=False)

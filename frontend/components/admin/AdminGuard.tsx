@@ -17,10 +17,10 @@ function AdminAccessGuard({ children }: { children: ReactNode }) {
   const [verifiedPath, setVerifiedPath] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const login = pathname === "/admin/login";
+  const publicAdminPath = pathname === "/admin/login" || pathname === "/admin/operators/accept";
 
   useEffect(() => {
-    if (login) return;
+    if (publicAdminPath) return;
     let active = true;
     const signIn = () => router.replace(`/admin/login?next=${encodeURIComponent(pathname)}`);
     if (!getAccessToken()) { signIn(); return; }
@@ -34,9 +34,9 @@ function AdminAccessGuard({ children }: { children: ReactNode }) {
       else setFailed(true);
     });
     return () => { active = false; };
-  }, [pathname, router, login, attempt]);
+  }, [pathname, router, publicAdminPath, attempt]);
 
-  if (login) return <>{children}</>;
+  if (publicAdminPath) return <>{children}</>;
   if (failed) return <main className="admin-access-error"><h1>We couldn’t verify your access</h1><p>Check your connection and try again.</p><button type="button" onClick={() => { setFailed(false); setAttempt((n) => n + 1); }}>Try again</button></main>;
   if (verifiedPath !== pathname) return <ClippitLoader tone="ink" label="Checking operator access" note="Verifying your admin session." />;
   return <>{children}</>;

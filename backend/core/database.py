@@ -27,8 +27,7 @@ def _asyncpg_url_and_connect_args(url: str) -> tuple[str, dict]:
 
 
 _database_url, _connect_args = _asyncpg_url_and_connect_args(settings.database_url)
-engine = create_async_engine(
-    _database_url,
+_engine_options = {
     # pool_pre_ping sends a throwaway "SELECT 1" over the network before
     # every checkout to test the connection is alive — on a database this
     # far away (Neon in Frankfurt, this app in NYC), that doubles the cost
@@ -36,12 +35,19 @@ engine = create_async_engine(
     # (Neon's pooler dropping an idle connection) without paying that tax
     # on every request — a connection just gets replaced the next time it's
     # checked out after its recycle window, not pinged first.
-    pool_pre_ping=False,
-    pool_recycle=1800,
-    pool_size=settings.db_pool_size,
-    max_overflow=settings.db_pool_max_overflow,
-    connect_args=_connect_args,
-)
+    "pool_pre_ping": False,
+    "pool_recycle": 1800,
+    "connect_args": _connect_args,
+}
+# SQLite's StaticPool does not accept QueuePool sizing arguments. Keeping
+# these options Postgres-only lets the declared in-memory test setup import
+# the application without changing production pooling.
+if not _database_url.startswith("sqlite"):
+    _engine_options.update(
+        pool_size=settings.db_pool_size,
+        max_overflow=settings.db_pool_max_overflow,
+    )
+engine = create_async_engine(_database_url, **_engine_options)
 
 
 async def warm_pool() -> None:

@@ -443,6 +443,23 @@ export function ConnectedAccountsScreen() {
     }
   };
 
+  const syncProfile = async (platform: string) => {
+    setBusy(`${platform}:sync`);
+    setError("");
+    try {
+      const updated = await socialApi.syncProfile(platform);
+      setAccounts((current) =>
+        current?.map((account) =>
+          account.platform === platform ? updated : account,
+        ) ?? null,
+      );
+    } catch (err) {
+      setError(errorMessage(err, `We couldn't refresh your ${platformLabel(platform)} details.`));
+    } finally {
+      setBusy("");
+    }
+  };
+
   if (!accounts && error)
     return (
       <Problem
@@ -558,13 +575,22 @@ export function ConnectedAccountsScreen() {
                 <StatusPill tone="lime">Connected</StatusPill>
               )}
               {account.connected ? (
-                <button
-                  type="button"
-                  disabled={busy === account.platform}
-                  onClick={() => disconnect(account.platform)}
-                >
-                  {busy === account.platform ? "Disconnecting…" : "Disconnect"}
-                </button>
+                <div className="account-card__actions">
+                  <button
+                    type="button"
+                    disabled={!!busy}
+                    onClick={() => void syncProfile(account.platform)}
+                  >
+                    {busy === `${account.platform}:sync` ? "Refreshing…" : "Refresh details"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!!busy}
+                    onClick={() => disconnect(account.platform)}
+                  >
+                    {busy === account.platform ? "Disconnecting…" : "Disconnect"}
+                  </button>
+                </div>
               ) : account.connectable ? (
                 <a
                   className="account-card__connect"
@@ -640,6 +666,8 @@ export function SubmitClipScreen({ campaignSlug }: { campaignSlug: string }) {
   const [campaign, setCampaign] = useState<CampaignOut | null>(null);
   const [loadError, setLoadError] = useState("");
   const [accounts, setAccounts] = useState<ConnectedAccountOut[]>([]);
+  const [accountsLoading, setAccountsLoading] = useState(true);
+  const [accountsError, setAccountsError] = useState("");
   const [platform, setPlatform] = useState("");
   const [url, setUrl] = useState("");
   const [title, setTitle] = useState("");
@@ -666,8 +694,12 @@ export function SubmitClipScreen({ campaignSlug }: { campaignSlug: string }) {
       );
     socialApi
       .accounts()
-      .then(setAccounts)
-      .catch(() => setAccounts([]));
+      .then((data) => {
+        setAccounts(data);
+        setAccountsError("");
+      })
+      .catch((err) => setAccountsError(errorMessage(err, "We couldn't check your connected accounts.")))
+      .finally(() => setAccountsLoading(false));
   }, [campaignSlug]);
 
   if (loadError)
@@ -685,7 +717,7 @@ export function SubmitClipScreen({ campaignSlug }: { campaignSlug: string }) {
   if (!campaign) return <Loading label="Opening the submission form" />;
 
   const account = accounts.find((item) => item.platform === platform);
-  const notConnected = !!accounts.length && !!platform && !account?.connected;
+  const notConnected = !accountsLoading && !accountsError && !!platform && !account?.connected;
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -781,6 +813,11 @@ export function SubmitClipScreen({ campaignSlug }: { campaignSlug: string }) {
               </Link>
             </p>
           )}
+          {accountsError && (
+            <p className="creator-error" role="alert">
+              {accountsError} Reload this page before submitting so we can verify the posting account.
+            </p>
+          )}
           <label className="creator-field">
             <span>Public post link</span>
             <div>
@@ -831,10 +868,12 @@ export function SubmitClipScreen({ campaignSlug }: { campaignSlug: string }) {
           <button
             className="lime-button submission-submit"
             type="submit"
-            disabled={submitting || !platform}
+            disabled={submitting || !platform || accountsLoading || !!accountsError || notConnected}
             aria-busy={submitting}
           >
-            {submitting ? (
+            {accountsLoading ? (
+              <ButtonLoader label="Checking account" />
+            ) : submitting ? (
               <ButtonLoader label="Sending for verification" />
             ) : (
               <>

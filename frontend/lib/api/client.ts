@@ -21,7 +21,7 @@ export function errorMessage(err: unknown, fallback = "Something went wrong. Ple
 
 
 
-async function request<T>(path: string, init: RequestInit = {}, isRetry = false): Promise<T> {
+async function request<T>(path: string, init: RequestInit = {}, isRetry = false, asBlob = false): Promise<T> {
   const token = getAccessToken();
 
   const headers: Record<string, string> = {
@@ -51,7 +51,7 @@ async function request<T>(path: string, init: RequestInit = {}, isRetry = false)
           if (refreshRes.ok) {
             const data = await refreshRes.json();
             updateTokenPair(data);
-            return request<T>(path, init, true);
+            return request<T>(path, init, true, asBlob);
           }
         } catch {
           // refresh failed, fall through
@@ -81,6 +81,7 @@ async function request<T>(path: string, init: RequestInit = {}, isRetry = false)
   }
 
   if (res.status === 204) return undefined as T;
+  if (asBlob) return await res.blob() as T;
   return res.json() as Promise<T>;
 }
 
@@ -102,6 +103,7 @@ function get<T>(path: string): Promise<T> {
 }
 
 export const api = {
+  download: (path: string) => request<Blob>(path, {}, false, true),
   get,
   post: <T>(path: string, body: unknown) =>
     request<T>(path, { method: "POST", body: JSON.stringify(body) }),

@@ -35,6 +35,7 @@ import {
 import { organisationsApi } from "@/lib/api/organisations";
 import { profileApi } from "@/lib/api/profile";
 import { errorMessage } from "@/lib/api/client";
+import { authApi, type ProviderStatus } from "@/lib/api/auth";
 import { uploadsApi, walletApi, type BrandWalletOut } from "@/lib/api/account";
 import {
   BRAND_CAMPAIGN_FEE_RATE,
@@ -2871,239 +2872,6 @@ export function BrandReviewQueueScreen() {
   );
 }
 
-export function BrandReviewDetailScreen({
-  id = "submission-1042",
-}: {
-  id?: string;
-}) {
-  const mockReview =
-    brandReviews.find((item) => item.id === id) ?? brandReviews[0];
-  const [review, setReview] = useState<BrandReview>(mockReview);
-  const [decision, setDecision] = useState<"approve" | "changes" | null>(null);
-  const [acting, setActing] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [activeAction, setActiveAction] = useState<
-    "approve" | "changes" | null
-  >(null);
-
-  useEffect(() => {
-    brandApi
-      .getReview(id)
-      .then((data) => {
-        setReview((current) => ({
-          ...current,
-          creator: data.creator_name,
-          handle: data.creator_handle ?? current.handle,
-          title: data.title ?? current.title,
-          platform:
-            (data.platform as BrandReview["platform"]) ?? current.platform,
-          confidence: data.confidence ?? current.confidence,
-          issue: data.issue ?? current.issue,
-        }));
-      })
-      .catch(() => undefined)
-      .finally(() => setLoading(false));
-  }, [id]);
-
-  const approve = async () => {
-    setActing(true);
-    setActiveAction("approve");
-    brandApi
-      .approveReview(id)
-      .catch(() => undefined)
-      .finally(() => setActing(false));
-    setDecision("approve");
-  };
-
-  const requestCorrection = async () => {
-    setActing(true);
-    setActiveAction("changes");
-    brandApi
-      .requestCorrection(id, review.issue ?? "Please review this submission.")
-      .catch(() => undefined)
-      .finally(() => setActing(false));
-    setDecision("changes");
-  };
-
-  if (loading || acting)
-    return (
-      <div className="brand-page">
-        <ClippitLoader
-          contained
-          tone="gold"
-          label={
-            loading
-              ? "Preparing the submission"
-              : activeAction === "approve"
-                ? "Approving this clip"
-                : "Saving your correction request"
-          }
-          note={
-            loading
-              ? "Loading the clip, evidence and campaign requirements."
-              : "Recording your decision and updating the creator."
-          }
-        />
-      </div>
-    );
-
-  if (decision)
-    return (
-      <div className="brand-page review-resolved">
-        <BrandArt
-          src={decision === "approve" ? art.proof : art.review}
-          label={decision === "approve" ? "Approved" : "Correction requested"}
-          tone={decision === "approve" ? "lime" : "gold"}
-        />
-        <Status tone={decision === "approve" ? "lime" : "gold"}>
-          {decision === "approve" ? "Approved" : "Changes requested"}
-        </Status>
-        <h1>
-          {decision === "approve" ? "Clip approved." : "Correction requested."}
-        </h1>
-        <p>
-          {decision === "approve"
-            ? "New verified views can now earn from the No long thing campaign."
-            : "The creator received the failed requirement and can submit a corrected post."}
-        </p>
-        <ActionLink href="/brand/reviews">Review the next clip</ActionLink>
-      </div>
-    );
-  return (
-    <div className="brand-page review-detail-page">
-      <Link className="brand-back" href="/brand/reviews">
-        <ProductIcon name="chevron" />
-        Back to review queue
-      </Link>
-      <header>
-        <div>
-          <Status tone="gold">Needs review</Status>
-          <h1>{review.title}</h1>
-          <p>
-            {review.creator} <span>{review.handle}</span> · {review.platform}
-          </p>
-        </div>
-        <div className="confidence-ticket">
-          <span>Your decision</span>
-          <strong>Review</strong>
-          <small>One campaign requirement needs a closer look.</small>
-        </div>
-      </header>
-      <div className="review-detail-grid">
-        <section className="submission-player">
-          <div>
-            <Image
-              src={review.image}
-              alt="Submission preview"
-              fill
-              sizes="(max-width: 900px) 100vw, 50vw"
-            />
-            <button type="button" aria-label="Play submission">
-              <ProductIcon name="play" />
-            </button>
-            <span>00:24</span>
-          </div>
-          <p>
-            <span>
-              <i>KM</i>
-              <strong>{review.creator}</strong>
-              <small>Connected {review.platform} account</small>
-            </span>
-            <a href="#public-post">
-              Open public post
-              <ProductIcon name="link" />
-            </a>
-          </p>
-        </section>
-        <aside className="review-evidence">
-          <BrandArt src={art.review} label="Review point" tone="gold" compact />
-          <div>
-            <small>Flagged requirement</small>
-            <h2>{review.issue}</h2>
-            <p>
-              The product appears between 00:11 and 00:13. The pack is visible,
-              but another object covers part of the brand mark.
-            </p>
-          </div>
-        </aside>
-      </div>
-      <section className="decision-sheet">
-        <header>
-          <div>
-            <h2>Requirements</h2>
-            <p>Check each requirement before deciding.</p>
-          </div>
-          <Status tone="paper">4 requirements</Status>
-        </header>
-        <ol>
-          <li className="is-pass">
-            <span>
-              <ProductIcon name="check" />
-            </span>
-            <p>
-              <strong>Show the prepared noodles clearly on screen.</strong>
-              <small>Found at 00:08 and 00:19</small>
-            </p>
-            <b>Pass</b>
-          </li>
-          <li className="is-review">
-            <span>
-              <ProductIcon name="eye" />
-            </span>
-            <p>
-              <strong>Show the product pack clearly on screen.</strong>
-              <small>
-                Partly visible at 00:11. Brand mark may be obscured.
-              </small>
-            </p>
-            <b>Review</b>
-          </li>
-          <li className="is-pass">
-            <span>
-              <ProductIcon name="check" />
-            </span>
-            <p>
-              <strong>Say or display: No long thing.</strong>
-              <small>Transcript match at 00:17</small>
-            </p>
-            <b>Pass</b>
-          </li>
-          <li className="is-pass">
-            <span>
-              <ProductIcon name="check" />
-            </span>
-            <p>
-              <strong>Tag @indomie_nigeria and use #NoLongThing.</strong>
-              <small>Both found in the public caption</small>
-            </p>
-            <b>Pass</b>
-          </li>
-        </ol>
-        <div className="decision-actions">
-          <button
-            type="button"
-            className="brand-button brand-button--dark"
-            disabled={acting}
-            onClick={requestCorrection}
-          >
-            Request a correction
-            <ProductIcon name="arrow" />
-          </button>
-          <button
-            type="button"
-            className="brand-button"
-            disabled={acting}
-            onClick={approve}
-          >
-            Approve this clip
-            <ProductIcon name="check" />
-          </button>
-        </div>
-      </section>
-    </div>
-  );
-}
-
 export function BrandSettingsScreen() {
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -3119,10 +2887,12 @@ export function BrandSettingsScreen() {
   const [financeEmail, setFinanceEmail] = useState("");
   const [verified, setVerified] = useState(false);
   const [orgName, setOrgName] = useState("");
+  const [providers, setProviders] = useState<ProviderStatus[]>([]);
+  const [providerBusy, setProviderBusy] = useState(false);
 
   useEffect(() => {
-    Promise.all([organisationsApi.getProfile(), profileApi.getPreferences()])
-      .then(([data, preferences]) => {
+    Promise.all([organisationsApi.getProfile(), profileApi.getPreferences(), authApi.providers()])
+      .then(([data, preferences, providerData]) => {
         setProfile((current) => ({
           ...current,
           name: data.name,
@@ -3133,6 +2903,7 @@ export function BrandSettingsScreen() {
         setFinanceEmail(data.finance_email ?? "");
         setOrgName(data.business_legal_name ?? data.name);
         setVerified(data.business_verified);
+        setProviders(providerData.providers);
         setNotices({
           funding: preferences.notifications.funding_alerts,
           reviews: preferences.notifications.review_alerts,
@@ -3160,6 +2931,19 @@ export function BrandSettingsScreen() {
         setNotices(previous);
         setSettingsError(errorMessage(error, "That notification setting could not be saved."));
       });
+  };
+
+  const connectGoogle = async () => {
+    if (providerBusy) return;
+    setProviderBusy(true);
+    setSettingsError("");
+    try {
+      const { url } = await authApi.googleLinkUrl();
+      window.location.assign(url);
+    } catch (error) {
+      setSettingsError(errorMessage(error, "Google sign-in could not be started."));
+      setProviderBusy(false);
+    }
   };
 
   const saveIdentity = async () => {
@@ -3212,6 +2996,7 @@ export function BrandSettingsScreen() {
           <a href="#identity">Organisation identity</a>
           <a href="#funding">Funding contact</a>
           <a href="#alerts">Campaign alerts</a>
+          <a href="#sign-in">Sign-in methods</a>
         </nav>
         <div>
           <section id="identity" className="brand-settings-sheet">
@@ -3348,6 +3133,25 @@ export function BrandSettingsScreen() {
                 />
                 <i />
               </label>
+            ))}
+          </section>
+          <section id="sign-in" className="brand-settings-sheet">
+            <header>
+              <div>
+                <h2>Sign-in methods</h2>
+                <p>See which methods can open this organisation account.</p>
+              </div>
+              <ProductIcon name="shield" />
+            </header>
+            {providers.map((provider) => (
+              <div className="verified-funder" key={provider.provider}>
+                <ProductIcon name={provider.provider === "google" ? "link" : "shield"} />
+                <span>
+                  <strong>{provider.provider === "google" ? "Google" : "Email and password"}</strong>
+                  <small>{provider.linked ? provider.email ?? "Connected to this account" : "Not connected"}</small>
+                </span>
+                {provider.linked ? <Status tone="lime">Connected</Status> : provider.provider === "google" ? <button type="button" className="brand-button" disabled={providerBusy} onClick={() => void connectGoogle()}>{providerBusy ? "Connecting…" : "Connect"}<ProductIcon name="arrow" /></button> : <Status tone="paper">Not set</Status>}
+              </div>
             ))}
           </section>
         </div>

@@ -398,6 +398,10 @@
 .account-card > div small { font-size: 11px; }
 .account-card > div em { color: #747b70; font-size: 9px; font-style: normal; }
 .account-card > button { padding: 9px 12px; background: transparent; border: 1px solid var(--ink); border-radius: 8px; font-size: 9px; font-weight: 800; cursor: pointer; }
+.account-card > .account-card__actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.account-card__actions button { padding: 8px 10px; color: var(--ink); background: transparent; border: 1px solid var(--ink); border-radius: 8px; font-size: 9px; font-weight: 800; cursor: pointer; }
+.account-card__actions button:first-child { border-color: transparent; }
+.account-card__actions button:disabled { cursor: wait; opacity: .55; }
 .account-card.is-connected > span:first-child { color: var(--ink); background: var(--lime); }
 .account-card > .creator-status { width: max-content; height: auto; background: var(--lime); border-radius: 999px; }
 
@@ -830,6 +834,8 @@
   .creator-split { grid-template-columns: minmax(0, 1.1fr) minmax(310px, 0.9fr); }
   .account-card { grid-template-columns: 48px minmax(0, 1fr) auto; }
   .account-card > .creator-status { display: none; }
+  .account-card > .account-card__actions { align-items: stretch; flex-direction: column; }
+  .account-card__actions button { padding-block: 6px; }
   .earnings-stage { grid-template-columns: minmax(350px, 1.15fr) minmax(270px, 0.85fr); }
   .earnings-buckets { grid-column: 1 / -1; grid-template-columns: repeat(4, 1fr); }
   .earnings-buckets article { border-top: 1px solid rgba(255, 255, 255, 0.14); border-right: 1px solid rgba(255, 255, 255, 0.14); border-bottom: 0; }

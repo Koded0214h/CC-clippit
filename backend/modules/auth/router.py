@@ -205,6 +205,20 @@ async def me(user: models.User = Depends(get_current_user)):
     return schemas.UserOut.model_validate(user)
 
 
+@router.patch("/me", response_model=schemas.UserOut)
+async def update_me(
+    payload: schemas.AccountUpdate,
+    user: models.User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """The account holder's own display name (operators have no profile
+    record, so this is the only place theirs can be changed)."""
+    user.full_name = payload.full_name
+    await db.commit()
+    await db.refresh(user)
+    return schemas.UserOut.model_validate(user)
+
+
 # --- remembered devices -----------------------------------------------------
 
 
