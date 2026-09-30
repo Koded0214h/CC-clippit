@@ -7,11 +7,8 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { ProductIcon, type ProductIconName } from "@/components/ui/ProductIcon";
 import { ProfileAvatar, type StoredProfile } from "@/components/ui/ProfilePhotoPicker";
-import { ReceiptHeader } from "@/components/ui/ReceiptHeader";
 import { ButtonLoader, ClippitLoader, ClippitMarkMotion } from "@/components/ui/ClippitLoader";
 import { ClippitEmptyState } from "@/components/ui/ClippitEmptyState";
-import { BRAND_CAMPAIGN_FEE_RATE, calculateFee } from "@/lib/fees";
-import { money } from "@/lib/product";
 import { authApi } from "@/lib/api/auth";
 import type { ProviderStatus, SessionOut } from "@/lib/api/auth";
 import { ApiError } from "@/lib/api/client";
@@ -38,15 +35,6 @@ type Notice = {
   href: string;
   unread: boolean;
 };
-
-const initialBrandNotices: Notice[] = [
-  { id: 101, kind: "Review", icon: "eye", title: "7 clips need your decision", copy: "Open the queue to approve, request changes or decline each submission.", time: "Now", href: "/brand/reviews", unread: true },
-  { id: 102, kind: "Review", icon: "play", title: "Kemi Frames submitted a new clip", copy: "The platform reading is ready for your review on No long thing.", time: "12 min", href: "/brand/reviews/kemi-frames", unread: true },
-  { id: 103, kind: "Money", icon: "bank", title: "₦42,800 was returned", copy: "The unused balance from Campus chop stories is back in your account.", time: "1 hr", href: "/brand/transactions", unread: true },
-  { id: 104, kind: "Campaigns", icon: "clock", title: "No long thing closes in 4 days", copy: "Approved clips can keep earning until the campaign closes or the pot runs out.", time: "3 hr", href: "/brand/campaigns/no-long-thing", unread: true },
-  { id: 105, kind: "Campaigns", icon: "eye", title: "72,800 verified views today", copy: "The latest platform readings are now included in your campaign total.", time: "Yesterday", href: "/brand/campaigns/no-long-thing", unread: false },
-  { id: 106, kind: "Account", icon: "shield", title: "Brand account verification is complete", copy: "Gbedu Records can fund campaigns and receive returned balances.", time: "18 Sep", href: "/brand/settings", unread: false },
-];
 
 function mapApiKind(kind: string): Notice["kind"] {
   const k = kind.toLowerCase();
@@ -135,10 +123,16 @@ export function NotificationsScreen() {
     }
   };
 
-  const open = (notice: Notice) => {
+  const open = async (notice: Notice) => {
     if (notice.unread) {
       setNotices((current) => current && current.map((item) => item.id === notice.id ? { ...item, unread: false } : item));
-      notificationsApi.markRead(String(notice.id)).then(announceNotificationsChanged).catch(() => undefined);
+      try {
+        await notificationsApi.markRead(String(notice.id));
+        announceNotificationsChanged();
+      } catch (err) {
+        setNotices((current) => current && current.map((item) => item.id === notice.id ? { ...item, unread: true } : item));
+        setError(err instanceof ApiError ? err.detail : "We couldn't mark that notification as read.");
+      }
     }
     if (notice.href) router.push(notice.href);
   };
@@ -165,70 +159,9 @@ export function NotificationsScreen() {
       <aside className="notification-tally"><span><ProductIcon name="bell" /><i>{unread}</i></span><strong>{unread ? `${unread} new` : "All read"}</strong><small>Latest account activity</small><div>{["All", "Clips", "Money", "Campaigns", "Account"].map((item) => <button type="button" className={filter === item ? "is-active" : ""} onClick={() => setFilter(item)} key={item}>{item}</button>)}</div></aside>
       <div className="notification-tape">
         {!visible.length && <ClippitEmptyState className="notification-tape__empty" size="compact" tone="gold" icon="bell" title={notices.length ? `No ${filter.toLowerCase()} notifications` : "You're all caught up"} copy={notices.length ? "Choose another filter to see the rest of your updates." : "Clip decisions, payable earnings and payouts will appear here."} />}
-        {visible.map((notice) => <a href={notice.href || undefined} className={notice.unread ? "is-unread" : ""} onClick={(event) => { event.preventDefault(); open(notice); }} key={notice.id}><span className={`notice-icon notice-icon--${notice.kind.toLowerCase()}`}><ProductIcon name={notice.icon} /></span><p><small>{notice.kind}</small><strong>{notice.title}</strong><span>{notice.copy}</span></p><time>{notice.time}</time><ProductIcon name="arrow" /></a>)}
+        {visible.map((notice) => <a href={notice.href || undefined} className={notice.unread ? "is-unread" : ""} onClick={(event) => { event.preventDefault(); void open(notice); }} key={notice.id}><span className={`notice-icon notice-icon--${notice.kind.toLowerCase()}`}><ProductIcon name={notice.icon} /></span><p><small>{notice.kind}</small><strong>{notice.title}</strong><span>{notice.copy}</span></p><time>{notice.time}</time><ProductIcon name="arrow" /></a>)}
         {hasMore && <button type="button" className="customer-text-button" disabled={loadingMore} onClick={loadOlder}>{loadingMore ? "Loading…" : "Show older notifications"}</button>}
       </div>
-    </section>
-  </div>;
-}
-
-const BRAND_NOTIFICATION_EVENT = "clippit:brand-notifications";
-
-function saveBrandRead(notices: Notice[]) {
-  const read = notices.filter((notice) => !notice.unread).map((notice) => notice.id);
-  window.localStorage.setItem("clippit:brand-notifications-read", JSON.stringify(read));
-  window.dispatchEvent(new CustomEvent(BRAND_NOTIFICATION_EVENT, { detail: notices.filter((notice) => notice.unread).length }));
-}
-
-export function BrandNotificationsScreen() {
-  const [filter, setFilter] = useState("All");
-  const [notices, setNotices] = useState(initialBrandNotices);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    notificationsApi.list().then((data) => {
-      if (data.items.length > 0) {
-        setNotices(data.items.map((n, i) => ({
-          id: i + 1,
-          kind: mapApiKind(n.kind),
-          icon: mapApiIcon(n.kind),
-          title: n.title,
-          copy: n.body,
-          time: relativeTimeFromDate(n.created_at),
-          href: n.link ?? "#",
-          unread: !n.read,
-        })));
-        return;
-      }
-      const timer = window.setTimeout(() => {
-        try {
-          const read = JSON.parse(window.localStorage.getItem("clippit:brand-notifications-read") || "[]") as Array<number | string>;
-          setNotices((current) => current.map((notice) => read.includes(notice.id) ? { ...notice, unread: false } : notice));
-        } catch { /* keep default */ }
-      }, 0);
-      return () => window.clearTimeout(timer);
-    }).catch(() => {
-      const timer = window.setTimeout(() => {
-        try {
-          const read = JSON.parse(window.localStorage.getItem("clippit:brand-notifications-read") || "[]") as Array<number | string>;
-          setNotices((current) => current.map((notice) => read.includes(notice.id) ? { ...notice, unread: false } : notice));
-        } catch { /* keep default */ }
-      }, 0);
-      return () => window.clearTimeout(timer);
-    }).finally(() => setLoading(false));
-  }, []);
-
-  const visible = notices.filter((notice) => filter === "All" || notice.kind === filter);
-  const unread = notices.filter((notice) => notice.unread).length;
-  const updateNotices = (next: Notice[]) => { setNotices(next); saveBrandRead(next); };
-
-  if (loading) return <div className="brand-page"><ClippitLoader contained tone="gold" label="Checking brand notifications" note="Bringing in reviews, campaign updates and money movement." /></div>;
-
-  return <div className="brand-page customer-page notifications-page brand-notifications-page">
-    <ScreenHead title="Notifications" copy="Reviews, campaign updates, money movement and account checks." action={<button className="customer-text-button" type="button" onClick={() => updateNotices(notices.map((notice) => ({ ...notice, unread: false })))} disabled={!unread}>Mark all as read</button>} />
-    <section className="notification-console">
-      <aside className="notification-tally"><span><ProductIcon name="bell" /><i>{unread}</i></span><strong>{unread ? `${unread} new` : "All read"}</strong><small>Gbedu Records activity</small><div>{["All", "Review", "Campaigns", "Money", "Account"].map((item) => <button type="button" className={filter === item ? "is-active" : ""} onClick={() => setFilter(item)} key={item}>{item}</button>)}</div></aside>
-      <div className="notification-tape">{visible.map((notice) => <Link href={notice.href} className={notice.unread ? "is-unread" : ""} onClick={() => updateNotices(notices.map((item) => item.id === notice.id ? { ...item, unread: false } : item))} key={notice.id}><span className={`notice-icon notice-icon--${notice.kind.toLowerCase()}`}><ProductIcon name={notice.icon} /></span><p><small>{notice.kind}</small><strong>{notice.title}</strong><span>{notice.copy}</span></p><time>{notice.time}</time><ProductIcon name="arrow" /></Link>)}</div>
     </section>
   </div>;
 }
@@ -247,7 +180,10 @@ export function PayoutAccountScreen() {
   const [verified, setVerified] = useState<BankAccountOut | null>(null);
 
   useEffect(() => {
-    bankDetailsApi.get().then(setExisting).catch(() => setExisting(null));
+    bankDetailsApi.get().then(setExisting).catch((err) => {
+      if (err instanceof ApiError && err.status === 404) setExisting(null);
+      else { setExisting(null); setError(err instanceof ApiError ? err.detail : "We couldn't check your payout account."); }
+    });
     banksApi.list().then((data) => {
       if (data.length > 0) {
         const sorted = [...data].sort((a, b) => a.name.localeCompare(b.name));
@@ -473,48 +409,6 @@ export function SecurityScreen() {
   </div>;
 }
 
-type BrandTransaction = { id: string; type: "Funding" | "Creator payout" | "Refund" | "Fee"; campaign: string; date: string; amount: number; status: string };
-const transactions: BrandTransaction[] = [
-  { id: "CLP-0926-041", type: "Funding", campaign: "No long thing", date: "20 Sep 2026", amount: -500000, status: "Cleared" },
-  { id: "VIEW-21904", type: "Creator payout", campaign: "No long thing", date: "20 Sep 2026", amount: -18400, status: "Settled" },
-  { id: "VIEW-21871", type: "Creator payout", campaign: "No long thing", date: "19 Sep 2026", amount: -32100, status: "Settled" },
-  { id: "REF-00812", type: "Refund", campaign: "Campus chop stories", date: "16 Sep 2026", amount: 42800, status: "Returned" },
-  { id: "FEE-00419", type: "Fee", campaign: "No long thing", date: "14 Sep 2026", amount: -calculateFee(500000, BRAND_CAMPAIGN_FEE_RATE), status: "Settled" },
-];
-
-function BrandReceiptDocument({ selected, fullPage = false }: { selected: BrandTransaction; fullPage?: boolean }) {
-  const ticketArt = selected.type === "Funding" ? "/assets/illustrations/clippit-icons/funding-pot.webp" : selected.type === "Refund" ? "/assets/illustrations/clippit-icons/withdraw-bank.webp" : selected.type === "Creator payout" ? "/assets/illustrations/clippit-icons/payout-wallet.webp" : "/assets/illustrations/clippit-icons/verified-proof.webp";
-  const recipient = selected.type === "Funding" ? ["Clippit Campaign Pot", "Brand wallet reservation"] : selected.type === "Refund" ? ["Gbedu Records Ltd.", "Brand wallet"] : selected.type === "Fee" ? ["Clippit Services", "Campaign fee account"] : ["Verified creator payout pool", "Creator settlement"];
-  const sender = selected.type === "Refund" ? ["Clippit Campaign Escrow", "Campaign account · 041"] : ["Gbedu Records Ltd.", "Wema Bank · 012***0193"];
-  return <aside className={`transaction-ticket${fullPage ? " transaction-ticket--full" : ""}`}><ReceiptHeader title="Official transaction receipt" reference={selected.id} /><div className="transaction-ticket__subject"><span><Image src={ticketArt} width={82} height={82} alt="" /></span><p><small>{selected.type}</small><strong>{selected.amount > 0 ? "+" : "−"}{money(Math.abs(selected.amount))}</strong><em><ProductIcon name="check" />{selected.status}</em><time>{selected.date} · 15:07:13 WAT</time></p></div><div className="transaction-ticket__parties"><section><h2>Recipient</h2><p><strong>{recipient[0]}</strong><span>{recipient[1]}</span></p></section><section><h2>Sender</h2><p><strong>{sender[0]}</strong><span>{sender[1]}</span></p></section></div><section className="transaction-ticket__information"><h2>Transaction information</h2><dl><div><dt>Transaction type</dt><dd>{selected.type}</dd></div><div><dt>Transaction ID</dt><dd>{selected.id}</dd></div><div><dt>Session ID</dt><dd>100033260920115117010192295902</dd></div><div><dt>Campaign</dt><dd>{selected.campaign}</dd></div><div><dt>Ledger entry</dt><dd>LDG-2026-0920-041</dd></div><div><dt>Settlement currency</dt><dd>Nigerian naira</dd></div></dl></section><div className="transaction-ticket__verified"><ProductIcon name="shield" /><span><strong>Verify this receipt</strong><small>clippit.ng/verify/{selected.id} · Code 7A19-C2F4</small></span></div>{selected.campaign === "Campus chop stories" && <Link href="/brand/campaigns/campus-chop/report">Open closeout report<ProductIcon name="arrow" /></Link>}<button type="button" onClick={() => window.print()}>Download receipt<ProductIcon name="brief" /></button></aside>;
-}
-
-export function BrandTransactionsScreen() {
-  const router = useRouter();
-  const [filter, setFilter] = useState("All");
-  const [selected, setSelected] = useState(transactions[0]);
-  const visible = transactions.filter((item) => filter === "All" || item.type === filter);
-  return <div className="brand-page customer-page brand-transactions-page">
-    <ScreenHead title="Transactions" copy="Review wallet funding, campaign deductions, creator payouts and refunds." action={<div className="brand-transaction-actions"><Link className="brand-button brand-button--dark" href="/brand/wallet">Open wallet<ProductIcon name="wallet" /></Link><button className="brand-button" type="button" onClick={() => window.print()}>Export statement<ProductIcon name="brief" /></button></div>} />
-    <section className="transaction-balance"><div><small>Money moved this month</small><strong><AnimatedNumber value={1080300} format="money" /></strong><span><ProductIcon name="brief" />Across all Brand wallet activity</span></div><dl><div><dt>Creator pots funded</dt><dd><AnimatedNumber value={850000} format="money" /></dd></div><div><dt>Paid to creators</dt><dd><AnimatedNumber value={187500} format="money" /></dd></div><div><dt>Returned</dt><dd><AnimatedNumber value={42800} format="money" /></dd></div></dl></section>
-    <div className="transaction-workspace"><section className="transaction-ledger"><header><div>{["All", "Funding", "Creator payout", "Refund", "Fee"].map((item) => <button type="button" className={filter === item ? "is-active" : ""} onClick={() => setFilter(item)} key={item}>{item}</button>)}</div><span>{visible.length} records</span></header><div className="transaction-labels"><span>Reference</span><span>Campaign</span><span>Date</span><span>Amount</span><span>Status</span></div>{visible.map((item) => <button type="button" className={`transaction-row${selected.id === item.id ? " is-selected" : ""}`} onClick={() => window.matchMedia("(max-width: 900px)").matches ? router.push(`/brand/transactions/${item.id}`) : setSelected(item)} key={item.id}><span><i><ProductIcon name={item.type === "Refund" ? "arrow" : item.type === "Funding" ? "wallet" : "bank"} /></i><b>{item.type}</b><small>{item.id}</small></span><strong>{item.campaign}</strong><time>{item.date}</time><em className={item.amount > 0 ? "is-credit" : ""}>{item.amount > 0 ? "+" : "−"}{money(Math.abs(item.amount))}</em><u>{item.status}</u></button>)}</section><BrandReceiptDocument selected={selected} /></div>
-  </div>;
-}
-
-export function BrandTransactionReceiptScreen({ transactionId }: { transactionId: string }) {
-  const selected = transactions.find((item) => item.id === transactionId) || transactions[0];
-  return <div className="brand-page customer-page transaction-receipt-page"><Link className="brand-back" href="/brand/transactions"><ProductIcon name="chevron" />Back to transactions</Link><BrandReceiptDocument selected={selected} fullPage /></div>;
-}
-
-export function CampaignCloseoutScreen() {
-  return <div className="brand-page customer-page closeout-page">
-    <ScreenHead title="Campaign closeout" copy="Final delivery and money record for Campus chop stories." back="/brand/campaigns" action={<button className="brand-button" type="button" onClick={() => window.print()}>Download report<ProductIcon name="brief" /></button>} />
-    <section className="closeout-hero"><div><span><ProductIcon name="check" /></span><small>Campaign completed · 16 Sep 2026</small><h2>Campus chop stories</h2><p>All approved views are settled. Unused money has been returned.</p></div><div className="closeout-stamp"><Image src="/assets/illustrations/clippit-icons/verified-proof.webp" alt="" width={220} height={220} /><strong>Closed clean</strong></div></section>
-    <section className="closeout-receipt"><ReceiptHeader title="Official campaign closeout" reference="CAM-0904-118" /><div className="closeout-receipt__campaign"><div><Image src="/assets/photos/street-style.jpg" alt="Campus chop stories campaign" fill sizes="110px" /></div><p><small>Completed campaign</small><strong>Campus chop stories</strong><span>Gbedu Records · Closed 16 Sep 2026</span></p><em><ProductIcon name="check" />Settled</em></div><div className="closeout-money"><p><small>Campaign pot</small><strong><AnimatedNumber value={350000} format="money" /></strong></p><i /><p><small>Earned by creators</small><strong><AnimatedNumber value={307200} format="money" /></strong></p><i /><p><small>Returned to Gbedu Records</small><strong><AnimatedNumber value={42800} format="money" /></strong></p></div><div className="closeout-proof"><article><small>Verified views</small><strong><AnimatedNumber value={875000} format="compact" /></strong><span>from platform readings</span></article><article><small>Approved clips</small><strong><AnimatedNumber value={93} /></strong><span>from 71 creators</span></article><article><small>Average cost</small><strong><AnimatedNumber value={351} format="money" /></strong><span>per 1K verified views</span></article><article><small>Review accuracy</small><strong><AnimatedNumber value={96} suffix="%" /></strong><span>4 verdicts overturned</span></article></div><footer className="closeout-receipt__footer"><ProductIcon name="shield" /><span><strong>Final settlement complete</strong><small>Creator earnings were settled and unused campaign funds returned.</small></span><b>Clippit verified</b></footer></section>
-    <div className="closeout-grid"><section className="platform-delivery"><header><h2>Where the views came from</h2><p>Final platform readings.</p></header>{[["TikTok", 50, 437500, "tiktok"], ["Instagram", 22, 192500, "instagram"], ["YouTube", 12, 105000, "youtube"], ["Facebook", 9, 78750, "facebook"], ["X", 7, 61250, "x"]].map(([name, share, views, icon]) => <div key={String(name)}><span><ProductIcon name={icon as ProductIconName} /></span><p><strong>{name}</strong><small><AnimatedNumber value={Number(views)} format="compact" /> views</small></p><i><b style={{ width: `${share}%` }} /></i><em>{share}%</em></div>)}</section><section className="top-delivery"><header><h2>Top clips</h2><p>Highest verified delivery.</p></header>{[["KM", "Kemi Frames", 146200], ["NE", "Nana Edits", 121800], ["DD", "Deji Does It", 98700]].map(([initials, name, views], index) => <article key={String(name)}><b>{index + 1}</b><span>{initials}</span><p><strong>{name}</strong><small><AnimatedNumber value={Number(views)} format="compact" /> verified views</small></p></article>)}</section></div>
-  </div>;
-}
-
 export function PublicProfileScreen() {
   const [state, setState] = useState<{ handle: string | null; isPublic: boolean; location: string | null; profile: PublicCreatorProfileOut | null } | null>(null);
   const [error, setError] = useState("");
@@ -523,7 +417,7 @@ export function PublicProfileScreen() {
   useEffect(() => {
     creatorProfileApi.get().then(async (me) => {
       let publicProfile: PublicCreatorProfileOut | null = null;
-      if (me.handle && me.public_profile) publicProfile = await publicProfilesApi.creator(me.handle).catch(() => null);
+      if (me.handle && me.public_profile) publicProfile = await publicProfilesApi.creator(me.handle);
       setState({ handle: me.handle, isPublic: me.public_profile, location: me.location ?? null, profile: publicProfile ?? { handle: me.handle ?? "", display_name: me.display_name, photo_url: me.photo_url, bio: me.bio, interests: me.interests, stats: { approved_clips: 0, verified_views: 0 }, recent_work: [] } });
     }).catch((err) => setError(err instanceof ApiError ? err.detail : "We couldn't load your profile."));
   }, []);

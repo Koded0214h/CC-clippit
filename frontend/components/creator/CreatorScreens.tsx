@@ -1999,7 +1999,10 @@ export function WithdrawScreen() {
     bankDetailsApi
       .get()
       .then(setBankDetail)
-      .catch(() => setBankDetail(null));
+      .catch((err) => {
+        if (err instanceof ApiError && err.status === 404) setBankDetail(null);
+        else setLoadError(errorMessage(err, "We couldn't load your payout account."));
+      });
   }, []);
 
   const number = Math.max(0, Number(amount) || 0);

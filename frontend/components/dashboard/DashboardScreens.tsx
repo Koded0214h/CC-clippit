@@ -522,11 +522,15 @@ function toBoardRow(r: LeaderRow): BoardRow {
 
 function MiniLeaderboard() {
   const [board, setBoard] = useState<BoardRow[] | null>(null);
+  const [error, setError] = useState("");
   useEffect(() => {
     earningsApi
       .leaderboard({ period: "week", limit: 4 })
-      .then((data) => setBoard(data.items.slice(0, 4).map(toBoardRow)))
-      .catch(() => setBoard([]));
+      .then((data) => {
+        setBoard(data.items.slice(0, 4).map(toBoardRow));
+        setError("");
+      })
+      .catch((err) => setError(errorMessage(err, "We couldn't load the weekly leaderboard.")));
   }, []);
   return (
     <aside className="mini-leaderboard">
@@ -535,6 +539,7 @@ function MiniLeaderboard() {
         href="/dashboard/leaderboard"
         linkLabel="Full board"
       />
+      {error && <p className="auth-error" role="alert">{error}</p>}
       {board && !board.length && (
         <ClippitEmptyState
           className="mini-leaderboard__empty"
@@ -614,7 +619,7 @@ export function DashboardHome() {
     Promise.all([
       creatorApi.overview(),
       campaignsApi.list({ feed: "all", limit: 6 }),
-      creatorApi.clips().catch(() => null),
+      creatorApi.clips(),
     ])
       .then(([overview, list, clips]) => {
         if (cancelled) return;
@@ -637,7 +642,7 @@ export function DashboardHome() {
             .map(campaignOutToLocal)
             .filter((item) => item.slug !== closing?.slug),
         );
-        setRecentClips(clips?.items.slice(0, 3) ?? []);
+        setRecentClips(clips.items.slice(0, 3));
         setError("");
       })
       .catch((err) => {

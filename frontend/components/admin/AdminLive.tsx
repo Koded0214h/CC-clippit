@@ -212,12 +212,18 @@ const readOnlyNote: Partial<Record<DetailKind, string>> = {
 export function AdminDetailScreen({ kind, id }: { kind: DetailKind; id: string }) {
   const state = useRemote(useCallback(() => detailLoad(kind, id), [kind, id]));
   const [operators, setOperators] = useState<OperatorOption[]>([]);
+  const [operatorsError, setOperatorsError] = useState("");
   useEffect(() => {
     if (kind !== "support" && kind !== "dispute") return;
-    adminApi.listOperators().then((rows) => setOperators(rows.filter((o) => !o.suspended))).catch(() => setOperators([]));
+    adminApi.listOperators()
+      .then((rows) => {
+        setOperators(rows.filter((o) => !o.suspended));
+        setOperatorsError("");
+      })
+      .catch((err) => setOperatorsError(errorMessage(err, "Could not load the operator list.")));
   }, [kind]);
   const actions = state.data != null ? detailActions(kind, id, record(state.data), operators) : [];
-  return <div className="admin-page"><AdminHeading back={backTo[kind] ?? "/admin"} title={`${titleCase(kind)} record`} copy={id} action={<AdminButton onClick={state.refresh}>Refresh</AdminButton>} /><RemoteState {...state} retry={state.refresh}>{kind === "creator-verification" ? <p className="admin-live-notice">The backend does not provide identity evidence or an admin identity decision endpoint.</p> : state.data != null && <div className="admin-live-detail"><section className="admin-docket"><Fields data={state.data} />{readOnlyNote[kind] && <p className="admin-live-notice">{readOnlyNote[kind]}</p>}{kind === "earning" && <Link href={`/admin/submissions/${record(state.data).submission_id}`}>Open submission and earnings controls</Link>}</section><aside>{actions.length ? actions.map((action) => <ActionForm key={action.label} action={action} done={state.refresh} />) : <p className="admin-live-notice">No actions available for this record in its current state.</p>}</aside></div>}</RemoteState></div>;
+  return <div className="admin-page"><AdminHeading back={backTo[kind] ?? "/admin"} title={`${titleCase(kind)} record`} copy={id} action={<AdminButton onClick={state.refresh}>Refresh</AdminButton>} />{operatorsError && <p className="admin-live-notice" role="alert">{operatorsError} Assignment controls are unavailable until it reconnects.</p>}<RemoteState {...state} retry={state.refresh}>{kind === "creator-verification" ? <p className="admin-live-notice">The backend does not provide identity evidence or an admin identity decision endpoint.</p> : state.data != null && <div className="admin-live-detail"><section className="admin-docket"><Fields data={state.data} />{readOnlyNote[kind] && <p className="admin-live-notice">{readOnlyNote[kind]}</p>}{kind === "earning" && <Link href={`/admin/submissions/${record(state.data).submission_id}`}>Open submission and earnings controls</Link>}</section><aside>{actions.length ? actions.map((action) => <ActionForm key={action.label} action={action} done={state.refresh} />) : <p className="admin-live-notice">No actions available for this record in its current state.</p>}</aside></div>}</RemoteState></div>;
 }
 
 export function AdminLedgerScreen() {

@@ -16,7 +16,6 @@ import {
 } from "@/components/ui/ProfilePhotoPicker";
 import { ReceiptHeader } from "@/components/ui/ReceiptHeader";
 import {
-  brandReviews,
   type BrandCampaign,
   type BrandCampaignState,
   type BrandReview,
