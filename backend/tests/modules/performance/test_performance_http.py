@@ -106,7 +106,9 @@ async def performance_api() -> PerformanceHarness:
             app.state.limiter.enabled = False
 
         transport = httpx.ASGITransport(app=app)
-        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        # Attribution cookies are Secure in production, so the isolated client
+        # must also use HTTPS to exercise real browser behavior.
+        async with httpx.AsyncClient(transport=transport, base_url="https://test") as client:
             yield PerformanceHarness(client, sessions, intelligence)
     finally:
         app.dependency_overrides.pop(get_db, None)
@@ -180,6 +182,12 @@ async def _submit_and_approve(
 
 async def test_hybrid_campaign_tracking_settlement_and_isolation(performance_api: PerformanceHarness):
     harness = performance_api
+    tracker = await harness.client.get("/tracker.js")
+    assert tracker.status_code == 200
+    assert tracker.headers["content-type"].startswith("application/javascript")
+    assert "window.ClippitTracking" in tracker.text
+    assert "clippit_ref" in tracker.text
+
     organisation = await _signup_verified(harness, "organisation")
     creator = await _signup_verified(harness, "creator")
 
@@ -223,12 +231,19 @@ async def test_hybrid_campaign_tracking_settlement_and_isolation(performance_api
                 "destination_type": "website",
                 "destination_url": "https://shop.example/products?id=42",
                 "attribution_window_days": 30,
-                "attribution_model": "last_touch",
+                "attribution_model": "first_touch",
             },
         },
     )
     created.raise_for_status()
     campaign_id = created.json()["id"]
+
+    setup_before_key = await harness.client.get(
+        f"/campaigns/{campaign_id}/integration", headers=_auth(organisation)
+    )
+    setup_before_key.raise_for_status()
+    assert setup_before_key.json()["configured"] is False
+    assert set(setup_before_key.json()["selected_event_types"]) == {"visit", "signup", "purchase"}
 
     async with harness.sessions() as session:
         campaign = await session.get(Campaign, uuid.UUID(campaign_id))
@@ -268,6 +283,7 @@ async def test_hybrid_campaign_tracking_settlement_and_isolation(performance_api
     assert destination.netloc == "shop.example"
     assert destination_query["id"] == ["42"]
     assert destination_query["clippit_ref"] == [first_link_body["short_code"]]
+    assert destination_query["clippit_campaign"] == [campaign_id.replace("-", "")]
 
     duplicate_visit = await harness.client.get(
         token_path,
@@ -283,6 +299,13 @@ async def test_hybrid_campaign_tracking_settlement_and_isolation(performance_api
     )
     integration.raise_for_status()
     secret = integration.json()["secret"]
+
+    setup_after_key = await harness.client.get(
+        f"/campaigns/{campaign_id}/integration", headers=_auth(organisation)
+    )
+    setup_after_key.raise_for_status()
+    assert setup_after_key.json()["configured"] is True
+    assert setup_after_key.json()["secret_last_four"] == secret[-4:]
 
     event_base = {
         "campaign_id": campaign_id,
@@ -365,13 +388,15 @@ async def test_hybrid_campaign_tracking_settlement_and_isolation(performance_api
         follow_redirects=False,
     )
     assert second_visit.status_code == 307
+    second_destination = parse_qs(urlsplit(second_visit.headers["location"]).query)
+    assert second_destination["clippit_ref"] == [first_link_body["short_code"]]
     second_purchase = await harness.client.post(
         "/performance/events",
         headers={"X-Clippit-Secret": secret},
         json={
             "campaign_id": campaign_id,
             "event_type": "purchase",
-            "attribution_code": second_body["short_code"],
+            "attribution_code": second_destination["clippit_ref"][0],
             "source_event_id": "order-2",
             "quantity": 1,
             "value_amount": 20_000,

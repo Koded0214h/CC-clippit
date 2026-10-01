@@ -8,10 +8,18 @@ import { ButtonLoader, ClippitLoader } from "@/components/ui/ClippitLoader";
 import { ProductIcon } from "@/components/ui/ProductIcon";
 import { banksApi, type BankOut } from "@/lib/api/bankDetails";
 import { walletApi, type OrganisationBankAccountOut } from "@/lib/api/account";
-import { errorMessage } from "@/lib/api/client";
+import { ApiError, errorMessage } from "@/lib/api/client";
 import { organisationsApi, type OrganisationProfileOut, type OrganisationTransactionOut } from "@/lib/api/organisations";
 import { formatDate } from "@/lib/format";
 import { money } from "@/lib/product";
+
+async function organisationBankOrNone() {
+  try { return await walletApi.getOrganisationBank(); }
+  catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+}
 
 export function BrandBillingScreen() {
   const [profile, setProfile] = useState<OrganisationProfileOut | null>(null);
@@ -28,8 +36,8 @@ export function BrandBillingScreen() {
   const load = () => Promise.all([
     organisationsApi.getProfile(),
     organisationsApi.transactions({ kind: "funding", limit: 100 }),
-    walletApi.getOrganisationBank().catch(() => null),
-    banksApi.list().catch(() => []),
+    organisationBankOrNone(),
+    banksApi.list(),
   ]).then(([profileData, transactionData, bankData, bankList]) => {
     setProfile(profileData); setTransactions(transactionData.items); setBank(bankData); setBanks(bankList);
     setDraft({ name: profileData.name, website: profileData.website ?? "", finance_email: profileData.finance_email ?? "" });

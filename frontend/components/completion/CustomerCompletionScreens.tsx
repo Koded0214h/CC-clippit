@@ -13,13 +13,13 @@ import { authApi, clearTokens, getAccessToken, type UserOut } from "@/lib/api/au
 import { ApiError, errorMessage } from "@/lib/api/client";
 import { disputesApi, legalApi, publicProfilesApi, receiptsApi, supportApi, uploadsApi, type DisputeDetailOut, type DisputeOut, type DisputeType, type LegalDocumentOut, type PublicCreatorProfileOut, type PublicCreatorWork, type ReceiptVerifyOut, type TicketDetailOut, type TicketOut } from "@/lib/api/account";
 import { earningsApi, type EarningRow } from "@/lib/api/earnings";
-import { payoutsApi, type PayoutOut } from "@/lib/api/payouts";
-import { creatorApi, type ClipRow } from "@/lib/api/creator";
+import { payoutsApi } from "@/lib/api/payouts";
+import { creatorApi } from "@/lib/api/creator";
 import { organisationsApi } from "@/lib/api/organisations";
 import { bankDetailsApi, type BankAccountOut } from "@/lib/api/bankDetails";
 import { socialApi } from "@/lib/api/social";
 import { formatDate, formatDateTime, naira, platformLabel } from "@/lib/format";
-import { BRAND_CANCELLATION_FEE_RATE, BRAND_TOP_UP_FEE_RATE, CREATOR_WITHDRAWAL_FEE_RATE, MINIMUM_WALLET_WITHDRAWAL, calculateFee, feePercentage } from "@/lib/fees";
+import { BRAND_CANCELLATION_FEE_RATE, BRAND_TOP_UP_FEE_RATE, CREATOR_WITHDRAWAL_FEE_RATE, MINIMUM_WALLET_WITHDRAWAL, feePercentage } from "@/lib/fees";
 
 const art = {
   proof: "/assets/illustrations/clippit-icons/verified-proof.webp",
@@ -113,59 +113,6 @@ export function HelpCentreScreen() {
   </ServiceFrame>;
 }
 
-export function HelpArticleScreen({ slug }: { slug: string }) {
-  const title = slug === "money-and-payouts" ? "Money and payouts" : slug === "connected-social-accounts" ? "Connected social accounts" : slug === "brand-workspace" ? "Using the brand workspace" : slug === "account-and-safety" ? "Account and safety" : slug === "how-views-are-checked" ? "How views are checked" : "How campaigns work";
-  const steps = title.includes("Money") ? ["Approved clips begin earning from verified platform views.", "New earnings stay on hold for five days.", "When the hold ends, the money moves to Payable.", "A withdrawal sends Payable money to your verified bank account."] : title.includes("views") ? ["Clippit reads views from the connected publishing account.", "Only complete groups of 1,000 views are billable.", "Campaign caps and remaining pot are applied to every reading.", "The reading history stays attached to the earning entry."] : ["Open the campaign and read every requirement.", "Join before posting so the campaign can track your entry.", "Publish from a connected account and submit the public link.", "Follow the check result from My clips."];
-  return <ServiceFrame>
-    <article className="article-shell">
-      <CompletionHead back="/help" kicker="Help guide" title={title} copy="The current Clippit process, in plain language." />
-      <div className="article-layout"><aside><strong>In this guide</strong>{steps.map((step, index) => <a href={`#step-${index + 1}`} key={step}>{index + 1}. {step.split(".")[0]}</a>)}<BigAction href="/support/tickets/new" tone="gold">Ask support</BigAction></aside><div className="article-copy"><div className="article-note"><ProductIcon name="shield" /><p><strong>Clippit records the evidence.</strong><span>Campaign rules, platform readings and money movements remain attached to the relevant transaction.</span></p></div>{steps.map((step, index) => <section id={`step-${index + 1}`} key={step}><span>{String(index + 1).padStart(2, "0")}</span><div><h2>{step}</h2><p>{index === 0 ? "The campaign screen shows the current rate, remaining pot, platform and any closing date before you act." : "If the status changes, the activity and notification screens show what changed and what you can do next."}</p></div></section>)}</div></div>
-    </article>
-  </ServiceFrame>;
-}
-
-const tickets = [
-  { id: "CLP-2841", subject: "Instagram account needs reconnecting", category: "Connected accounts", time: "12 min ago", status: "Support replied", tone: "lime" as Tone },
-  { id: "CLP-2718", subject: "Question about a five-day hold", category: "Earnings", time: "18 Sep", status: "Waiting for you", tone: "gold" as Tone },
-  { id: "CLP-2430", subject: "Campaign brief was unclear", category: "Campaigns", time: "2 Sep", status: "Resolved", tone: "paper" as Tone },
-];
-
-export function SupportTicketsScreen() {
-  return <ServiceFrame active="Support"><section className="service-content completion-page"><CompletionHead title="Support tickets" copy="Your conversations with the Clippit support team." action={<BigAction href="/support/tickets/new">New ticket</BigAction>} /><div className="ticket-board"><aside><strong>2 open</strong><span>Average first reply</span><b>under 2 hours</b><MiniArt src={art.review} tone="gold" /></aside><section>{tickets.map((ticket) => <Link href={`/support/tickets/${ticket.id}`} key={ticket.id} className="ticket-row"><span><ProductIcon name={ticket.category === "Earnings" ? "wallet" : ticket.category === "Campaigns" ? "campaigns" : "link"} /></span><p><small>{ticket.id} · {ticket.category}</small><strong>{ticket.subject}</strong><em>{ticket.time}</em></p><Status tone={ticket.tone}>{ticket.status}</Status><ProductIcon name="arrow" /></Link>)}</section></div></section></ServiceFrame>;
-}
-
-export function NewSupportTicketScreen() {
-  const [sent, setSent] = useState(false);
-  const [category, setCategory] = useState("Campaigns");
-  if (sent) return <ServiceFrame active="Support"><section className="completion-result"><MiniArt src={art.proof} /><Status tone="lime">Ticket CLP-2914</Status><h1>Your message is with support.</h1><p>We will notify you when the team replies. You can add more details from the ticket.</p><BigAction href="/support/tickets/CLP-2914">Open ticket</BigAction></section></ServiceFrame>;
-  return <ServiceFrame active="Support"><section className="service-content completion-page"><CompletionHead back="/support/tickets" title="Contact support" copy="Choose the issue and include the reference that support should inspect." /><form className="completion-form support-form" onSubmit={(event) => { event.preventDefault(); setSent(true); }}><div className="form-main"><fieldset><legend>What is this about?</legend><div className="choice-grid choice-grid--compact">{["Campaigns", "Money", "Connected accounts", "Account access"].map((item) => <label className={category === item ? "is-selected" : ""} key={item}><input type="radio" name="category" value={item} checked={category === item} onChange={() => setCategory(item)} /><ProductIcon name={item === "Money" ? "wallet" : item === "Campaigns" ? "campaigns" : item === "Connected accounts" ? "link" : "shield"} /><span>{item}</span></label>)}</div></fieldset><label><span>Subject</span><input required placeholder="A short description of the problem" /></label><label><span>What happened?</span><textarea required rows={7} placeholder="Tell us what you expected, what happened and when it happened." /></label><label><span>Related reference <small>Optional</small></span><input placeholder="Campaign, payout or transaction ID" /></label></div><aside className="form-aside"><div><ProductIcon name="upload" /><strong>Add screenshots or documents</strong><span>PNG, JPG or PDF · up to 10 MB each</span><input type="file" multiple /></div><p><ProductIcon name="shield" />Do not upload passwords, verification codes or full card details.</p><button className="completion-submit" type="submit">Send to support<ProductIcon name="arrow" /></button></aside></form></section></ServiceFrame>;
-}
-
-export function SupportTicketDetailScreen({ id }: { id: string }) {
-  const [messages, setMessages] = useState(["I reconnected Instagram, but the status still says it needs attention.", "We found an expired permission. Please reconnect once more from Connected accounts; the new permission set is ready."]);
-  const [reply, setReply] = useState("");
-  return <ServiceFrame active="Support"><section className="service-content completion-page"><CompletionHead back="/support/tickets" kicker={id} title="Instagram account needs reconnecting" action={<Status tone="lime">Support replied</Status>} /><div className="thread-layout"><section className="message-thread"><div className="thread-day">Today</div>{messages.map((message, index) => <article className={index % 2 ? "is-support" : "is-customer"} key={`${message}-${index}`}><span>{index % 2 ? <Mark /> : "TO"}</span><div><header><strong>{index % 2 ? "Clippit support" : "You"}</strong><time>{index ? "10:42" : "10:18"}</time></header><p>{message}</p></div></article>)}<form onSubmit={(event) => { event.preventDefault(); if (reply.trim()) { setMessages((current) => [...current, reply.trim()]); setReply(""); } }}><textarea value={reply} onChange={(event) => setReply(event.target.value)} placeholder="Write a reply" rows={4} /><div><button type="button"><ProductIcon name="upload" />Attach file</button><button type="submit" disabled={!reply.trim()}>Send reply<ProductIcon name="arrow" /></button></div></form></section><aside className="case-facts"><h2>Ticket details</h2><dl><div><dt>Status</dt><dd>Open</dd></div><div><dt>Category</dt><dd>Connected accounts</dd></div><div><dt>Created</dt><dd>22 Sep 2026</dd></div><div><dt>Account</dt><dd>@tobioncam</dd></div></dl><Link href="/dashboard/accounts">Open connected accounts<ProductIcon name="arrow" /></Link></aside></div></section></ServiceFrame>;
-}
-
-const disputes = [
-  { id: "DSP-0419", title: "Earning entry VIEW-21904", amount: "₦18,400", state: "More information needed", date: "Reply by 25 Sep", tone: "gold" as Tone },
-  { id: "DSP-0372", title: "Submission SUB-01871", amount: "No money held", state: "Decision issued", date: "Closed 12 Sep", tone: "paper" as Tone },
-];
-
-export function DisputesScreen() {
-  return <ServiceFrame active="Support"><section className="service-content completion-page"><CompletionHead title="Disputes" copy="Formal reviews of a money movement or product decision." action={<BigAction href="/disputes/new">Open a dispute</BigAction>} /><div className="dispute-ledger"><header><span>Case</span><span>Value</span><span>Status</span><span>Deadline</span></header>{disputes.map((item) => <Link href={`/disputes/${item.id}`} key={item.id}><p><small>{item.id}</small><strong>{item.title}</strong></p><b>{item.amount}</b><Status tone={item.tone}>{item.state}</Status><time>{item.date}</time><ProductIcon name="arrow" /></Link>)}</div><div className="policy-note"><ProductIcon name="shield" /><p><strong>Use support for ordinary questions.</strong><span>Open a dispute when you need a formal decision about money, a verdict or a transaction.</span></p><Link href="/support/tickets/new">Ask support first</Link></div></section></ServiceFrame>;
-}
-
-export function NewDisputeScreen() {
-  const [step, setStep] = useState(1);
-  const [kind, setKind] = useState("Earning");
-  return <ServiceFrame active="Support"><section className="service-content completion-page dispute-create"><CompletionHead back="/disputes" title={step === 3 ? "Check your dispute" : "Open a dispute"} copy="A dispute creates a formal, time-stamped case." /><div className="form-progress"><span style={{ width: `${step * 33.333}%` }} /></div>{step === 1 && <section className="step-sheet"><strong>What needs a formal review?</strong><div className="choice-grid">{["Earning", "Payout", "Submission verdict", "Campaign funding"].map((item) => <button className={kind === item ? "is-selected" : ""} onClick={() => setKind(item)} key={item}><ProductIcon name={item === "Earning" || item === "Payout" ? "wallet" : item === "Submission verdict" ? "play" : "campaigns"} /><span>{item}</span><small>{item === "Earning" ? "Amount, view reading or hold" : item === "Payout" ? "Failed or missing transfer" : item === "Submission verdict" ? "Escalate after an appeal" : "Funding, fee or refund"}</small></button>)}</div><button className="completion-submit" onClick={() => setStep(2)}>Continue<ProductIcon name="arrow" /></button></section>}{step === 2 && <section className="step-sheet"><strong>Give us the evidence</strong><label><span>{kind} reference</span><input defaultValue="VIEW-21904" /></label><label><span>What decision should be reviewed?</span><textarea rows={6} placeholder="Explain what is incorrect and the outcome you are requesting." /></label><label className="file-drop"><ProductIcon name="upload" /><strong>Add evidence</strong><small>Images, receipts or documents</small><input type="file" multiple /></label><div className="step-actions"><button onClick={() => setStep(1)}>Back</button><button className="completion-submit" onClick={() => setStep(3)}>Review dispute<ProductIcon name="arrow" /></button></div></section>}{step === 3 && <section className="step-sheet review-claim"><Status tone="gold">Not submitted</Status><h2>{kind} · VIEW-21904</h2><dl><div><dt>Requested review</dt><dd>Verified-view earning calculation</dd></div><div><dt>Money involved</dt><dd>₦18,400</dd></div><div><dt>Evidence</dt><dd>2 files attached</dd></div><div><dt>Response window</dt><dd>Usually within 5 working days</dd></div></dl><label><input type="checkbox" />I confirm the information is complete and accurate.</label><BigAction href="/disputes/DSP-0420">Submit dispute</BigAction></section>}</section></ServiceFrame>;
-}
-
-export function DisputeDetailScreen({ id }: { id: string }) {
-  return <ServiceFrame active="Support"><section className="service-content completion-page"><CompletionHead back="/disputes" kicker={id} title="Earning entry VIEW-21904" action={<Status tone="gold">More information needed</Status>} /><div className="dispute-case"><section className="case-timeline"><article className="is-current"><span><ProductIcon name="brief" /></span><div><small>22 Sep · 14:12</small><h2>Clippit requested the original platform insight</h2><p>Upload the insights screen that shows the post URL and total views.</p><button><ProductIcon name="upload" />Upload requested evidence</button></div></article><article><span><ProductIcon name="eye" /></span><div><small>22 Sep · 10:06</small><h2>Review started</h2><p>The earning entry and its platform readings were attached to the case.</p></div></article><article><span><ProductIcon name="check" /></span><div><small>21 Sep · 18:40</small><h2>Dispute received</h2><p>Your original claim and two evidence files were locked.</p></div></article></section><aside className="decision-clock"><span>Reply before</span><strong>25</strong><b>September</b><small>2 days remaining</small><dl><div><dt>Money on hold</dt><dd>₦18,400</dd></div><div><dt>Assigned team</dt><dd>Trust review</dd></div><div><dt>Case type</dt><dd>Earning</dd></div></dl></aside></div></section></ServiceFrame>;
-}
-
 export function AccountDataScreen() {
   const [requested, setRequested] = useState(false);
   const [requesting, setRequesting] = useState(false);
@@ -207,20 +154,21 @@ export function DeleteAccountScreen() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [checks, setChecks] = useState<{ money: number; tickets: number; disputes: number } | null>(null);
+  const [checksError, setChecksError] = useState("");
 
   useEffect(() => {
     authApi.me().then(async (me: UserOut) => {
       const [summary, tickets, disputes] = await Promise.all([
-        me.role === "creator" ? earningsApi.summary().catch(() => null) : Promise.resolve(null),
-        supportApi.list("open").catch(() => []),
-        disputesApi.list().catch(() => []),
+        me.role === "creator" ? earningsApi.summary() : Promise.resolve(null),
+        supportApi.list("open"),
+        disputesApi.list(),
       ]);
       setChecks({
         money: summary ? summary.payable + summary.in_hold + summary.processing : 0,
         tickets: tickets.length,
         disputes: disputes.filter((item) => item.status === "open" || item.status === "awaiting_customer").length,
       });
-    }).catch(() => setChecks({ money: 0, tickets: 0, disputes: 0 }));
+    }).catch((err) => setChecksError(errorMessage(err, "We couldn't verify whether your account has unresolved money or cases.")));
   }, []);
 
   const requestDeletion = async () => {
@@ -240,32 +188,11 @@ export function DeleteAccountScreen() {
     }
   };
 
-  return <ServiceFrame active="Account"><section className="service-content completion-page"><CompletionHead back="/account/data" title="Delete account" copy="Check what must be settled before deletion can begin." /><div className="delete-layout"><section>{!checks ? <p>Checking your account…</p> : <><h2>{checks.money > 0 || checks.tickets || checks.disputes ? "Check these first" : "Nothing is blocking deletion"}</h2>
+  return <ServiceFrame active="Account"><section className="service-content completion-page"><CompletionHead back="/account/data" title="Delete account" copy="Check what must be settled before deletion can begin." /><div className="delete-layout"><section>{checksError ? <ClippitEmptyState tone="danger" icon="shield" title="We couldn't complete the safety check" copy={checksError} /> : !checks ? <p>Checking your account…</p> : <><h2>{checks.money > 0 || checks.tickets || checks.disputes ? "Check these first" : "Nothing is blocking deletion"}</h2>
       {checks.money > 0 ? <article><span><ProductIcon name="wallet" /></span><p><strong>{naira(checks.money)} hasn&apos;t been paid out yet</strong><small>Deletion is refused while earnings are payable, held or processing. Withdraw what&apos;s payable and wait for the rest to clear.</small></p><Link href="/dashboard/withdraw">Withdraw money</Link></article> : <article className="is-clear"><span><ProductIcon name="check" /></span><p><strong>No unsettled money</strong><small>Nothing is held, payable or processing.</small></p></article>}
       {checks.tickets > 0 && <article><span><ProductIcon name="brief" /></span><p><strong>{checks.tickets} support ticket{checks.tickets === 1 ? " is" : "s are"} open</strong><small>You&apos;ll lose access to replies once the account is deleted.</small></p><Link href="/support/tickets">Open tickets</Link></article>}
       {checks.disputes > 0 && <article><span><ProductIcon name="shield" /></span><p><strong>{checks.disputes} dispute{checks.disputes === 1 ? " is" : "s are"} still open</strong><small>Withdraw or wait for a decision before deleting.</small></p><Link href="/disputes">Open disputes</Link></article>}
-    </>}</section><aside><MiniArt src={art.bank} tone="gold" /><h2>After the blockers are cleared</h2><p>Your public profile is hidden immediately. Required transaction and safety records are retained under the applicable policy; other eligible account data is deleted or anonymised.</p><label><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} />I understand this cannot be undone.</label>{confirmed && <label className="delete-password-label"><span>Confirm your password to continue</span><input type="password" value={stepPassword} onChange={(event) => setStepPassword(event.target.value)} placeholder="Your current password" autoComplete="current-password" /></label>}{deleteError && <p className="auth-error" role="alert">{deleteError}</p>}<button disabled={!confirmed || (confirmed && !stepPassword) || deleteLoading} aria-busy={deleteLoading} onClick={requestDeletion}>{deleteLoading ? <ButtonLoader label="Closing your account safely" /> : "Request account deletion"}</button></aside></div></section></ServiceFrame>;
-}
-
-const legalDocs = [
-  { slug: "terms", title: "Terms of use", copy: "The rules for using a Clippit account.", date: "Effective 1 September 2026" },
-  { slug: "privacy", title: "Privacy policy", copy: "What data Clippit uses and why.", date: "Effective 1 September 2026" },
-  { slug: "community-rules", title: "Community rules", copy: "Content and conduct expected on Clippit.", date: "Effective 12 September 2026" },
-  { slug: "campaign-funding", title: "Campaign funding terms", copy: "Funding, fees, pots, payouts and refunds.", date: "Effective 12 September 2026" },
-];
-
-export function LegalCentreScreen() {
-  return <ServiceFrame active="Legal"><section className="legal-hero"><div><Status tone="gold">Versioned documents</Status><h1>Legal centre</h1><p>Terms, policies and the versions accepted by your account.</p></div><div className="legal-stamp"><ProductIcon name="shield" /><strong>4/4</strong><span>current versions accepted</span></div></section><section className="service-content legal-list">{legalDocs.map((doc, index) => <Link href={`/legal/${doc.slug}`} key={doc.slug}><span>{String(index + 1).padStart(2, "0")}</span><p><strong>{doc.title}</strong><small>{doc.copy}</small></p><time>{doc.date}</time><ProductIcon name="arrow" /></Link>)}</section></ServiceFrame>;
-}
-
-export function LegalDocumentScreen({ slug }: { slug: string }) {
-  const doc = legalDocs.find((item) => item.slug === slug) ?? legalDocs[0];
-  return <ServiceFrame active="Legal"><article className="legal-document"><CompletionHead back="/legal" kicker="Version 2.1 · Accepted" title={doc.title} copy={doc.date} /><div className="legal-document__body"><aside><strong>Contents</strong><a href="#overview">Overview</a><a href="#account">Your account</a><a href="#money">Money and records</a><a href="#contact">Questions</a><button onClick={() => window.print()}>Print document<ProductIcon name="brief" /></button></aside><div><section id="overview"><h2>1. Overview</h2><p>This document explains the agreement between you and Clippit for the services named here. It applies to the version and effective date shown above.</p></section><section id="account"><h2>2. Your account</h2><p>Keep your account information accurate and protect your sign-in details. Actions taken through the account may be treated as authorised until you report unauthorised access.</p></section><section id="money"><h2>3. Money and records</h2><p>Campaign funding, creator earnings, fees, refunds and withdrawals are recorded against immutable transaction references. Specific timing and eligibility are shown before each money action.</p></section><section id="contact"><h2>4. Questions</h2><p>Use the support centre if you need an explanation of how this document applies to a Clippit action.</p><BigAction href="/support/tickets/new" tone="ink">Contact support</BigAction></section></div></div></article></ServiceFrame>;
-}
-
-export function ConsentUpdateScreen() {
-  const [accepted, setAccepted] = useState(false);
-  return <ServiceFrame active="Legal"><section className="consent-screen"><div className="consent-sheet"><Status tone="gold">Action required</Status><h1>Campaign funding terms changed.</h1><p>Review the changes before you fund or join another campaign.</p><ol><li><span>1</span><div><strong>Refund timing is clearer</strong><p>Unused balances show their expected return date after campaign close.</p></div></li><li><span>2</span><div><strong>Platform reading disputes have a deadline</strong><p>The deadline now appears beside every eligible transaction.</p></div></li><li><span>3</span><div><strong>No change to your current money</strong><p>Existing earnings, pots and transaction references remain unchanged.</p></div></li></ol><label><input type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} />I have read and accept version 2.1 of the campaign funding terms.</label><button className="completion-submit" disabled={!accepted}>Accept and continue<ProductIcon name="arrow" /></button><Link href="/legal/campaign-funding">Read the full document</Link></div><MiniArt src={art.brief} tone="gold" /></section></ServiceFrame>;
+    </>}</section><aside><MiniArt src={art.bank} tone="gold" /><h2>After the blockers are cleared</h2><p>Your public profile is hidden immediately. Required transaction and safety records are retained under the applicable policy; other eligible account data is deleted or anonymised.</p><label><input type="checkbox" checked={confirmed} disabled={!checks || !!checksError} onChange={(event) => setConfirmed(event.target.checked)} />I understand this cannot be undone.</label>{confirmed && <label className="delete-password-label"><span>Confirm your password to continue</span><input type="password" value={stepPassword} onChange={(event) => setStepPassword(event.target.value)} placeholder="Your current password" autoComplete="current-password" /></label>}{deleteError && <p className="auth-error" role="alert">{deleteError}</p>}<button disabled={!checks || !!checksError || !confirmed || !stepPassword || deleteLoading} aria-busy={deleteLoading} onClick={requestDeletion}>{deleteLoading ? <ButtonLoader label="Closing your account safely" /> : "Request account deletion"}</button></aside></div></section></ServiceFrame>;
 }
 
 const RECEIPT_TYPES: Record<string, string> = { payout: "Creator payout", funding: "Campaign funding", refund: "Campaign refund" };
@@ -283,19 +210,17 @@ export function ReceiptVerificationScreen({ reference }: { reference: string }) 
   return <ServiceFrame><section className="verify-receipt"><div className="verify-radar"><i /><i /><i /><span><ProductIcon name="check" /></span></div><Status tone="lime">Authentic Clippit record</Status><h1>This receipt is valid.</h1><p>The reference matches a Clippit record. Compare the amount and date below with the receipt you were shown.</p><section><header><Mark /><div><strong>{receipt.issuer}</strong><span>Receipt verification</span></div></header><dl><div><dt>Reference</dt><dd>{receipt.reference}</dd></div><div><dt>Type</dt><dd>{RECEIPT_TYPES[receipt.type] ?? receipt.type}</dd></div><div><dt>Amount</dt><dd>{naira(receipt.amount)}</dd></div><div><dt>Status</dt><dd>{receipt.status}</dd></div><div><dt>Date</dt><dd>{formatDateTime(receipt.date)}</dd></div><div><dt>Record fingerprint</dt><dd>{receipt.digest.slice(0, 16).toUpperCase()}</dd></div></dl><footer><ProductIcon name="shield" />Checked {formatDateTime(new Date().toISOString())}</footer></section><small>Clippit will never ask for a password or verification code on a receipt verification page.</small></section></ServiceFrame>;
 }
 
-function VerificationStart({ role }: { role: "creator" | "brand" }) {
-  const brand = role === "brand";
-  const base = brand ? "/brand/verification" : "/dashboard/verification";
-  return <div className={`${brand ? "brand-page" : "dashboard-page"} completion-workspace`}><CompletionHead title={brand ? "Verify Gbedu Records" : "Verify your identity"} copy={brand ? "Required before higher campaign limits and organisation billing are enabled." : "Required before your first withdrawal."} action={<Status tone="gold">Not started</Status>} /><section className="verification-intro"><div><span className="verification-number">01</span><h2>{brand ? "Business details" : "Identity details"}</h2><p>{brand ? "Legal business name, registration number, address and an authorised representative." : "Your legal name, date of birth, phone number and address."}</p></div><div><span className="verification-number">02</span><h2>{brand ? "Business documents" : "Identity document"}</h2><p>{brand ? "Registration document and a recent proof of business address." : "A clear government-issued document and a quick face check."}</p></div><div><span className="verification-number">03</span><h2>Review</h2><p>Track every check and correct anything that cannot be verified.</p></div><aside><MiniArt src={brand ? art.brief : art.proof} tone={brand ? "gold" : "lime"} /><strong>Usually reviewed within one working day</strong><small>Your documents are encrypted and are not shown on your public profile.</small><BigAction href={`${base}/${brand ? "business" : "identity"}`}>Start verification</BigAction></aside></section></div>;
-}
-
 function CreatorReadinessScreen() {
   const [state, setState] = useState<{ user: UserOut; bank: BankAccountOut | null; connected: number } | null>(null);
   const [error, setError] = useState("");
   useEffect(() => {
-    Promise.all([authApi.me(), bankDetailsApi.get().catch(() => null), socialApi.accounts().catch(() => [])])
+    const bank = bankDetailsApi.get().catch((err) => {
+      if (err instanceof ApiError && err.status === 404) return null;
+      throw err;
+    });
+    Promise.all([authApi.me(), bank, socialApi.accounts()])
       .then(([user, bank, accounts]) => setState({ user, bank, connected: accounts.filter((a) => a.connected).length }))
-      .catch((err) => setError(errorMessage(err)));
+      .catch((err) => setError(errorMessage(err, "We couldn't verify your account readiness.")));
   }, []);
   if (error) return <div className="dashboard-page completion-workspace"><CompletionHead title="Account checks" copy={error} /></div>;
   if (!state) return <div className="dashboard-page"><ClippitLoader contained label="Checking your account" /></div>;
@@ -309,35 +234,12 @@ function CreatorReadinessScreen() {
 }
 
 export function CreatorVerificationScreen() { return <CreatorReadinessScreen />; }
-export function BrandVerificationScreen() { return <VerificationStart role="brand" />; }
-
-function DetailsForm({ role }: { role: "creator" | "brand" }) {
-  const brand = role === "brand";
-  const base = brand ? "/brand/verification" : "/dashboard/verification";
-  return <div className={`${brand ? "brand-page" : "dashboard-page"} completion-workspace`}><CompletionHead back={base} kicker="Step 1 of 3" title={brand ? "Business details" : "Identity details"} copy="Enter the details exactly as they appear on the document." /><form className="identity-sheet"><div className="identity-grid">{brand ? <><label><span>Registered business name</span><input defaultValue="Gbedu Records Limited" /></label><label><span>Registration number</span><input placeholder="RC number" /></label><label className="is-wide"><span>Registered address</span><input placeholder="Street, city and state" /></label><label><span>Representative's legal name</span><input defaultValue="Tomi Odukoya" /></label><label><span>Role in the organisation</span><select defaultValue="Director"><option>Director</option><option>Owner</option><option>Employee</option><option>Authorised agent</option></select></label></> : <><label><span>Legal first name</span><input defaultValue="Tobi" /></label><label><span>Legal last name</span><input defaultValue="Adeyemi" /></label><label><span>Date of birth</span><input type="date" /></label><label><span>Phone number</span><input defaultValue="+234 803 000 2041" /></label><label className="is-wide"><span>Residential address</span><input placeholder="Street, city and state" /></label></>}</div><div className="identity-confirm"><ProductIcon name="shield" /><p><strong>Use your legal details.</strong><span>They are used for verification and money controls, not your public display name.</span></p></div><BigAction href={`${base}/documents`}>Save and continue</BigAction></form></div>;
-}
 
 export function CreatorIdentityScreen() { return <CreatorReadinessScreen />; }
-export function BrandBusinessScreen() { return <DetailsForm role="brand" />; }
-
-function DocumentsScreen({ role }: { role: "creator" | "brand" }) {
-  const brand = role === "brand";
-  const base = brand ? "/brand/verification" : "/dashboard/verification";
-  const [files, setFiles] = useState<string[]>([]);
-  const add = (event: ChangeEvent<HTMLInputElement>) => setFiles(Array.from(event.target.files ?? []).map((file) => file.name));
-  return <div className={`${brand ? "brand-page" : "dashboard-page"} completion-workspace`}><CompletionHead back={`${base}/${brand ? "business" : "identity"}`} kicker="Step 2 of 3" title={brand ? "Business documents" : "Identity document"} copy="Make every edge visible and keep text in focus." /><section className="document-studio"><div className="document-guide"><div className="document-frame"><i /><i /><i /><i /><ProductIcon name={brand ? "brief" : "person"} /></div><h2>{brand ? "Required documents" : "Choose a document"}</h2><p>{brand ? "CAC registration document and proof of business address issued within the last three months." : "National ID, driver's licence, voter card or international passport."}</p><ul><li><ProductIcon name="check" />Original document</li><li><ProductIcon name="check" />Colour image or PDF</li><li><ProductIcon name="check" />No glare or covered details</li></ul></div><div className="upload-stack"><label><ProductIcon name="upload" /><strong>{brand ? "Upload registration document" : "Upload the front of your document"}</strong><span>JPG, PNG or PDF · up to 10 MB</span><input type="file" onChange={add} /></label><label><ProductIcon name="camera" /><strong>{brand ? "Upload proof of address" : "Take a quick face photo"}</strong><span>{brand ? "Bank statement or utility bill" : "Use this device camera in good light"}</span><input type="file" accept="image/*" capture="user" onChange={add} /></label>{files.length > 0 && <div className="upload-ready">{files.map((file) => <p key={file}><ProductIcon name="check" /><span><strong>{file}</strong><small>Ready to submit</small></span></p>)}</div>}<BigAction href={`${base}/status`}>Submit for review</BigAction></div></section></div>;
-}
 
 export function CreatorDocumentsScreen() { return <CreatorReadinessScreen />; }
-export function BrandDocumentsScreen() { return <DocumentsScreen role="brand" />; }
-
-function VerificationStatus({ role }: { role: "creator" | "brand" }) {
-  const brand = role === "brand";
-  return <div className={`${brand ? "brand-page" : "dashboard-page"} completion-workspace`}><CompletionHead title="Verification status" copy={brand ? "Gbedu Records Limited" : "Tobi Adeyemi"} action={<Status tone="gold">In review</Status>} /><section className="verification-status"><div className="status-orbit"><i /><i /><i /><span><ProductIcon name="shield" /></span><strong>Reviewing</strong><small>Submitted today · 14:28</small></div><section><article className="is-complete"><span><ProductIcon name="check" /></span><p><strong>{brand ? "Business details" : "Identity details"}</strong><small>Details passed format and duplicate checks.</small></p><Status tone="lime">Complete</Status></article><article className="is-current"><span><ProductIcon name="eye" /></span><p><strong>{brand ? "Document check" : "Identity document"}</strong><small>A reviewer is checking the submitted images.</small></p><Status tone="gold">In review</Status></article><article><span>3</span><p><strong>Final decision</strong><small>You will get a notification as soon as this is complete.</small></p><Status>Waiting</Status></article></section><aside><ProductIcon name="clock" /><div><strong>Nothing else is needed right now.</strong><span>If a document needs correction, this screen will show exactly what to replace.</span></div></aside></section></div>;
-}
 
 export function CreatorVerificationStatusScreen() { return <CreatorReadinessScreen />; }
-export function BrandVerificationStatusScreen() { return <VerificationStatus role="brand" />; }
 
 function monthKey(iso: string) {
   const date = new Date(iso);
@@ -381,116 +283,26 @@ export function EarningsStatementScreen() {
 export function PublicCreatorProfileScreen({ handle }: { handle: string }) {
   const [profile, setProfile] = useState<PublicCreatorProfileOut | null>(null);
   const [work, setWork] = useState<PublicCreatorWork[]>([]);
+  const [workError, setWorkError] = useState("");
   const [error, setError] = useState<{ notFound: boolean; message: string } | null>(null);
 
   useEffect(() => {
     publicProfilesApi.creator(handle).then((data) => {
       setProfile(data);
       setWork(data.recent_work);
-      publicProfilesApi.creatorClips(handle, 12).then(setWork).catch(() => undefined);
+      publicProfilesApi.creatorClips(handle, 12)
+        .then((items) => {
+          setWork(items);
+          setWorkError("");
+        })
+        .catch((err) => setWorkError(errorMessage(err, "Some recent work could not be loaded.")));
     }).catch((err) => setError({ notFound: err instanceof ApiError && err.status === 404, message: errorMessage(err) }));
   }, [handle]);
 
   if (error) return <ServiceFrame><section className="public-profile"><ClippitEmptyState className="completion-empty" tone="danger" icon="person" title={error.notFound ? `@${handle} isn't on Clippit` : "We couldn't load this profile"} copy={error.notFound ? "The handle may have changed, or the creator has made their profile private." : error.message} action={<BigAction href="/auth/sign-up">Create your Clippit profile</BigAction>} role="alert" /></section></ServiceFrame>;
   if (!profile) return <ServiceFrame><section className="public-profile"><ClippitLoader contained compact label="Loading creator profile" /></section></ServiceFrame>;
 
-  return <ServiceFrame><section className="public-profile"><header><div className="profile-photo">{profile.photo_url ? <Image src={profile.photo_url} alt={profile.display_name} fill sizes="260px" unoptimized /> : <strong className="profile-photo__initials">{profile.display_name.split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase()}</strong>}</div><div><Status tone="lime"><ProductIcon name="shield" />Verified creator</Status><h1>{profile.display_name}</h1><p>@{profile.handle}</p>{profile.bio && <blockquote>{profile.bio}</blockquote>}<div>{profile.interests.map((lane) => <span key={lane}>{lane}</span>)}</div></div><aside><small>Verified views</small><strong><AnimatedNumber value={profile.stats.verified_views} format="compact" suffix=" views" /></strong><span>Across {profile.stats.approved_clips} approved Clippit clip{profile.stats.approved_clips === 1 ? "" : "s"}</span></aside></header><section className="profile-work"><div className="profile-work__head"><div><h2>Approved campaign work</h2><p>Only clips approved through Clippit appear here.</p></div><span>{profile.stats.approved_clips} clips</span></div>{!work.length ? <ClippitEmptyState className="profile-work__empty" size="compact" icon="camera" title="No approved campaign work yet" copy="Approved clips will appear here." /> : <div>{work.map((item) => <article key={`${item.campaign_slug}-${item.submitted_at}`}><div><Image src="/assets/photos/creator-studio-pexels-8359963.jpg" alt="" fill sizes="(max-width: 700px) 100vw, 33vw" /><span><ProductIcon name="play" /></span></div><p><strong>{item.campaign_title}</strong><small>{item.brand_name ?? "Brand"} · {platformLabel(item.platform)} · {formatDate(item.submitted_at)}</small></p></article>)}</div>}</section><footer><span><Mark /><strong>Profile verified by Clippit</strong></span><Link href="/auth/sign-up">Create your Clippit profile<ProductIcon name="arrow" /></Link></footer></section></ServiceFrame>;
-}
-
-const members = [
-  { initials: "TO", name: "Tomi Odukoya", email: "tomi@gbedurecords.com", role: "Owner", status: "Active" },
-  { initials: "AM", name: "Amina Musa", email: "amina@gbedurecords.com", role: "Campaign manager", status: "Active" },
-  { initials: "KO", name: "Kunle Ojo", email: "kunle@gbedurecords.com", role: "Reviewer", status: "Active" },
-  { initials: "IN", name: "Ife Nwosu", email: "ife@gbedurecords.com", role: "Finance", status: "Invited" },
-];
-
-export function BrandTeamScreen() {
-  return <div className="brand-page completion-workspace"><CompletionHead title="Team" copy="Who can access Gbedu Records and what they can do." action={<BigAction href="/brand/team/invite">Invite someone</BigAction>} /><section className="team-board"><aside><strong><AnimatedNumber value={4} padStart={2} /></strong><span>people</span><div><b>1</b> invitation waiting</div><p>Owner access cannot be removed until ownership is transferred.</p></aside><div><header><span>Member</span><span>Role</span><span>Status</span><span>Access</span></header>{members.map((member) => <article key={member.email}><i>{member.initials}</i><p><strong>{member.name}</strong><small>{member.email}</small></p><b>{member.role}</b><Status tone={member.status === "Active" ? "lime" : "gold"}>{member.status}</Status><button aria-label={`Manage ${member.name}`}><ProductIcon name="more" /></button></article>)}</div></section></div>;
-}
-
-export function BrandInviteScreen() {
-  const [role, setRole] = useState("Campaign manager");
-  const [email, setEmail] = useState("");
-  const [sent, setSent] = useState<{ email: string; role: string } | null>(null);
-  const roles = {
-    "Campaign manager": ["Create and edit campaigns", "Review submissions", "View campaign transactions"],
-    Reviewer: ["Review submissions", "Request corrections", "View campaign performance"],
-    Finance: ["View billing and invoices", "Fund campaigns", "Request eligible refunds"],
-  };
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const invite = { email: email.trim().toLowerCase(), role, sentAt: new Date().toISOString() };
-    try {
-      const existing = JSON.parse(window.localStorage.getItem("clippit:brand-team-invites") || "[]") as Array<typeof invite>;
-      window.localStorage.setItem("clippit:brand-team-invites", JSON.stringify([invite, ...existing.filter((item) => item.email !== invite.email)]));
-    } catch {}
-    setSent(invite);
-    window.requestAnimationFrame(() => window.scrollTo({ top: 0 }));
-  };
-  if (sent) return <div className="brand-page completion-workspace"><CompletionHead back="/brand/team" title="Invitation sent" copy="The invite is ready for the recipient." /><section className="invite-success" role="status" aria-live="polite"><div className="invite-success__seal"><i /><span><ProductIcon name="check" /></span></div><Status tone="lime">Sent successfully</Status><h2>{sent.email}</h2><p>They can join Gbedu Records as a <strong>{sent.role}</strong>.</p><div className="invite-success__details"><span><ProductIcon name="brief" /><b>{sent.role}</b></span><span><ProductIcon name="clock" /><b>Invite pending</b></span></div><div className="invite-success__actions"><button type="button" onClick={() => { setEmail(""); setSent(null); }}>Invite another person<ProductIcon name="users" /></button><BigAction href="/brand/team">Back to team</BigAction></div></section></div>;
-  return <div className="brand-page completion-workspace"><CompletionHead back="/brand/team" title="Invite a team member" copy="Choose access based on the work this person handles." /><form className="invite-layout" onSubmit={submit}><section><label><span>Work email</span><input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@company.com" /></label><fieldset><legend>Role</legend>{Object.keys(roles).map((item) => <label className={role === item ? "is-selected" : ""} key={item}><input type="radio" checked={role === item} onChange={() => setRole(item)} /><span><strong>{item}</strong><small>{item === "Campaign manager" ? "Runs campaigns from brief to closeout" : item === "Reviewer" ? "Decides whether creator work meets the brief" : "Handles funding, invoices and refunds"}</small></span><ProductIcon name="check" /></label>)}</fieldset><button className="completion-submit" type="submit" disabled={!email.trim()}>Send invitation<ProductIcon name="arrow" /></button></section><aside><span><ProductIcon name="users" /></span><h2>{role}</h2><p>This role can:</p>{roles[role as keyof typeof roles].map((item) => <div key={item}><ProductIcon name="check" />{item}</div>)}<small>You can change or remove this access later.</small></aside></form></div>;
-}
-
-const invoices = [
-  { id: "INV-0926-041", date: "20 Sep 2026", label: "Clippit campaign fee (15%) · No long thing", amount: "₦75,000", status: "Paid" },
-  { id: "INV-0926-033", date: "14 Sep 2026", label: "Clippit campaign fee (15%) · Campus chop stories", amount: "₦52,500", status: "Paid" },
-  { id: "CN-0926-008", date: "12 Sep 2026", label: "Campaign credit note", amount: "−₦4,200", status: "Applied" },
-];
-
-type BillingDetails = { legalName: string; registration: string; address: string; email: string };
-const DEFAULT_BILLING_DETAILS: BillingDetails = {
-  legalName: "Gbedu Records Limited",
-  registration: "RC 1829041",
-  address: "Lagos, Nigeria",
-  email: "finance@gbedurecords.com",
-};
-
-export function BrandBillingScreen() {
-  const [details, setDetails] = useState<BillingDetails>(DEFAULT_BILLING_DETAILS);
-  const [draft, setDraft] = useState<BillingDetails>(DEFAULT_BILLING_DETAILS);
-  const [editing, setEditing] = useState(false);
-  const [saved, setSaved] = useState(false);
-  const openEditor = () => { setDraft(details); setSaved(false); setEditing(true); };
-  const saveDetails = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setDetails(draft);
-    setEditing(false);
-    setSaved(true);
-    try { window.localStorage.setItem("clippit:brand-billing-details", JSON.stringify(draft)); } catch {}
-  };
-  return <div className="brand-page completion-workspace billing-page">
-    <CompletionHead title="Billing and invoices" copy={`${details.legalName} · Nigerian naira`} />
-    {saved && <div className="billing-saved" role="status" aria-live="polite"><ProductIcon name="check" /><span><strong>Billing details updated</strong><small>New invoices will use these details.</small></span></div>}
-    <section className="billing-identity">
-      <div><span><ProductIcon name="building" /></span><p><small>Billing identity</small><strong>{details.legalName}</strong><em>{details.registration} · {details.address}</em><em>{details.email}</em></p></div>
-      <Status tone="lime">Verified</Status>
-      <button type="button" onClick={openEditor}>Edit billing details</button>
-    </section>
-    {editing && <form className="billing-editor" onSubmit={saveDetails}>
-      <header><div><small>Billing identity</small><h2>Edit billing details</h2></div><button type="button" onClick={() => setEditing(false)} aria-label="Close billing editor"><ProductIcon name="more" /></button></header>
-      <div className="billing-editor__grid">
-        <label><span>Legal business name</span><input required value={draft.legalName} onChange={(event) => setDraft({ ...draft, legalName: event.target.value })} /></label>
-        <label><span>Registration number</span><input required value={draft.registration} onChange={(event) => setDraft({ ...draft, registration: event.target.value })} /></label>
-        <label><span>Billing address</span><input required value={draft.address} onChange={(event) => setDraft({ ...draft, address: event.target.value })} /></label>
-        <label><span>Billing email</span><input required type="email" value={draft.email} onChange={(event) => setDraft({ ...draft, email: event.target.value })} /></label>
-      </div>
-      <footer><button type="button" onClick={() => setEditing(false)}>Cancel</button><button className="completion-submit" type="submit">Save changes<ProductIcon name="check" /></button></footer>
-    </form>}
-    <section className="invoice-stack"><header><div><h2>Invoices and credit notes</h2><p>Official documents issued for campaign charges.</p></div><button onClick={() => window.print()}>Download statement<ProductIcon name="brief" /></button></header>{invoices.map((invoice) => <Link href={`/brand/invoices/${invoice.id}`} key={invoice.id}><span><ProductIcon name="brief" /></span><p><small>{invoice.id} · {invoice.date}</small><strong>{invoice.label}</strong></p><b>{invoice.amount}</b><Status tone={invoice.status === "Paid" ? "lime" : "gold"}>{invoice.status}</Status><ProductIcon name="arrow" /></Link>)}</section>
-  </div>;
-}
-
-export function BrandInvoiceScreen({ id }: { id: string }) {
-  return <div className="brand-page completion-workspace"><CompletionHead back="/brand/billing" title="Invoice" action={<button className="statement-download" onClick={() => window.print()}>Download PDF<ProductIcon name="brief" /></button>} /><article className="official-invoice"><header><div><Image src="/assets/clippit-mark.png" width={58} height={58} alt="" /><span><strong>Clippit</strong><small>Official tax invoice</small></span></div><p><small>Invoice number</small><strong>{id}</strong><span>Issued 20 Sep 2026</span></p></header><section className="invoice-parties"><div><small>Billed to</small><strong>Gbedu Records Limited</strong><span>RC 1829041</span><span>14 Admiralty Way, Lekki, Lagos</span><span>finance@gbedurecords.com</span></div><div><small>Issued by</small><strong>Clippit Technologies Limited</strong><span>Lagos, Nigeria</span><span>billing@clippit.ng</span></div></section><table><thead><tr><th>Description</th><th>Reference</th><th>Amount</th></tr></thead><tbody><tr><td>Clippit campaign fee<br /><small>15% of ₦500,000 creator pot · No long thing</small></td><td>CLP-0926-041</td><td>₦75,000</td></tr></tbody><tfoot><tr><td colSpan={2}>Subtotal</td><td>₦75,000</td></tr><tr><td colSpan={2}>Tax</td><td>₦0</td></tr><tr><td colSpan={2}>Total paid</td><td>₦75,000</td></tr></tfoot></table><footer><span><ProductIcon name="check" /></span><p><strong>Paid in full</strong><small>Payment reference PAY-9091841 · 20 Sep 2026</small></p><i>CLIPPIT · {id} · CLIPPIT · {id}</i></footer></article></div>;
-}
-
-export function CampaignRefundScreen({ slug }: { slug: string }) {
-  const [requested, setRequested] = useState(false);
-  const unusedBalance = 42800;
-  const cancellationFee = calculateFee(unusedBalance, BRAND_CANCELLATION_FEE_RATE);
-  const walletCredit = unusedBalance - cancellationFee;
-  if (requested) return <div className="brand-page completion-workspace"><section className="completion-result completion-result--workspace"><MiniArt src={art.bank} tone="gold" /><Status tone="lime">Cancellation requested</Status><h1>{new Intl.NumberFormat("en-NG", { style: "currency", currency: "NGN", maximumFractionDigits: 0 }).format(walletCredit)} is returning to your Brand wallet.</h1><p>We will close the campaign, settle recognised creator earnings and add the refundable balance to your wallet.</p><BigAction href="/brand/transactions">Track in transactions</BigAction></section></div>;
-  return <div className="brand-page completion-workspace"><CompletionHead back={`/brand/campaigns/${slug}/report`} title="Cancel campaign" copy="Check the closeout amount before you confirm." /><section className="refund-sheet"><div className="refund-tally"><small>Unused campaign money</small><strong><AnimatedNumber value={unusedBalance} format="money" /></strong><span>of ₦350,000 creator pot</span><div><i style={{ width: "87.77%" }} /><b /></div><p><span>Earned by creators</span><b>₦307,200</b></p><p><span>Unused creator pot</span><b>₦42,800</b></p></div><aside><h2>Closeout quote</h2><div><ProductIcon name="wallet" /><p><strong>Gbedu Records Brand wallet</strong><span>Available after closeout</span></p><Status tone="lime">Active</Status></div><dl><div><dt>Unused balance</dt><dd>₦42,800</dd></div><div><dt>Cancellation fee ({feePercentage(BRAND_CANCELLATION_FEE_RATE)}%)</dt><dd>−₦1,070</dd></div><div><dt>Returned to Brand wallet</dt><dd>₦41,730</dd></div><div><dt>Campaign</dt><dd>Campus chop stories</dd></div></dl><label><input type="checkbox" />I understand that creator earnings already recognised will not be reversed.</label><button className="completion-submit" onClick={() => setRequested(true)}>Cancel and return ₦41,730<ProductIcon name="arrow" /></button></aside></section></div>;
+  return <ServiceFrame><section className="public-profile"><header><div className="profile-photo">{profile.photo_url ? <Image src={profile.photo_url} alt={profile.display_name} fill sizes="260px" unoptimized /> : <strong className="profile-photo__initials">{profile.display_name.split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase()}</strong>}</div><div><Status tone="lime"><ProductIcon name="shield" />Verified creator</Status><h1>{profile.display_name}</h1><p>@{profile.handle}</p>{profile.bio && <blockquote>{profile.bio}</blockquote>}<div>{profile.interests.map((lane) => <span key={lane}>{lane}</span>)}</div></div><aside><small>Verified views</small><strong><AnimatedNumber value={profile.stats.verified_views} format="compact" suffix=" views" /></strong><span>Across {profile.stats.approved_clips} approved Clippit clip{profile.stats.approved_clips === 1 ? "" : "s"}</span></aside></header><section className="profile-work"><div className="profile-work__head"><div><h2>Approved campaign work</h2><p>Only clips approved through Clippit appear here.</p></div><span>{profile.stats.approved_clips} clips</span></div>{workError && <p className="auth-error" role="alert">{workError}</p>}{!work.length && !workError ? <ClippitEmptyState className="profile-work__empty" size="compact" icon="camera" title="No approved campaign work yet" copy="Approved clips will appear here." /> : <div>{work.map((item) => <article key={`${item.campaign_slug}-${item.submitted_at}`}><div><Image src="/assets/photos/creator-studio-pexels-8359963.jpg" alt="" fill sizes="(max-width: 700px) 100vw, 33vw" /><span><ProductIcon name="play" /></span></div><p><strong>{item.campaign_title}</strong><small>{item.brand_name ?? "Brand"} · {platformLabel(item.platform)} · {formatDate(item.submitted_at)}</small></p></article>)}</div>}</section><footer><span><Mark /><strong>Profile verified by Clippit</strong></span><Link href="/auth/sign-up">Create your Clippit profile<ProductIcon name="arrow" /></Link></footer></section></ServiceFrame>;
 }
 
 type GuideSection = { title: string; body: string; points?: string[] };
@@ -692,6 +504,8 @@ export function ProductionNewDisputeScreen() {
   const router = useRouter();
   const [type, setType] = useState<DisputeType>("earning_entry");
   const [options, setOptions] = useState<Record<string, DisputeOption[]> | null>(null);
+  const [accountRole, setAccountRole] = useState<UserOut["role"] | null>(null);
+  const [optionsError, setOptionsError] = useState("");
   const [resourceId, setResourceId] = useState("");
   const [claim, setClaim] = useState("");
   const [sending, setSending] = useState(false);
@@ -701,24 +515,33 @@ export function ProductionNewDisputeScreen() {
     const params = new URLSearchParams(window.location.search);
     const presetType = params.get("type") as DisputeType | null;
     const presetResource = params.get("resource");
-    Promise.all([
-      earningsApi.history({ limit: 50 }).then((data) => data.items).catch(() => [] as EarningRow[]),
-      payoutsApi.list({ limit: 30 }).then((data) => data.items).catch(() => [] as PayoutOut[]),
-      creatorApi.clips().then((data) => data.items).catch(() => [] as ClipRow[]),
-      organisationsApi.transactions({ limit: 100 }).then((data) => data.items).catch(() => []),
-    ]).then(([earnings, payouts, clips, organisationTransactions]) => {
-      setOptions({
-        earning_entry: earnings.map((row) => ({ id: row.id, label: `${naira(row.amount)} · ${row.campaign_title}`, detail: `${row.clip} · ${formatDate(row.date)} · ${row.state}` })),
-        payout: payouts.map((payout) => ({ id: payout.id, label: `${naira(payout.amount)} · ${payout.reference}`, detail: `${payout.status} · ${formatDate(payout.initiated_at)}` })),
-        submission_verdict: clips.map((clip) => ({ id: clip.id, label: clip.title || clip.campaign_title, detail: `${clip.label} · ${platformLabel(clip.platform)} · ${formatDate(clip.submitted_at)}` })),
-        funding_order: organisationTransactions.filter((row) => row.kind === "funding").map((row) => ({ id: row.id, label: `${naira(row.amount)} · ${row.campaign_title}`, detail: `${row.status} · ${row.reference} · ${formatDate(row.created_at)}` })),
-        refund: organisationTransactions.filter((row) => row.kind === "refund").map((row) => ({ id: row.id, label: `${naira(row.amount)} · ${row.campaign_title}`, detail: `${row.status} · ${row.reference} · ${formatDate(row.created_at)}` })),
-      });
-      if (presetType && DISPUTE_TYPES.some((item) => item.type === presetType)) setType(presetType);
+    authApi.me().then(async (user) => {
+      setAccountRole(user.role);
+      if (user.role === "organisation") {
+        const organisationTransactions = (await organisationsApi.transactions({ limit: 100 })).items;
+        setOptions({
+          funding_order: organisationTransactions.filter((row) => row.kind === "funding").map((row) => ({ id: row.id, label: `${naira(row.amount)} · ${row.campaign_title}`, detail: `${row.status} · ${row.reference} · ${formatDate(row.created_at)}` })),
+          refund: organisationTransactions.filter((row) => row.kind === "refund").map((row) => ({ id: row.id, label: `${naira(row.amount)} · ${row.campaign_title}`, detail: `${row.status} · ${row.reference} · ${formatDate(row.created_at)}` })),
+        });
+        setType(presetType === "refund" ? "refund" : "funding_order");
+      } else {
+        const [earnings, payouts, clips] = await Promise.all([
+          earningsApi.history({ limit: 50 }).then((data) => data.items),
+          payoutsApi.list({ limit: 30 }).then((data) => data.items),
+          creatorApi.clips().then((data) => data.items),
+        ]);
+        setOptions({
+          earning_entry: earnings.map((row) => ({ id: row.id, label: `${naira(row.amount)} · ${row.campaign_title}`, detail: `${row.clip} · ${formatDate(row.date)} · ${row.state}` })),
+          payout: payouts.map((payout) => ({ id: payout.id, label: `${naira(payout.amount)} · ${payout.reference}`, detail: `${payout.status} · ${formatDate(payout.initiated_at)}` })),
+          submission_verdict: clips.map((clip) => ({ id: clip.id, label: clip.title || clip.campaign_title, detail: `${clip.label} · ${platformLabel(clip.platform)} · ${formatDate(clip.submitted_at)}` })),
+        });
+        if (presetType && ["earning_entry", "payout", "submission_verdict"].includes(presetType)) setType(presetType);
+      }
       if (presetResource) setResourceId(presetResource);
-    });
+    }).catch((err) => setOptionsError(errorMessage(err, "We couldn't load the records available for dispute.")));
   }, []);
 
+  const availableTypes = DISPUTE_TYPES.filter((item) => accountRole === "organisation" ? ["funding_order", "refund"].includes(item.type) : ["earning_entry", "payout", "submission_verdict"].includes(item.type));
   const list = options?.[type] ?? [];
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -733,9 +556,9 @@ export function ProductionNewDisputeScreen() {
     }
   };
 
-  return <ServiceFrame active="Support"><section className="service-content completion-page"><CompletionHead back="/disputes" title="Open a dispute" copy="Pick the exact record so the original evidence stays attached." /><form className="completion-form" onSubmit={submit}><div className="form-main"><fieldset><legend>What should be reviewed?</legend><div className="choice-grid">{DISPUTE_TYPES.map((item) => <label className={type === item.type ? "is-selected" : ""} key={item.type}><input type="radio" checked={type === item.type} onChange={() => { setType(item.type); setResourceId(""); }} /><ProductIcon name={item.icon} /><span>{item.label}</span><small>{item.copy}</small></label>)}</div></fieldset>
+  return <ServiceFrame active="Support"><section className="service-content completion-page"><CompletionHead back="/disputes" title="Open a dispute" copy="Pick the exact record so the original evidence stays attached." />{optionsError ? <ClippitEmptyState tone="danger" icon="shield" title="Your eligible records could not be loaded" copy={optionsError} /> : <form className="completion-form" onSubmit={submit}><div className="form-main"><fieldset><legend>What should be reviewed?</legend><div className="choice-grid">{availableTypes.map((item) => <label className={type === item.type ? "is-selected" : ""} key={item.type}><input type="radio" checked={type === item.type} onChange={() => { setType(item.type); setResourceId(""); }} /><ProductIcon name={item.icon} /><span>{item.label}</span><small>{item.copy}</small></label>)}</div></fieldset>
     <label><span>Which record?</span>{!options ? <input disabled placeholder="Loading your records…" /> : list.length ? <select required value={resourceId} onChange={(event) => setResourceId(event.target.value)}><option value="">Choose a record</option>{list.map((option) => <option key={option.id} value={option.id}>{option.label} — {option.detail}</option>)}{resourceId && !list.some((option) => option.id === resourceId) && <option value={resourceId}>Record {shortRef(resourceId)}</option>}</select> : <input disabled placeholder={`You have no ${DISPUTE_TYPES.find((item) => item.type === type)?.label.toLowerCase()} records to dispute yet`} />}</label>
-    <label><span>What decision is incorrect?</span><textarea required minLength={20} maxLength={2000} rows={7} value={claim} onChange={(event) => setClaim(event.target.value)} placeholder="Explain the record, the issue and the outcome you are requesting." /><small>{claim.trim().length}/2000 · minimum 20</small></label></div><aside className="form-aside"><p><ProductIcon name="shield" />Submitting a dispute preserves the original decision and evidence. You can add screenshots to the case after it opens.</p><p><ProductIcon name="clock" />Earnings can be disputed for 30 days, payouts for 14 days and verdicts for 7 days.</p>{error && <p className="auth-error" role="alert">{error}</p>}<button className="completion-submit" type="submit" disabled={sending || !resourceId || claim.trim().length < 20}>{sending ? "Submitting…" : "Submit dispute"}<ProductIcon name="arrow" /></button></aside></form></section></ServiceFrame>;
+    <label><span>What decision is incorrect?</span><textarea required minLength={20} maxLength={2000} rows={7} value={claim} onChange={(event) => setClaim(event.target.value)} placeholder="Explain the record, the issue and the outcome you are requesting." /><small>{claim.trim().length}/2000 · minimum 20</small></label></div><aside className="form-aside"><p><ProductIcon name="shield" />Submitting a dispute preserves the original decision and evidence. You can add screenshots to the case after it opens.</p><p><ProductIcon name="clock" />Deadlines depend on the record type and are enforced by the server.</p>{error && <p className="auth-error" role="alert">{error}</p>}<button className="completion-submit" type="submit" disabled={sending || !resourceId || claim.trim().length < 20}>{sending ? "Submitting…" : "Submit dispute"}<ProductIcon name="arrow" /></button></aside></form>}</section></ServiceFrame>;
 }
 
 export function ProductionDisputeDetailScreen({ id }: { id: string }) {
@@ -891,13 +714,13 @@ export function ProductionConsentUpdateScreen() {
 }
 
 const reviewRoutes = [
-  ["Support", "/help", "Help centre"], ["Support", "/help/how-campaigns-work", "Help article"], ["Support", "/support/tickets", "Support tickets"], ["Support", "/support/tickets/new", "New support ticket"], ["Support", "/support/tickets/CLP-2841", "Support conversation"], ["Support", "/disputes", "Disputes"], ["Support", "/disputes/new", "Open dispute"], ["Support", "/disputes/DSP-0419", "Dispute case"],
-  ["Privacy and legal", "/account/data", "Your data"], ["Privacy and legal", "/account/delete", "Delete account"], ["Privacy and legal", "/legal", "Legal centre"], ["Privacy and legal", "/legal/privacy", "Legal document"], ["Privacy and legal", "/consent/update", "Updated terms"], ["Privacy and legal", "/verify/VIEW-21904", "Receipt verification"],
-  ["Creator", "/dashboard/verification", "Creator verification"], ["Creator", "/dashboard/verification/identity", "Identity details"], ["Creator", "/dashboard/verification/documents", "Identity document"], ["Creator", "/dashboard/verification/status", "Verification status"], ["Creator", "/dashboard/earnings/statement", "Earnings statement"], ["Creator", "/creators/tobioncam", "Public creator profile"],
-  ["Brand", "/brand/verification", "Business verification"], ["Brand", "/brand/verification/business", "Business details"], ["Brand", "/brand/verification/documents", "Business documents"], ["Brand", "/brand/verification/status", "Business status"], ["Brand", "/brand/team", "Team members"], ["Brand", "/brand/team/invite", "Invite member"], ["Brand", "/brand/billing", "Billing"], ["Brand", "/brand/invoices/INV-0926-041", "Invoice"], ["Brand", "/brand/campaigns/campus-chop/refund", "Campaign refund"],
+  ["Support", "/help", "Help centre"], ["Support", "/help/how-campaigns-work", "Help article"], ["Support", "/support/tickets", "Support tickets"], ["Support", "/support/tickets/new", "New support ticket"], ["Support", "/disputes", "Disputes"], ["Support", "/disputes/new", "Open dispute"],
+  ["Privacy and legal", "/account/data", "Your data"], ["Privacy and legal", "/account/delete", "Delete account"], ["Privacy and legal", "/legal", "Legal centre"], ["Privacy and legal", "/legal/privacy", "Legal document"], ["Privacy and legal", "/consent/update", "Updated terms"],
+  ["Creator", "/dashboard/verification", "Creator verification"], ["Creator", "/dashboard/verification/identity", "Identity details"], ["Creator", "/dashboard/verification/documents", "Identity document"], ["Creator", "/dashboard/verification/status", "Verification status"], ["Creator", "/dashboard/earnings/statement", "Earnings statement"],
+  ["Brand", "/brand/verification", "Business verification"], ["Brand", "/brand/verification/business", "Business details"], ["Brand", "/brand/verification/documents", "Business documents"], ["Brand", "/brand/verification/status", "Business status"], ["Brand", "/brand/team", "Team members"], ["Brand", "/brand/team/invite", "Invite member"], ["Brand", "/brand/billing", "Billing"],
 ] as const;
 
 export function CustomerScreenReviewIndex() {
   const groups = ["Support", "Privacy and legal", "Creator", "Brand"] as const;
-  return <ServiceFrame><section className="review-index"><CompletionHead kicker="Development review" title="29 customer screens" copy="Open every completed screen from one place. The number and order match the production screen inventory." action={<Status tone="lime">29 / 29 built</Status>} />{groups.map((group) => <section key={group}><header><h2>{group}</h2><span>{reviewRoutes.filter((route) => route[0] === group).length} screens</span></header><div>{reviewRoutes.filter((route) => route[0] === group).map((route, index) => <Link href={route[1]} key={route[1]}><i>{String(index + 1).padStart(2, "0")}</i><p><strong>{route[2]}</strong><small>{route[1]}</small></p><ProductIcon name="arrow" /></Link>)}</div></section>)}</section></ServiceFrame>;
+  return <ServiceFrame><section className="review-index"><CompletionHead kicker="Experience directory" title="Connected customer journeys" copy="Open each live journey from one place. Detail pages appear from real records in their lists." action={<Status tone="lime">Live routes</Status>} />{groups.map((group) => <section key={group}><header><h2>{group}</h2><span>{reviewRoutes.filter((route) => route[0] === group).length} screens</span></header><div>{reviewRoutes.filter((route) => route[0] === group).map((route, index) => <Link href={route[1]} key={route[1]}><i>{String(index + 1).padStart(2, "0")}</i><p><strong>{route[2]}</strong><small>{route[1]}</small></p><ProductIcon name="arrow" /></Link>)}</div></section>)}</section></ServiceFrame>;
 }

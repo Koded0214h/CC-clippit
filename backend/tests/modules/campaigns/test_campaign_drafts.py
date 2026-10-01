@@ -51,6 +51,36 @@ async def test_a_stale_revision_is_refused(api):
     assert stale.status_code == 409
 
 
+async def test_conversion_setup_can_autosave_before_the_store_url_is_complete(api):
+    _, org = await signup(api, "organisation")
+    d = await _draft(api, org)
+
+    partial = await api.patch(
+        f"/campaign-drafts/{d['id']}",
+        headers=auth(org),
+        json={
+            "revision": 0,
+            "step": "metrics",
+            "performance_metrics": [
+                {"metric_type": "view", "rate_amount": 500, "unit_size": 1000},
+                {"metric_type": "purchase", "rate_amount": 1000, "unit_size": 1},
+            ],
+            "conversion_setup": {
+                "destination_type": "website",
+                "destination_url": "https://",
+                "attribution_window_days": 30,
+                "attribution_model": "first_touch",
+            },
+        },
+    )
+
+    assert partial.status_code == 200, partial.text
+    assert partial.json()["answers"]["conversion_setup"]["destination_url"] == "https://"
+    # The saved draft is allowed to be partial, but campaign creation is not.
+    finalized = await api.post(f"/campaign-drafts/{d['id']}/finalize", headers=auth(org))
+    assert finalized.status_code == 422
+
+
 async def test_finalize_needs_every_blocker_cleared_and_then_creates_a_real_campaign(api):
     _, org = await signup(api, "organisation")
     d = await _draft(api, org)

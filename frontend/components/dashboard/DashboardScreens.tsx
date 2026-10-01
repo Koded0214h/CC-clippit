@@ -522,11 +522,15 @@ function toBoardRow(r: LeaderRow): BoardRow {
 
 function MiniLeaderboard() {
   const [board, setBoard] = useState<BoardRow[] | null>(null);
+  const [error, setError] = useState("");
   useEffect(() => {
     earningsApi
       .leaderboard({ period: "week", limit: 4 })
-      .then((data) => setBoard(data.items.slice(0, 4).map(toBoardRow)))
-      .catch(() => setBoard([]));
+      .then((data) => {
+        setBoard(data.items.slice(0, 4).map(toBoardRow));
+        setError("");
+      })
+      .catch((err) => setError(errorMessage(err, "We couldn't load the weekly leaderboard.")));
   }, []);
   return (
     <aside className="mini-leaderboard">
@@ -535,6 +539,7 @@ function MiniLeaderboard() {
         href="/dashboard/leaderboard"
         linkLabel="Full board"
       />
+      {error && <p className="auth-error" role="alert">{error}</p>}
       {board && !board.length && (
         <ClippitEmptyState
           className="mini-leaderboard__empty"
@@ -614,7 +619,7 @@ export function DashboardHome() {
     Promise.all([
       creatorApi.overview(),
       campaignsApi.list({ feed: "all", limit: 6 }),
-      creatorApi.clips().catch(() => null),
+      creatorApi.clips(),
     ])
       .then(([overview, list, clips]) => {
         if (cancelled) return;
@@ -637,7 +642,7 @@ export function DashboardHome() {
             .map(campaignOutToLocal)
             .filter((item) => item.slug !== closing?.slug),
         );
-        setRecentClips(clips?.items.slice(0, 3) ?? []);
+        setRecentClips(clips.items.slice(0, 3));
         setError("");
       })
       .catch((err) => {
@@ -1174,8 +1179,9 @@ export function CampaignDetail({ slug }: { slug: string }) {
   const [notFound, setNotFound] = useState(false);
   const [loadError, setLoadError] = useState("");
   const [joined, setJoined] = useState(false);
-  const [sideLeaders, setSideLeaders] = useState<BoardRow[]>([]);
-  const [holdDays, setHoldDays] = useState(5);
+  const [sideLeaders, setSideLeaders] = useState<BoardRow[] | null>(null);
+  const [leadersError, setLeadersError] = useState("");
+  const [holdDays, setHoldDays] = useState<number | null>(null);
   const [joining, setJoining] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [problem, setProblem] = useState<JoinProblem | null>(null);
@@ -1197,10 +1203,14 @@ export function CampaignDetail({ slug }: { slug: string }) {
         earningsApi
           .leaderboard({ campaign_id: data.id, limit: 3 })
           .then((board) => {
-            if (!cancelled)
+            if (!cancelled) {
               setSideLeaders(board.items.slice(0, 3).map(toBoardRow));
+              setLeadersError("");
+            }
           })
-          .catch(() => undefined);
+          .catch((err) => {
+            if (!cancelled) setLeadersError(errorMessage(err, "We couldn't load this campaign's leaderboard."));
+          });
       })
       .catch((err) => {
         if (cancelled) return;
@@ -1212,7 +1222,9 @@ export function CampaignDetail({ slug }: { slug: string }) {
       .then((data) => {
         if (!cancelled) setHoldDays(data.hold_days);
       })
-      .catch(() => undefined);
+      .catch(() => {
+        if (!cancelled) setHoldDays(null);
+      });
     return () => {
       cancelled = true;
     };
@@ -1635,11 +1647,13 @@ export function CampaignDetail({ slug }: { slug: string }) {
               <div>
                 <dt>Holding period</dt>
                 <dd>
-                  <AnimatedNumber
-                    value={holdDays}
-                    suffix=" days"
-                    duration={700}
-                  />
+                  {holdDays === null ? "Unavailable" : (
+                    <AnimatedNumber
+                      value={holdDays}
+                      suffix=" days"
+                      duration={700}
+                    />
+                  )}
                 </dd>
               </div>
               <div>
@@ -1679,7 +1693,13 @@ export function CampaignDetail({ slug }: { slug: string }) {
               }
               linkLabel="View board"
             />
-            {!sideLeaders.length && (
+            {leadersError && (
+              <p className="auth-error" role="alert">{leadersError}</p>
+            )}
+            {!sideLeaders && !leadersError && (
+              <ClippitLoader contained compact label="Loading campaign leaderboard" />
+            )}
+            {sideLeaders && !sideLeaders.length && !leadersError && (
               <ClippitEmptyState
                 className="campaign-leaders__empty"
                 size="inline"
@@ -1688,7 +1708,7 @@ export function CampaignDetail({ slug }: { slug: string }) {
                 copy="The first approved clip with verified views takes the opening spot."
               />
             )}
-            {sideLeaders.map((person) => (
+            {(sideLeaders ?? []).map((person) => (
               <div key={person.rank}>
                 <span>
                   <AnimatedNumber value={person.rank} duration={600} />
@@ -2160,8 +2180,10 @@ export function SettingsScreen() {
     note: string;
   } | null>(null);
   const [profileLoaded, setProfileLoaded] = useState(false);
-  const [bankDetail, setBankDetail] = useState<BankAccountOut | null>(null);
+  const [bankDetail, setBankDetail] = useState<BankAccountOut | null | undefined>(undefined);
+  const [bankError, setBankError] = useState("");
   const [socials, setSocials] = useState<ConnectedAccountOut[] | null>(null);
+  const [socialError, setSocialError] = useState("");
   const [socialNotice, setSocialNotice] = useState("");
   const [notifPrefs, setNotifPrefs] = useState<NotificationSettings | null>(
     null,
@@ -2189,12 +2211,25 @@ export function SettingsScreen() {
       .finally(() => setProfileLoaded(true));
     bankDetailsApi
       .get()
-      .then(setBankDetail)
-      .catch(() => setBankDetail(null));
+      .then((data) => {
+        setBankDetail(data);
+        setBankError("");
+      })
+      .catch((err) => {
+        if (err instanceof ApiError && err.status === 404) {
+          setBankDetail(null);
+          setBankError("");
+        } else {
+          setBankError(errorMessage(err, "We couldn't load your payout account."));
+        }
+      });
     socialApi
       .accounts()
-      .then(setSocials)
-      .catch(() => setSocials([]));
+      .then((data) => {
+        setSocials(data);
+        setSocialError("");
+      })
+      .catch((err) => setSocialError(errorMessage(err, "We couldn't load your connected accounts.")));
     profileApi
       .getPreferences()
       .then((data) => setNotifPrefs(data.notifications))
@@ -2600,7 +2635,12 @@ export function SettingsScreen() {
                 {socialNotice}
               </p>
             )}
-            {!socials && (
+            {socialError && (
+              <p className="form-error" role="alert">
+                {socialError}
+              </p>
+            )}
+            {!socials && !socialError && (
               <ClippitLoader contained compact label="Checking your accounts" />
             )}
             {socials?.map((account) =>
@@ -2669,7 +2709,17 @@ export function SettingsScreen() {
               </div>
               <ProductIcon name="bank" />
             </div>
-            {bankDetail ? (
+            {bankError ? (
+              <ClippitEmptyState
+                tone="danger"
+                icon="bank"
+                title="We couldn't load your payout account"
+                copy={bankError}
+                action={<Link className="ink-button" href="/dashboard/payout-account">Open payout account<ProductIcon name="arrow" /></Link>}
+              />
+            ) : bankDetail === undefined ? (
+              <ClippitLoader contained compact label="Checking your payout account" />
+            ) : bankDetail ? (
               <div className="bank-account">
                 <span>
                   <ProductIcon name="bank" />

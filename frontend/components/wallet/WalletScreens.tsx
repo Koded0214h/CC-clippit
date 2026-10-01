@@ -20,7 +20,7 @@ import { campaignsApi, type CampaignOut } from "@/lib/api/campaigns";
 import { earningsApi } from "@/lib/api/earnings";
 import { organisationsApi, type OrganisationTransactionOut } from "@/lib/api/organisations";
 import { payoutsApi } from "@/lib/api/payouts";
-import { errorMessage } from "@/lib/api/client";
+import { ApiError, errorMessage } from "@/lib/api/client";
 import { formatDate } from "@/lib/format";
 
 function WalletHeading({ title, copy, back, actions }: { title: string; copy: string; back?: string; actions?: ReactNode }) {
@@ -33,6 +33,14 @@ function Money({ value, delay = 0 }: { value: number; delay?: number }) {
 
 type BrandMovement = { id: string; reference: string; label: string; detail: string; amount: number; credit: boolean; at: string; href: string };
 
+async function optionalBank<T>(request: Promise<T>): Promise<T | null> {
+  try { return await request; }
+  catch (err) {
+    if (err instanceof ApiError && err.status === 404) return null;
+    throw err;
+  }
+}
+
 export function BrandWalletScreen() {
   const [wallet, setWallet] = useState<BrandWalletOut | null>(null);
   const [bank, setBank] = useState<OrganisationBankAccountOut | null>(null);
@@ -42,7 +50,7 @@ export function BrandWalletScreen() {
   useEffect(() => {
     Promise.all([
       walletApi.getBrand(),
-      walletApi.getOrganisationBank().catch(() => null),
+      optionalBank(walletApi.getOrganisationBank()),
       organisationsApi.transactions({ limit: 6 }),
       walletApi.brandWithdrawals(6),
     ]).then(([walletData, bankData, transactionData, withdrawalData]) => {
@@ -100,19 +108,24 @@ export function CreatorWalletScreen() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    walletApi.getCreator().then(setWallet).catch((err) => setError(errorMessage(err)));
-    bankDetailsApi.get().then(setBank).catch(() => setBank(null));
-    Promise.all([earningsApi.history({ limit: 5 }).catch(() => null), payoutsApi.list({ limit: 5 }).catch(() => null)]).then(([history, payouts]) => {
-      const earned: CreatorMovement[] = (history?.items ?? []).map((row) => ({
+    Promise.all([
+      walletApi.getCreator(),
+      optionalBank(bankDetailsApi.get()),
+      earningsApi.history({ limit: 5 }),
+      payoutsApi.list({ limit: 5 }),
+    ]).then(([walletData, bankData, history, payouts]) => {
+      setWallet(walletData);
+      setBank(bankData);
+      const earned: CreatorMovement[] = history.items.map((row) => ({
         key: `e-${row.id}`, href: "/dashboard/earnings", label: row.state === "Payable" ? "Clip earning cleared" : row.state === "Paid" ? "Clip earning paid out" : "Clip earning in review",
         detail: `${row.brand ?? row.campaign_title} · ${row.clip}`, amount: row.amount, state: row.state === "Payable" ? "Available" : row.state === "Accrued" ? "Held" : row.state, credit: true, at: row.date,
       }));
-      const paidOut: CreatorMovement[] = (payouts?.items ?? []).map((payout) => ({
+      const paidOut: CreatorMovement[] = payouts.items.map((payout) => ({
         key: `p-${payout.id}`, href: `/dashboard/payouts/receipt?id=${payout.id}`, label: "Withdrawal to bank", detail: `${payout.destination.bank_name} · ${payout.reference}`,
         amount: payout.amount, state: payout.status === "succeeded" ? "Sent" : payout.status === "failed" ? "Failed" : "Processing", credit: false, at: payout.initiated_at,
       }));
       setMovements([...earned, ...paidOut].sort((a, b) => b.at.localeCompare(a.at)).slice(0, 6));
-    });
+    }).catch((err) => setError(errorMessage(err, "We couldn't load your wallet activity.")));
   }, []);
 
   if (error) return <div className="dashboard-page wallet-page"><ClippitEmptyState tone="danger" icon="wallet" title="We couldn&apos;t load your wallet" copy={error} role="alert" /></div>;
@@ -144,7 +157,7 @@ export function BrandWalletWithdrawScreen() {
   const [requestKey] = useState(() => crypto.randomUUID());
 
   useEffect(() => {
-    Promise.all([walletApi.getBrand(), walletApi.getOrganisationBank().catch(() => null)])
+    Promise.all([walletApi.getBrand(), optionalBank(walletApi.getOrganisationBank())])
       .then(([walletData, bankData]) => { setWallet(walletData); setBank(bankData); })
       .catch((err) => setError(errorMessage(err)));
   }, []);

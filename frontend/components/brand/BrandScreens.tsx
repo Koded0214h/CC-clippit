@@ -16,7 +16,6 @@ import {
 } from "@/components/ui/ProfilePhotoPicker";
 import { ReceiptHeader } from "@/components/ui/ReceiptHeader";
 import {
-  brandReviews,
   type BrandCampaign,
   type BrandCampaignState,
   type BrandReview,
@@ -42,6 +41,7 @@ import {
   calculateFee,
   feePercentage,
 } from "@/lib/fees";
+import { COUNTRY_CALLING_CODES } from "@/lib/country-calling-codes";
 import {
   useBrandCampaign,
   type BriefRule,
@@ -1112,8 +1112,8 @@ const metricChoices: Array<{
   },
   {
     type: "purchase",
-    title: "Purchases",
-    note: "Completed orders confirmed by your store",
+    title: "Purchases or paid uses",
+    note: "Orders, bookings or paid actions confirmed by your business",
     icon: "wallet",
     group: "conversion",
   },
@@ -1121,6 +1121,9 @@ const metricChoices: Array<{
 
 export function CampaignMetricsScreen() {
   const { draft, toggleMetric, updateMetric, update } = useBrandCampaign();
+  const [moreMetricsOpen, setMoreMetricsOpen] = useState(() =>
+    draft.metrics.some((metric) => ["visit", "signup", "lead", "purchase"].includes(metric.type)),
+  );
   const hasConversion = draft.metrics.some((metric) =>
     ["visit", "signup", "lead", "purchase"].includes(metric.type),
   );
@@ -1128,7 +1131,7 @@ export function CampaignMetricsScreen() {
     !hasConversion ||
     (draft.conversionMode === "website"
       ? /^https?:\/\//i.test(draft.storeUrl)
-      : draft.whatsappNumber.replace(/\D/g, "").length >= 10);
+      : draft.whatsappNumber.length === 10);
   return (
     <BuilderFrame
       step={3}
@@ -1150,14 +1153,14 @@ export function CampaignMetricsScreen() {
     >
       <section className="metric-studio">
         <div className="metric-studio__rail" aria-label="Campaign metrics">
-          {metricChoices.map((choice) => {
+          {metricChoices.filter((choice) => choice.group === "social" || moreMetricsOpen).map((choice) => {
             const metric = draft.metrics.find(
               (item) => item.type === choice.type,
             );
             return (
               <article
                 key={choice.type}
-                className={metric ? "is-selected" : ""}
+                className={`${metric ? "is-selected" : ""}${choice.group === "conversion" ? " is-business-metric" : ""}`}
               >
                 <button
                   type="button"
@@ -1197,6 +1200,19 @@ export function CampaignMetricsScreen() {
               </article>
             );
           })}
+          <button
+            type="button"
+            className={`metric-more${moreMetricsOpen ? " is-open" : ""}`}
+            onClick={() => setMoreMetricsOpen((open) => !open)}
+            aria-expanded={moreMetricsOpen}
+          >
+            <span><ProductIcon name="link" /></span>
+            <p>
+              <strong>{moreMetricsOpen ? "Hide business results" : "More business results"}</strong>
+              <small>Visits, signups, leads, purchases and paid uses</small>
+            </p>
+            <b>{draft.metrics.filter((metric) => ["visit", "signup", "lead", "purchase"].includes(metric.type)).length || "+"}</b>
+          </button>
         </div>
         {hasConversion ? (
           <section className="conversion-route">
@@ -1269,20 +1285,35 @@ export function CampaignMetricsScreen() {
             ) : (
               <label>
                 <span>Business WhatsApp number</span>
-                <div className="brand-input-with-icon">
-                  <ProductIcon name="phone" />
+                <div className="whatsapp-number-field">
+                  <select
+                    aria-label="WhatsApp country code"
+                    value={draft.whatsappCountry}
+                    onChange={(event) => update({ whatsappCountry: event.target.value })}
+                  >
+                    {COUNTRY_CALLING_CODES.map((country) => (
+                      <option key={country.iso} value={country.iso}>
+                        {country.name} (+{country.dialCode})
+                      </option>
+                    ))}
+                  </select>
                   <input
-                    inputMode="tel"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="tel-national"
+                    pattern="[0-9]{10}"
+                    maxLength={10}
                     value={draft.whatsappNumber}
                     onChange={(event) =>
-                      update({ whatsappNumber: event.target.value })
+                      update({ whatsappNumber: event.target.value.replace(/\D/g, "").slice(0, 10) })
                     }
-                    placeholder="2348012345678"
+                    placeholder="8012345678"
+                    aria-describedby="whatsapp-number-help"
                   />
+                  <b aria-live="polite">{draft.whatsappNumber.length}/10</b>
                 </div>
-                <small>
-                  Include the country code. Clippit will generate the wa.me
-                  link.
+                <small id="whatsapp-number-help">
+                  Enter the 10 digits after the country code. Leave out the first zero.
                 </small>
               </label>
             )}
@@ -1304,22 +1335,10 @@ export function CampaignMetricsScreen() {
                   <option value={90}>90 days</option>
                 </select>
               </label>
-              <label>
-                <span>Credit goes to</span>
-                <select
-                  value={draft.attributionModel}
-                  onChange={(event) =>
-                    update({
-                      attributionModel: event.target.value as
-                        | "first_touch"
-                        | "last_touch",
-                    })
-                  }
-                >
-                  <option value="last_touch">Last creator link used</option>
-                  <option value="first_touch">First creator link used</option>
-                </select>
-              </label>
+              <p className="conversion-route__first-touch">
+                <ProductIcon name="check" />
+                <span><strong>The first creator gets paid.</strong> Once a customer clicks a creator&apos;s link, that creator keeps the customer&apos;s tracked results during this window.</span>
+              </p>
             </div>
             <p className="conversion-route__proof">
               <ProductIcon name="shield" />
@@ -1888,7 +1907,7 @@ export function CampaignFundingScreen() {
               <ProductIcon name="bank" />
               <span>
                 <strong>Card payment</strong>
-                <small>Continue to the payment provider's secure checkout</small>
+                <small>Continue to the payment provider&apos;s secure checkout</small>
               </span>
               <i>{method === "card" && <ProductIcon name="check" />}</i>
             </button>
@@ -2049,143 +2068,6 @@ export function CampaignFundingScreen() {
   );
 }
 
-export function CampaignFundedScreen() {
-  const { draft } = useBrandCampaign();
-  const fee = calculateFee(draft.pot, BRAND_CAMPAIGN_FEE_RATE);
-  return (
-    <div className="brand-page funded-page">
-      <section className="funded-hero">
-        <div className="funded-art">
-          {draft.coverImage ? (
-            <div className="funded-cover">
-              <Image
-                src={draft.coverImage}
-                alt={`${draft.title} campaign cover`}
-                fill
-                unoptimized
-                sizes="420px"
-              />
-            </div>
-          ) : (
-            <BrandArt src={art.funding} label="Pot received" tone="lime" />
-          )}
-          <span>
-            <ProductIcon name="check" />
-          </span>
-        </div>
-        <Status>Funds confirmed</Status>
-        <h1>Campaign funded.</h1>
-        <p>{draft.title} is live. Creators can now join and submit clips.</p>
-        <div>
-          <ActionLink href="/brand/campaigns/no-long-thing">
-            View campaign
-          </ActionLink>
-          <ActionLink href="/brand/campaigns" dark>
-            Back to campaigns
-          </ActionLink>
-        </div>
-      </section>
-      <aside className="funded-ticket">
-        <ReceiptHeader
-          title="Campaign funding certificate"
-          reference="CLP-LIVE-041"
-        />
-        <div className="funded-ticket__campaign">
-          <span>
-            {draft.coverImage ? (
-              <Image
-                src={draft.coverImage}
-                alt=""
-                fill
-                unoptimized
-                sizes="84px"
-              />
-            ) : (
-              <Image src={art.funding} alt="" fill sizes="84px" />
-            )}
-          </span>
-          <p>
-            <small>Funded campaign</small>
-            <strong>{draft.title}</strong>
-            <em>Gbedu Records</em>
-          </p>
-          <i>
-            <ProductIcon name="check" />
-            Live
-          </i>
-        </div>
-        <div className="funded-ticket__amount">
-          <small>Total paid</small>
-          <h2>
-            <Money value={draft.pot + fee} />
-          </h2>
-          <time>20 Sep 2026 · 15:07:13 WAT</time>
-        </div>
-        <div className="funded-ticket__parties">
-          <section>
-            <h2>Reserved for</h2>
-            <p>
-              <strong>Clippit campaign pot</strong>
-              <span>Creator earnings</span>
-            </p>
-          </section>
-          <section>
-            <h2>From</h2>
-            <p>
-              <strong>Gbedu Records Ltd.</strong>
-              <span>Brand wallet</span>
-            </p>
-          </section>
-        </div>
-        <section className="funded-ticket__information">
-          <h2>Transaction information</h2>
-          <dl>
-            <div>
-              <dt>Funding transaction ID</dt>
-              <dd>CLP-LIVE-041</dd>
-            </div>
-            <div>
-              <dt>Wallet ledger reference</dt>
-              <dd>LDG-260920-041</dd>
-            </div>
-            <div>
-              <dt>Creator pot</dt>
-              <dd>
-                <Money value={draft.pot} />
-              </dd>
-            </div>
-            <div>
-              <dt>Clippit campaign fee (15%)</dt>
-              <dd>
-                <Money value={fee} />
-              </dd>
-            </div>
-            <div>
-              <dt>Performance rates</dt>
-              <dd>{draft.metrics.length} selected</dd>
-            </div>
-            <div>
-              <dt>Campaign end</dt>
-              <dd>
-                {draft.endCondition === "budget"
-                  ? "When the pot is empty"
-                  : `${draft.days} days or an empty pot`}
-              </dd>
-            </div>
-          </dl>
-        </section>
-        <footer>
-          <ProductIcon name="shield" />
-          <span>
-            <strong>Verify this certificate</strong>
-            <small>clippit.ng/verify/CLP-LIVE-041 · Code C04A-7719</small>
-          </span>
-        </footer>
-      </aside>
-    </div>
-  );
-}
-
 const EMPTY_LIVE_CAMPAIGN: BrandCampaign = {
   slug: "",
   title: "",
@@ -2212,18 +2094,14 @@ export function LiveCampaignScreen({ slug }: { slug?: string }) {
   >([]);
   const [submissions, setSubmissions] = useState<CampaignSubmissionRow[]>([]);
   const [paused, setPaused] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+  const [loading, setLoading] = useState(!!slug);
+  const [loadError, setLoadError] = useState(slug ? "" : "Campaign reference is missing.");
   const [controlBusy, setControlBusy] = useState(false);
   const [pauseMode, setPauseMode] = useState<"entries" | "full">("entries");
   const [control, setControl] = useState<"pause" | null>(null);
-  const [integrationSecret, setIntegrationSecret] = useState("");
-  const [integrationBusy, setIntegrationBusy] = useState(false);
-  const [integrationError, setIntegrationError] = useState("");
-  const [integrationCopied, setIntegrationCopied] = useState(false);
 
   useEffect(() => {
-    if (!slug) { setLoading(false); setLoadError("Campaign reference is missing."); return; }
+    if (!slug) return;
     Promise.all([campaignsApi.get(slug), campaignsApi.getStats(slug), campaignsApi.getSubmissions(slug)])
       .then(([data, statsData, submissionData]) => {
         setBrandName(data.brand?.name ?? "Brand");
@@ -2274,29 +2152,6 @@ export function LiveCampaignScreen({ slug }: { slug?: string }) {
   const tracksConversions = campaignMetrics.some((metric) =>
     ["visit", "signup", "lead", "purchase"].includes(metric.metric_type),
   );
-
-  const createIntegrationKey = async () => {
-    if (!slug || integrationBusy) return;
-    setIntegrationBusy(true);
-    setIntegrationError("");
-    try {
-      const result = await campaignsApi.rotateIntegrationSecret(slug);
-      setIntegrationSecret(result.secret);
-      setIntegrationCopied(false);
-    } catch (error) {
-      setIntegrationError(
-        errorMessage(error, "The setup key could not be created. Try again."),
-      );
-    } finally {
-      setIntegrationBusy(false);
-    }
-  };
-
-  const copyIntegrationKey = async () => {
-    if (!integrationSecret) return;
-    await navigator.clipboard?.writeText(integrationSecret);
-    setIntegrationCopied(true);
-  };
 
   const resumeCampaign = async () => {
     if (!slug || controlBusy) return;
@@ -2497,33 +2352,12 @@ export function LiveCampaignScreen({ slug }: { slug?: string }) {
               website or store. It lets your store confirm signups, leads and
               purchases against the right creator link.
             </p>
-            {integrationError ? (
-              <span className="campaign-integration-card__error">
-                {integrationError}
-              </span>
-            ) : null}
           </div>
           <div className="campaign-integration-card__action">
-            {integrationSecret ? (
-              <div className="campaign-integration-card__secret">
-                <span>Copy now. It will not be shown again.</span>
-                <code>{integrationSecret}</code>
-                <button type="button" onClick={copyIntegrationKey}>
-                  <ProductIcon name={integrationCopied ? "check" : "link"} />
-                  {integrationCopied ? "Copied" : "Copy setup key"}
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                className="brand-button"
-                onClick={createIntegrationKey}
-                disabled={!slug || integrationBusy}
-              >
-                {integrationBusy ? "Creating key..." : "Create setup key"}
-                <ProductIcon name="arrow" />
-              </button>
-            )}
+            <Link className="brand-button" href={`/brand/campaigns/${slug}/integration`}>
+              Open tracking setup
+              <ProductIcon name="arrow" />
+            </Link>
           </div>
         </section>
       ) : null}
@@ -2743,29 +2577,18 @@ const tabMap: Record<string, "needs_review" | "appeals" | "resolved"> = {
 };
 
 function apiReviewToBrand(r: ApiReviewCard): BrandReview {
-  const validPlatforms = [
-    "TikTok",
-    "Instagram",
-    "Facebook",
-    "X",
-    "YouTube",
-  ] as const;
-  const platform =
-    validPlatforms.find((p) => p.toLowerCase() === r.platform.toLowerCase()) ??
-    "TikTok";
   return {
     id: r.id,
     title: r.title ?? r.campaign_title,
     creator: r.creator_name,
     handle: r.creator_handle ? `@${r.creator_handle.replace(/^@/, "")}` : "",
-    platform,
+    platform: r.platform,
     image: r.video_url ?? "/assets/video/creator-reaction-poster.jpg",
     submitted: new Date(r.submitted_at).toLocaleDateString("en-NG", {
       day: "numeric",
       month: "short",
     }),
     issue: r.issue ?? "Please review this submission.",
-    confidence: Math.round((r.confidence ?? 0.75) * 100),
   };
 }
 
@@ -2781,8 +2604,6 @@ export function BrandReviewQueueScreen() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    setLoading(true);
-    setError("");
     const tab = tabMap[filter] ?? "needs_review";
     brandApi
       .reviews(tab)
@@ -2793,6 +2614,13 @@ export function BrandReviewQueueScreen() {
       .catch((err) => setError(errorMessage(err, "We couldn't load the review queue.")))
       .finally(() => setLoading(false));
   }, [filter]);
+
+  const selectFilter = (next: string) => {
+    if (next === filter) return;
+    setLoading(true);
+    setError("");
+    setFilter(next);
+  };
 
   const needsCount = counts.needs_review;
   return (
@@ -2816,7 +2644,7 @@ export function BrandReviewQueueScreen() {
           <button
             type="button"
             key={item}
-            onClick={() => setFilter(item)}
+            onClick={() => selectFilter(item)}
             className={filter === item ? "is-active" : ""}
           >
             {item}

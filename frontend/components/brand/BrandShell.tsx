@@ -21,6 +21,7 @@ const navigation: Array<{ href: string; label: string; mobile?: string; icon: Pr
   { href: "/brand/campaigns", label: "Campaigns", mobile: "Campaigns", icon: "campaigns" },
   { href: "/brand/wallet", label: "Wallet", icon: "wallet" },
   { href: "/brand/transactions", label: "Transactions", icon: "brief" },
+  { href: "/brand/tracking", label: "Customer tracking", icon: "link" },
   { href: "/brand/campaigns/new", label: "Create campaign", mobile: "Create", icon: "spark" },
   { href: "/brand/reviews", label: "Review queue", mobile: "Review", icon: "eye" },
   { href: "/brand/team", label: "Team", icon: "users" },
@@ -71,7 +72,7 @@ export function BrandShell({ children }: { children: ReactNode }) {
   }, []);
   const initials = displayName.trim().split(/\s+/).slice(0, 2).map((word) => word[0]).join("").toUpperCase() || "U";
   const mobilePrimary = navigation.filter((item) => item.mobile && item.label !== "Settings");
-  const mobileMore = navigation.filter((item) => ["Wallet", "Transactions", "Team", "Billing", "Verification", "Settings"].includes(item.label));
+  const mobileMore = navigation.filter((item) => ["Wallet", "Transactions", "Customer tracking", "Team", "Billing", "Verification", "Settings"].includes(item.label));
   const moreIsCurrent = [...mobileMore, ...brandResourceNavigation].some((item) => current(pathname, item.href));
   return <BrandCampaignProvider><div className="brand-shell">
     <aside className="brand-rail">
@@ -87,7 +88,7 @@ export function BrandShell({ children }: { children: ReactNode }) {
     {moreOpen && <button className="brand-mobile-more-backdrop" type="button" aria-label="Close workspace menu" onClick={() => setMoreOpen(false)} />}
     <section className={`brand-mobile-more${moreOpen ? " is-open" : ""}`} aria-label="More brand workspace pages" aria-hidden={!moreOpen}>
       <header><div><small>Workspace</small><strong>More tools</strong></div><button type="button" onClick={() => setMoreOpen(false)} aria-label="Close workspace menu"><ProductIcon name="more" /></button></header>
-      <nav>{mobileMore.map((item) => <Link key={item.href} href={item.href} onClick={() => setMoreOpen(false)} className={current(pathname, item.href) ? "is-active" : ""}><span><ProductIcon name={item.icon} /></span><p><strong>{item.label}</strong><small>{item.label === "Wallet" ? "Balance, funding and withdrawals" : item.label === "Transactions" ? "Funding and money movement" : item.label === "Team" ? "Current account access" : item.label === "Billing" ? "Details, invoices and receipts" : item.label === "Verification" ? "Current organisation status" : "Organisation and alerts"}</small></p><ProductIcon name="arrow" /></Link>)}{brandResourceNavigation.map((item) => <Link key={item.href} href={item.href} onClick={() => setMoreOpen(false)} className={current(pathname, item.href) ? "is-active" : ""}><span><ProductIcon name={item.icon} /></span><p><strong>{item.label}</strong><small>{item.copy}</small></p><ProductIcon name="arrow" /></Link>)}</nav>
+      <nav>{mobileMore.map((item) => <Link key={item.href} href={item.href} onClick={() => setMoreOpen(false)} className={current(pathname, item.href) ? "is-active" : ""}><span><ProductIcon name={item.icon} /></span><p><strong>{item.label}</strong><small>{item.label === "Wallet" ? "Balance, funding and withdrawals" : item.label === "Transactions" ? "Funding and money movement" : item.label === "Customer tracking" ? "Signups, orders and paid actions" : item.label === "Team" ? "Current account access" : item.label === "Billing" ? "Details, invoices and receipts" : item.label === "Verification" ? "Current organisation status" : "Organisation and alerts"}</small></p><ProductIcon name="arrow" /></Link>)}{brandResourceNavigation.map((item) => <Link key={item.href} href={item.href} onClick={() => setMoreOpen(false)} className={current(pathname, item.href) ? "is-active" : ""}><span><ProductIcon name={item.icon} /></span><p><strong>{item.label}</strong><small>{item.copy}</small></p><ProductIcon name="arrow" /></Link>)}</nav>
     </section>
     <nav className={`brand-mobile-dock${dockHidden && !moreOpen ? " is-hidden" : ""}`} aria-label="Brand mobile navigation">{mobilePrimary.map((item) => <Link key={item.href} href={item.href} onClick={() => setMoreOpen(false)} className={current(pathname, item.href) ? "is-active" : ""}><ProductIcon name={item.icon} /><span>{item.mobile}</span>{item.label === "Review queue" && pendingReviews > 0 && <b>{pendingReviews}</b>}</Link>)}<button type="button" className={moreIsCurrent || moreOpen ? "is-active" : ""} aria-expanded={moreOpen} onClick={() => setMoreOpen((value) => !value)}><ProductIcon name="more" /><span>More</span></button></nav>
   </div></BrandCampaignProvider>;

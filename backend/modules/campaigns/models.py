@@ -142,7 +142,7 @@ class Campaign(Base):
     conversion_destination_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     conversion_whatsapp_number: Mapped[str | None] = mapped_column(String(24), nullable=True)
     attribution_window_days: Mapped[int] = mapped_column(Integer, nullable=False, server_default="30")
-    attribution_model: Mapped[str] = mapped_column(String(20), nullable=False, server_default="last_touch")
+    attribution_model: Mapped[str] = mapped_column(String(20), nullable=False, server_default="first_touch")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
