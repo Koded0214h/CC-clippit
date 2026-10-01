@@ -43,6 +43,7 @@ from typing import Mapping
 import httpx
 
 from core.cache import TTLCache
+from core.config import get_settings
 
 from .base import (
     AccountNotFound,
@@ -154,6 +155,13 @@ class PaystackProvider:
                 "reference": paystack_reference(reference),
                 "channels": ["card"] if method == "card" else ["bank_transfer"],
                 "metadata": {"clippit_reference": reference, "description": description},
+                # Without this, Paystack falls back to whatever "Callback
+                # URL" is set in the dashboard — easy to leave stale (it
+                # still pointed at a decommissioned host after the last
+                # infra move, so paying landed on a dead page). Setting it
+                # per-transaction means it's never wrong, and it's always
+                # right if the frontend domain ever changes again.
+                "callback_url": f"{get_settings().app_url}/brand/campaigns/new/funded",
             },
         )
         data = body.get("data") or {}

@@ -5,6 +5,14 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   agentRules: false,
   allowedDevOrigins: ["127.0.0.1", "10.115.136.123"],
+  images: {
+    // Campaign covers, brand/creator photos and asset uploads all come
+    // from Cloudinary now. next/image refuses to render an unlisted
+    // remote host at all (not a broken-image icon — it just never
+    // renders), which is why these went blank the moment uploads moved
+    // off local disk.
+    remotePatterns: [{ protocol: "https", hostname: "res.cloudinary.com" }],
+  },
   async headers() {
     return [
       {

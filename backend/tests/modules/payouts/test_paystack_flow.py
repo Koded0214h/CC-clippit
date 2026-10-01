@@ -54,6 +54,10 @@ async def test_funding_sends_the_brand_to_a_hosted_checkout_and_a_signed_charge_
     sent = ps.sent("POST", "/transaction/initialize")[0][2]
     assert sent["amount"] == 57_500_000 and sent["email"] == org["user"]["email"]
     assert sent["reference"] == "clippit-" + order["reference"].lower()
+    # Set explicitly, not left to whatever's configured in the Paystack
+    # dashboard — that drifted stale across the last infra move and sent
+    # brands to a dead page right after paying.
+    assert sent["callback_url"] == f"{get_settings().app_url}/brand/campaigns/new/funded"
 
     # Not paid yet: the brand's claim opens nothing.
     unpaid = await api.post(f"/campaigns/{c['id']}/funding/confirm", headers=auth(org))
