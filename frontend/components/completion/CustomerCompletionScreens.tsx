@@ -283,20 +283,26 @@ export function EarningsStatementScreen() {
 export function PublicCreatorProfileScreen({ handle }: { handle: string }) {
   const [profile, setProfile] = useState<PublicCreatorProfileOut | null>(null);
   const [work, setWork] = useState<PublicCreatorWork[]>([]);
+  const [workError, setWorkError] = useState("");
   const [error, setError] = useState<{ notFound: boolean; message: string } | null>(null);
 
   useEffect(() => {
     publicProfilesApi.creator(handle).then((data) => {
       setProfile(data);
       setWork(data.recent_work);
-      publicProfilesApi.creatorClips(handle, 12).then(setWork).catch(() => undefined);
+      publicProfilesApi.creatorClips(handle, 12)
+        .then((items) => {
+          setWork(items);
+          setWorkError("");
+        })
+        .catch((err) => setWorkError(errorMessage(err, "Some recent work could not be loaded.")));
     }).catch((err) => setError({ notFound: err instanceof ApiError && err.status === 404, message: errorMessage(err) }));
   }, [handle]);
 
   if (error) return <ServiceFrame><section className="public-profile"><ClippitEmptyState className="completion-empty" tone="danger" icon="person" title={error.notFound ? `@${handle} isn't on Clippit` : "We couldn't load this profile"} copy={error.notFound ? "The handle may have changed, or the creator has made their profile private." : error.message} action={<BigAction href="/auth/sign-up">Create your Clippit profile</BigAction>} role="alert" /></section></ServiceFrame>;
   if (!profile) return <ServiceFrame><section className="public-profile"><ClippitLoader contained compact label="Loading creator profile" /></section></ServiceFrame>;
 
-  return <ServiceFrame><section className="public-profile"><header><div className="profile-photo">{profile.photo_url ? <Image src={profile.photo_url} alt={profile.display_name} fill sizes="260px" unoptimized /> : <strong className="profile-photo__initials">{profile.display_name.split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase()}</strong>}</div><div><Status tone="lime"><ProductIcon name="shield" />Verified creator</Status><h1>{profile.display_name}</h1><p>@{profile.handle}</p>{profile.bio && <blockquote>{profile.bio}</blockquote>}<div>{profile.interests.map((lane) => <span key={lane}>{lane}</span>)}</div></div><aside><small>Verified views</small><strong><AnimatedNumber value={profile.stats.verified_views} format="compact" suffix=" views" /></strong><span>Across {profile.stats.approved_clips} approved Clippit clip{profile.stats.approved_clips === 1 ? "" : "s"}</span></aside></header><section className="profile-work"><div className="profile-work__head"><div><h2>Approved campaign work</h2><p>Only clips approved through Clippit appear here.</p></div><span>{profile.stats.approved_clips} clips</span></div>{!work.length ? <ClippitEmptyState className="profile-work__empty" size="compact" icon="camera" title="No approved campaign work yet" copy="Approved clips will appear here." /> : <div>{work.map((item) => <article key={`${item.campaign_slug}-${item.submitted_at}`}><div><Image src="/assets/photos/creator-studio-pexels-8359963.jpg" alt="" fill sizes="(max-width: 700px) 100vw, 33vw" /><span><ProductIcon name="play" /></span></div><p><strong>{item.campaign_title}</strong><small>{item.brand_name ?? "Brand"} · {platformLabel(item.platform)} · {formatDate(item.submitted_at)}</small></p></article>)}</div>}</section><footer><span><Mark /><strong>Profile verified by Clippit</strong></span><Link href="/auth/sign-up">Create your Clippit profile<ProductIcon name="arrow" /></Link></footer></section></ServiceFrame>;
+  return <ServiceFrame><section className="public-profile"><header><div className="profile-photo">{profile.photo_url ? <Image src={profile.photo_url} alt={profile.display_name} fill sizes="260px" unoptimized /> : <strong className="profile-photo__initials">{profile.display_name.split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase()}</strong>}</div><div><Status tone="lime"><ProductIcon name="shield" />Verified creator</Status><h1>{profile.display_name}</h1><p>@{profile.handle}</p>{profile.bio && <blockquote>{profile.bio}</blockquote>}<div>{profile.interests.map((lane) => <span key={lane}>{lane}</span>)}</div></div><aside><small>Verified views</small><strong><AnimatedNumber value={profile.stats.verified_views} format="compact" suffix=" views" /></strong><span>Across {profile.stats.approved_clips} approved Clippit clip{profile.stats.approved_clips === 1 ? "" : "s"}</span></aside></header><section className="profile-work"><div className="profile-work__head"><div><h2>Approved campaign work</h2><p>Only clips approved through Clippit appear here.</p></div><span>{profile.stats.approved_clips} clips</span></div>{workError && <p className="auth-error" role="alert">{workError}</p>}{!work.length && !workError ? <ClippitEmptyState className="profile-work__empty" size="compact" icon="camera" title="No approved campaign work yet" copy="Approved clips will appear here." /> : <div>{work.map((item) => <article key={`${item.campaign_slug}-${item.submitted_at}`}><div><Image src="/assets/photos/creator-studio-pexels-8359963.jpg" alt="" fill sizes="(max-width: 700px) 100vw, 33vw" /><span><ProductIcon name="play" /></span></div><p><strong>{item.campaign_title}</strong><small>{item.brand_name ?? "Brand"} · {platformLabel(item.platform)} · {formatDate(item.submitted_at)}</small></p></article>)}</div>}</section><footer><span><Mark /><strong>Profile verified by Clippit</strong></span><Link href="/auth/sign-up">Create your Clippit profile<ProductIcon name="arrow" /></Link></footer></section></ServiceFrame>;
 }
 
 type GuideSection = { title: string; body: string; points?: string[] };

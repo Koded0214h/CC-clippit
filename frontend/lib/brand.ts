@@ -23,9 +23,8 @@ export type BrandReview = {
   creator: string;
   handle: string;
   title: string;
-  platform: "TikTok" | "Instagram" | "Facebook" | "X" | "YouTube";
+  platform: string;
   image: string;
-  confidence: number;
   issue: string;
   submitted: string;
 };

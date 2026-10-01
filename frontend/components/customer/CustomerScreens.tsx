@@ -16,6 +16,7 @@ import { announceNotificationsChanged, notificationsApi, type NotificationOut } 
 import { bankDetailsApi, banksApi, type BankAccountOut, type BankOut } from "@/lib/api/bankDetails";
 import { creatorProfileApi } from "@/lib/api/social";
 import { publicProfilesApi, type PublicCreatorProfileOut } from "@/lib/api/account";
+import { creatorApi } from "@/lib/api/creator";
 import { formatDate, platformLabel } from "@/lib/format";
 
 function ScreenHead({ title, copy, back, action }: { title: string; copy: string; back?: string; action?: ReactNode }) {
@@ -415,10 +416,25 @@ export function PublicProfileScreen() {
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    creatorProfileApi.get().then(async (me) => {
+    Promise.all([creatorProfileApi.get(), creatorApi.clips()]).then(async ([me, clips]) => {
       let publicProfile: PublicCreatorProfileOut | null = null;
       if (me.handle && me.public_profile) publicProfile = await publicProfilesApi.creator(me.handle);
-      setState({ handle: me.handle, isPublic: me.public_profile, location: me.location ?? null, profile: publicProfile ?? { handle: me.handle ?? "", display_name: me.display_name, photo_url: me.photo_url, bio: me.bio, interests: me.interests, stats: { approved_clips: 0, verified_views: 0 }, recent_work: [] } });
+      const approved = clips.items.filter((clip) => clip.status === "approved");
+      setState({ handle: me.handle, isPublic: me.public_profile, location: me.location ?? null, profile: publicProfile ?? {
+        handle: me.handle ?? "",
+        display_name: me.display_name,
+        photo_url: me.photo_url,
+        bio: me.bio,
+        interests: me.interests,
+        stats: { approved_clips: approved.length, verified_views: clips.verified_views },
+        recent_work: approved.slice(0, 6).map((clip) => ({
+          campaign_title: clip.campaign_title,
+          campaign_slug: clip.campaign_slug,
+          brand_name: clip.brand,
+          platform: clip.platform,
+          submitted_at: clip.submitted_at,
+        })),
+      } });
     }).catch((err) => setError(err instanceof ApiError ? err.detail : "We couldn't load your profile."));
   }, []);
 

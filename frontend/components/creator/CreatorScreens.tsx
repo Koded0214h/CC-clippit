@@ -15,7 +15,6 @@ import { AnimatedNumber } from "@/components/ui/AnimatedNumber";
 import { ReceiptHeader } from "@/components/ui/ReceiptHeader";
 import { ButtonLoader, ClippitLoader } from "@/components/ui/ClippitLoader";
 import { ClippitEmptyState } from "@/components/ui/ClippitEmptyState";
-import { feePercentage } from "@/lib/fees";
 import { money } from "@/lib/product";
 import {
   earningsApi,
@@ -1077,6 +1076,7 @@ export function ApprovedVerdictScreen() {
   const id = useQueryId();
   const { submission, error } = useSubmission(id);
   const [earnings, setEarnings] = useState<SubmissionEarningsOut | null>(null);
+  const [earningsError, setEarningsError] = useState("");
   const [withdrawing, setWithdrawing] = useState(false);
   const [actionError, setActionError] = useState("");
 
@@ -1084,8 +1084,11 @@ export function ApprovedVerdictScreen() {
     if (id)
       submissionsApi
         .getEarnings(id)
-        .then(setEarnings)
-        .catch(() => undefined);
+        .then((data) => {
+          setEarnings(data);
+          setEarningsError("");
+        })
+        .catch((err) => setEarningsError(errorMessage(err, "We couldn't load this clip's earnings.")));
   }, [id]);
 
   if (id === undefined) return <Loading label="Opening your clip" />;
@@ -1166,12 +1169,16 @@ export function ApprovedVerdictScreen() {
               ? `The next held amount becomes payable on ${formatDate(earnings.next_payable_at)}.`
               : ""}
           </p>
-          <div className="verdict-money">
+          {earningsError ? (
+            <p className="creator-error" role="alert">{earningsError} Your approval is unchanged. Open Earnings to view the latest amounts.</p>
+          ) : !earnings ? (
+            <ClippitLoader contained compact label="Loading this clip's earnings" />
+          ) : <div className="verdict-money">
             <div>
               <small>Current verified views</small>
               <strong>
                 <AnimatedNumber
-                  value={earnings?.verified_views ?? 0}
+                  value={earnings.verified_views}
                   format="compact"
                 />
               </strong>
@@ -1179,16 +1186,16 @@ export function ApprovedVerdictScreen() {
             <div>
               <small>Earned so far</small>
               <strong>
-                <AnimatedMoney value={earnings?.accrued ?? 0} delay={100} />
+                <AnimatedMoney value={earnings.accrued} delay={100} />
               </strong>
             </div>
             <div>
               <small>Payable now</small>
               <strong>
-                <AnimatedMoney value={earnings?.payable_now ?? 0} delay={160} />
+                <AnimatedMoney value={earnings.payable_now} delay={160} />
               </strong>
             </div>
-          </div>
+          </div>}
           <div className="verdict-actions">
             <PrimaryLink href="/dashboard/earnings">View earnings</PrimaryLink>
             {!withdrawn && (
@@ -2168,7 +2175,12 @@ export function WithdrawScreen() {
               </dd>
             </div>
             <div>
-              <dt>Clippit fee ({feePercentage(0.07)}%)</dt>
+              <dt>
+                Clippit fee
+                {liveQuote && liveQuote.amount > 0
+                  ? ` (${Math.round((liveQuote.fee / liveQuote.amount) * 100)}%)`
+                  : ""}
+              </dt>
               <dd>
                 {liveQuote ? (
                   <>
@@ -2305,7 +2317,7 @@ export function PayoutReceiptScreen() {
   const state = payoutTone(payout.status);
   const destination = `${payout.destination.bank_name} ending ${payout.destination.account_number_masked.slice(-4)}`;
   const feeRate =
-    payout.amount > 0 ? Math.round((payout.fee / payout.amount) * 100) : 7;
+    payout.amount > 0 ? Math.round((payout.fee / payout.amount) * 100) : null;
 
   return (
     <div className="dashboard-page creator-flow-page receipt-page">
@@ -2413,7 +2425,7 @@ export function PayoutReceiptScreen() {
               <dd>{money(payout.amount)}</dd>
             </div>
             <div>
-              <dt>Clippit fee ({feeRate}%)</dt>
+              <dt>Clippit fee{feeRate === null ? "" : ` (${feeRate}%)`}</dt>
               <dd>−{money(payout.fee)}</dd>
             </div>
             <div>
@@ -2453,7 +2465,7 @@ export function PayoutReceiptScreen() {
             </span>
             <p>
               <strong>{money(payout.fee)} Clippit fee</strong>
-              <small>{feeRate}% withdrawal charge</small>
+              <small>{feeRate === null ? "Recorded withdrawal charge" : `${feeRate}% withdrawal charge`}</small>
             </p>
             <i />
             <span>

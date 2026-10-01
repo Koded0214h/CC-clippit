@@ -1907,7 +1907,7 @@ export function CampaignFundingScreen() {
               <ProductIcon name="bank" />
               <span>
                 <strong>Card payment</strong>
-                <small>Continue to the payment provider's secure checkout</small>
+                <small>Continue to the payment provider&apos;s secure checkout</small>
               </span>
               <i>{method === "card" && <ProductIcon name="check" />}</i>
             </button>
@@ -2068,143 +2068,6 @@ export function CampaignFundingScreen() {
   );
 }
 
-export function CampaignFundedScreen() {
-  const { draft } = useBrandCampaign();
-  const fee = calculateFee(draft.pot, BRAND_CAMPAIGN_FEE_RATE);
-  return (
-    <div className="brand-page funded-page">
-      <section className="funded-hero">
-        <div className="funded-art">
-          {draft.coverImage ? (
-            <div className="funded-cover">
-              <Image
-                src={draft.coverImage}
-                alt={`${draft.title} campaign cover`}
-                fill
-                unoptimized
-                sizes="420px"
-              />
-            </div>
-          ) : (
-            <BrandArt src={art.funding} label="Pot received" tone="lime" />
-          )}
-          <span>
-            <ProductIcon name="check" />
-          </span>
-        </div>
-        <Status>Funds confirmed</Status>
-        <h1>Campaign funded.</h1>
-        <p>{draft.title} is live. Creators can now join and submit clips.</p>
-        <div>
-          <ActionLink href="/brand/campaigns/no-long-thing">
-            View campaign
-          </ActionLink>
-          <ActionLink href="/brand/campaigns" dark>
-            Back to campaigns
-          </ActionLink>
-        </div>
-      </section>
-      <aside className="funded-ticket">
-        <ReceiptHeader
-          title="Campaign funding certificate"
-          reference="CLP-LIVE-041"
-        />
-        <div className="funded-ticket__campaign">
-          <span>
-            {draft.coverImage ? (
-              <Image
-                src={draft.coverImage}
-                alt=""
-                fill
-                unoptimized
-                sizes="84px"
-              />
-            ) : (
-              <Image src={art.funding} alt="" fill sizes="84px" />
-            )}
-          </span>
-          <p>
-            <small>Funded campaign</small>
-            <strong>{draft.title}</strong>
-            <em>Gbedu Records</em>
-          </p>
-          <i>
-            <ProductIcon name="check" />
-            Live
-          </i>
-        </div>
-        <div className="funded-ticket__amount">
-          <small>Total paid</small>
-          <h2>
-            <Money value={draft.pot + fee} />
-          </h2>
-          <time>20 Sep 2026 · 15:07:13 WAT</time>
-        </div>
-        <div className="funded-ticket__parties">
-          <section>
-            <h2>Reserved for</h2>
-            <p>
-              <strong>Clippit campaign pot</strong>
-              <span>Creator earnings</span>
-            </p>
-          </section>
-          <section>
-            <h2>From</h2>
-            <p>
-              <strong>Gbedu Records Ltd.</strong>
-              <span>Brand wallet</span>
-            </p>
-          </section>
-        </div>
-        <section className="funded-ticket__information">
-          <h2>Transaction information</h2>
-          <dl>
-            <div>
-              <dt>Funding transaction ID</dt>
-              <dd>CLP-LIVE-041</dd>
-            </div>
-            <div>
-              <dt>Wallet ledger reference</dt>
-              <dd>LDG-260920-041</dd>
-            </div>
-            <div>
-              <dt>Creator pot</dt>
-              <dd>
-                <Money value={draft.pot} />
-              </dd>
-            </div>
-            <div>
-              <dt>Clippit campaign fee (15%)</dt>
-              <dd>
-                <Money value={fee} />
-              </dd>
-            </div>
-            <div>
-              <dt>Performance rates</dt>
-              <dd>{draft.metrics.length} selected</dd>
-            </div>
-            <div>
-              <dt>Campaign end</dt>
-              <dd>
-                {draft.endCondition === "budget"
-                  ? "When the pot is empty"
-                  : `${draft.days} days or an empty pot`}
-              </dd>
-            </div>
-          </dl>
-        </section>
-        <footer>
-          <ProductIcon name="shield" />
-          <span>
-            <strong>Verify this certificate</strong>
-            <small>clippit.ng/verify/CLP-LIVE-041 · Code C04A-7719</small>
-          </span>
-        </footer>
-      </aside>
-    </div>
-  );
-}
-
 const EMPTY_LIVE_CAMPAIGN: BrandCampaign = {
   slug: "",
   title: "",
@@ -2231,14 +2094,14 @@ export function LiveCampaignScreen({ slug }: { slug?: string }) {
   >([]);
   const [submissions, setSubmissions] = useState<CampaignSubmissionRow[]>([]);
   const [paused, setPaused] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
+  const [loading, setLoading] = useState(!!slug);
+  const [loadError, setLoadError] = useState(slug ? "" : "Campaign reference is missing.");
   const [controlBusy, setControlBusy] = useState(false);
   const [pauseMode, setPauseMode] = useState<"entries" | "full">("entries");
   const [control, setControl] = useState<"pause" | null>(null);
 
   useEffect(() => {
-    if (!slug) { setLoading(false); setLoadError("Campaign reference is missing."); return; }
+    if (!slug) return;
     Promise.all([campaignsApi.get(slug), campaignsApi.getStats(slug), campaignsApi.getSubmissions(slug)])
       .then(([data, statsData, submissionData]) => {
         setBrandName(data.brand?.name ?? "Brand");
@@ -2714,29 +2577,18 @@ const tabMap: Record<string, "needs_review" | "appeals" | "resolved"> = {
 };
 
 function apiReviewToBrand(r: ApiReviewCard): BrandReview {
-  const validPlatforms = [
-    "TikTok",
-    "Instagram",
-    "Facebook",
-    "X",
-    "YouTube",
-  ] as const;
-  const platform =
-    validPlatforms.find((p) => p.toLowerCase() === r.platform.toLowerCase()) ??
-    "TikTok";
   return {
     id: r.id,
     title: r.title ?? r.campaign_title,
     creator: r.creator_name,
     handle: r.creator_handle ? `@${r.creator_handle.replace(/^@/, "")}` : "",
-    platform,
+    platform: r.platform,
     image: r.video_url ?? "/assets/video/creator-reaction-poster.jpg",
     submitted: new Date(r.submitted_at).toLocaleDateString("en-NG", {
       day: "numeric",
       month: "short",
     }),
     issue: r.issue ?? "Please review this submission.",
-    confidence: Math.round((r.confidence ?? 0.75) * 100),
   };
 }
 
@@ -2752,8 +2604,6 @@ export function BrandReviewQueueScreen() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    setLoading(true);
-    setError("");
     const tab = tabMap[filter] ?? "needs_review";
     brandApi
       .reviews(tab)
@@ -2764,6 +2614,13 @@ export function BrandReviewQueueScreen() {
       .catch((err) => setError(errorMessage(err, "We couldn't load the review queue.")))
       .finally(() => setLoading(false));
   }, [filter]);
+
+  const selectFilter = (next: string) => {
+    if (next === filter) return;
+    setLoading(true);
+    setError("");
+    setFilter(next);
+  };
 
   const needsCount = counts.needs_review;
   return (
@@ -2787,7 +2644,7 @@ export function BrandReviewQueueScreen() {
           <button
             type="button"
             key={item}
-            onClick={() => setFilter(item)}
+            onClick={() => selectFilter(item)}
             className={filter === item ? "is-active" : ""}
           >
             {item}
