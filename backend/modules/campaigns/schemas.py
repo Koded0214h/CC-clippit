@@ -380,6 +380,31 @@ class BrandOverviewOut(BaseModel):
     featured: CampaignOut | None
 
 
+class BrandTrendRecommendation(BaseModel):
+    category: str
+    topic: str
+    insight: str
+    campaign_idea: str
+    sample_size: int
+    median_views: int
+    median_view_velocity_per_hour: float | None
+    median_engagement_rate: float | None
+    latest_observed_at: datetime
+    confidence: Literal["medium", "high"]
+
+
+class BrandTrendRecommendationsOut(BaseModel):
+    source: Literal["clippit_recent_campaign_performance"] = "clippit_recent_campaign_performance"
+    trend_window_days: int = 30
+    freshness_days: int = 7
+    minimum_sample_size: int = 3
+    interests: list[str]
+    campaign_goal: str | None
+    generated_at: datetime
+    recommendations: list[BrandTrendRecommendation]
+    message: str | None = None
+
+
 class MembershipOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

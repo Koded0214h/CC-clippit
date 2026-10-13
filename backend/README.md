@@ -248,6 +248,7 @@ then goes `active`. Its terms are locked from the moment funding starts.
 | `POST …/close` | owner/admin | books the views earned so far, then closes; stops tracking |
 | `GET …/stats` · `…/submissions` · `…/report` | owner/admin | the live-campaign screen: pot drawn down, verified views, the last-24h delta, the review pipeline; recent submissions; CSV (formula-injection safe) |
 | `GET /brand/overview` | organisation | pending reviews, live/draft/completed counts, spend, 24h views & earnings, the featured live campaign |
+| `GET /brand/recommendations/trends` | organisation | current campaign ideas from recent approved posts in the brand's onboarding interests; includes evidence size, freshness, and an empty-state message when the sample is too small |
 
 **The budget identity.** Send `pot` (what the brand budgets) or
 `expected_views` (what that buys); the other is derived at the payout rate.
@@ -362,7 +363,7 @@ audit event naming the admin.
 | Route | Purpose |
 |---|---|
 | `PUT /creators/me/onboarding` · `GET/PUT /creators/me/profile` | name, content lanes, platforms, discovery/experience/goals, photo |
-| `PUT /organisations/me/onboarding` · `GET/PUT /organisations/me/profile` | org identity, funding contact; `business_verified` is read-only here |
+| `PUT /organisations/me/onboarding` · `GET/PUT /organisations/me/profile` | org identity, funding contact, content/viewing interests used by brand trend recommendations; `business_verified` is read-only here |
 | `GET /creators/me/accounts` | every platform, connected or not, with handle and when its views were last read |
 | `GET /creators/me/overview` | dashboard home: closest-to-closing campaign, new lane matches, earnings |
 | `POST /uploads/images\|videos\|evidence` | streamed, size-capped, type sniffed from bytes; media served at `/media/…` |

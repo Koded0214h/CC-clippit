@@ -13,9 +13,19 @@ from modules.earnings.models import EarningEntry
 from modules.organisations.models import OrganisationProfile
 from modules.submissions.models import Submission, SubmissionStatus, VerificationStatus
 
-from . import models, schemas, service
+from . import models, recommendations, schemas, service
 
 router = APIRouter(prefix="/brand", tags=["brand"])
+
+
+@router.get("/recommendations/trends", response_model=schemas.BrandTrendRecommendationsOut)
+async def trend_recommendations(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """Suggest campaign angles from recent, measured posts in this brand's
+    onboarding interests. No client-supplied user ID is accepted."""
+    if user.role != Role.organisation:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only an organisation account has this")
+    profile = await db.get(OrganisationProfile, user.id)
+    return await recommendations.for_organisation(db, profile)
 
 
 @router.get("/overview", response_model=schemas.BrandOverviewOut)
